@@ -309,9 +309,79 @@ elif menu == "🔥 今日 AI 优质推荐榜":
     st.dataframe(
         display_df.style.background_gradient(subset=['AI 综合评分'], cmap='Reds'),
         use_container_width=True,
-        height=580
+        height=400
     )
-    st.info("💡 提示：点击表格任意列标题即可重新按该字段排序（如点击【AI推荐星级】或【最新价格】）。")
+    st.info("💡 提示：点击表格任意列标题即可重新按该字段排序。在下方选择特定股票查看 【🔍 单股 AI 深度诊断研报】。")
+    
+    st.markdown("---")
+    st.subheader("🔍 单股 AI 深度诊断研报与舆情风向")
+    
+    # 标的选择下拉框
+    stock_options = [f"{row['symbol']} - {row['name']}" for _, row in top_df.iterrows()]
+    selected_option = st.selectbox("🎯 选择需要查看深度 AI 研报的推荐标的:", stock_options, index=0)
+    
+    if selected_option:
+        sel_sym = selected_option.split(" - ")[0]
+        sel_row = top_df[top_df['symbol'] == sel_sym].iloc[0].to_dict()
+        
+        # 实时分析舆情
+        from src.analysis.news_analyzer import fetch_latest_news, analyze_stock_sentiment, generate_stock_report
+        news_df = fetch_latest_news(max_items=50)
+        sentiment_res = analyze_stock_sentiment(sel_row['symbol'], sel_row['name'], news_df)
+        report = generate_stock_report(sel_row, sentiment_res)
+        
+        diag_col1, diag_col2 = st.columns([1, 1])
+        
+        with diag_col1:
+            # 舆情情绪 Plotly Gauge 仪表盘
+            fig_gauge = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=sentiment_res['sentiment_score'],
+                domain={'x': [0, 1], 'y': [0, 1]},
+                title={'text': f"<b>{sel_row['name']} 舆情情绪指数</b>", 'font': {'size': 16}},
+                gauge={
+                    'axis': {'range': [-1.0, 1.0], 'tickwidth': 1},
+                    'bar': {'color': "#d62728" if sentiment_res['sentiment_score'] > 0 else "#2ca02c"},
+                    'steps': [
+                        {'range': [-1.0, -0.2], 'color': "#ffcccb"},
+                        {'range': [-0.2, 0.2], 'color': "#f0f0f0"},
+                        {'range': [0.2, 1.0], 'color': "#d4edda"}
+                    ],
+                    'threshold': {
+                        'line': {'color': "black", 'width': 3},
+                        'thickness': 0.75,
+                        'value': sentiment_res['sentiment_score']
+                    }
+                }
+            ))
+            fig_gauge.update_layout(height=260, margin=dict(l=20, r=20, t=40, b=20))
+            st.plotly_chart(fig_gauge, use_container_width=True)
+            
+        with diag_col2:
+            # 量化因子得分对比柱状图
+            factor_df = pd.DataFrame([
+                {"因子名称": "动量得分 (MOM)", "得分": sel_row.get("MOM_20_norm", 0.0)},
+                {"因子名称": "低波避险 (LOW_VOL)", "得分": sel_row.get("LOW_VOL_20_norm", 0.0)},
+                {"因子名称": "复合 Alpha (COMPOSITE)", "得分": sel_row.get("COMPOSITE_ALPHA_norm", 0.0)}
+            ])
+            fig_factors = px.bar(
+                factor_df, x="因子名称", y="得分",
+                color="得分", color_continuous_scale="Reds",
+                title=f"<b>{sel_row['name']} 多因子得分画像</b>"
+            )
+            fig_factors.update_layout(height=260, template="plotly_white", margin=dict(l=20, r=20, t=40, b=20))
+            st.plotly_chart(fig_factors, use_container_width=True)
+            
+        # 结构化 Markdown AI 研报
+        st.markdown(report['markdown_report'])
+        
+        # 匹配新闻展示
+        if sentiment_res['matched_news']:
+            st.markdown("##### 📰 关联全球快讯")
+            for item in sentiment_res['matched_news']:
+                st.caption(f"⏱️ [{item.get('time', '')}] **{item.get('title', '')}** — {item.get('content', '')}")
+        else:
+            st.info("ℹ️ 近期无重大舆情事件，行情主要由量化技术面与因子得分驱动。")
 
 
 # =============================================================================
