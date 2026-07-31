@@ -125,6 +125,10 @@ def load_and_process_quant_engine():
     df_composite = neutralize_factors_cross_section(df_composite, ["COMPOSITE_ALPHA"])
     df_composite = orthogonalize_factors(df_composite, ["MOM_20_norm", "LOW_VOL_20_norm", "MA_DEV_20_norm"])
     
+    # 全量股票池新闻舆情 Alpha 融合 (Pre-filtering & Sentiment Alpha)
+    from src.analysis.news_analyzer import integrate_sentiment_alpha
+    df_composite = integrate_sentiment_alpha(df_composite)
+    
     # IC 总结
     all_factor_cols = ["MOM_20", "LOW_VOL_20", "MA_DEV_20", "COMPOSITE_ALPHA", "COMPOSITE_ALPHA_neu"]
     ic_summary = summarize_factor_ic(df_composite, all_factor_cols)
@@ -297,7 +301,10 @@ elif menu == "🔥 今日 AI 优质推荐榜":
             top_df['name'].str.contains(search_term, case=False, na=False)
         ]
         
-    display_df = top_df[['symbol', 'name', 'close', 'AI推荐星级', '推荐理由标签', 'COMPOSITE_ALPHA_norm']].copy()
+    display_cols = ['symbol', 'name', 'close', 'AI推荐星级', '推荐理由标签', '催化剂标签', '最新重磅新闻', 'COMPOSITE_ALPHA_norm']
+    existing_cols = [c for c in display_cols if c in top_df.columns]
+    
+    display_df = top_df[existing_cols].copy()
     display_df = display_df.rename(columns={
         'symbol': '股票代码',
         'name': '股票名称',
