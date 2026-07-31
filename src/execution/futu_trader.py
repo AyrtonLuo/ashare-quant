@@ -56,7 +56,7 @@ class FutuSimTrader:
         self.port = port
         self.is_mock = is_mock or not HAS_FUTU_SDK
 
-    def execute_rebalance(self, top_portfolio_df: pd.DataFrame, initial_mock_cash: float = 1000000.0) -> Dict[str, Any]:
+    def execute_rebalance(self, top_portfolio_df: pd.DataFrame, initial_mock_cash: float = 1000000.0, mock_positions: Dict = None) -> Dict[str, Any]:
         """
         根据 Top 39 优质选股名单对富途模拟盘账号执行智能调仓
         """
@@ -115,8 +115,8 @@ class FutuSimTrader:
                         if qty > 0:
                             current_positions[code] = {"qty": qty, "price": price, "name": name}
             else:
-                # Mock 模式下的默认旧持仓模拟 (假设持有一只不在 Top 39 的旧股票，测试卖出平仓)
-                current_positions["SH.600000"] = {"qty": 2000, "price": 7.50, "name": "浦发银行"}
+                # 若显式传入了测试旧持仓，则加载；新空账户默认持仓为空 {}
+                current_positions = mock_positions if mock_positions is not None else {}
 
             # =========================================================================
             # 🛍️ 步骤 1: 卖出逻辑 (当前持仓中不在 Top 39 名单内的股票全额卖出)

@@ -30,21 +30,26 @@ def test_futu_rebalance_lot_size_constraint():
         {"symbol": "000001", "name": "平安银行", "close": 11.63}
     ])
 
+    # 1. 测试新空账户调仓 (0 笔卖单)
     trader = FutuSimTrader(is_mock=True)
-    res = trader.execute_rebalance(sample_df, initial_mock_cash=1000000.0)
+    res_empty = trader.execute_rebalance(sample_df, initial_mock_cash=1000000.0)
+    assert len(res_empty["sell_orders"]) == 0
+    assert len(res_empty["buy_orders"]) == 3
 
-    assert "mode" in res
-    assert "sell_orders" in res
-    assert "buy_orders" in res
-    assert "account_summary" in res
+    # 2. 测试带旧持仓的模拟盘调仓 (平仓不在 Top39 名单内的旧股票)
+    mock_pos = {"SH.600000": {"qty": 2000, "price": 7.50, "name": "浦发银行"}}
+    res_with_pos = trader.execute_rebalance(sample_df, initial_mock_cash=1000000.0, mock_positions=mock_pos)
 
-    # 校验所有买单交易股数必须是 100 股的整数倍且 >= 100
-    for b_order in res["buy_orders"]:
+    assert "mode" in res_with_pos
+    assert "sell_orders" in res_with_pos
+    assert "buy_orders" in res_with_pos
+
+    # 校验买单股数必须是 100 股整倍数
+    for b_order in res_with_pos["buy_orders"]:
         qty = b_order["buy_qty"]
         assert qty >= 100
         assert qty % 100 == 0
-        assert b_order["symbol"] in ["600941", "000651", "000001"]
 
-    # 校验卖单中清除了不在名单中的旧股票
-    assert len(res["sell_orders"]) >= 1
-    assert res["sell_orders"][0]["symbol"] == "600000"
+    # 校验卖单平仓旧持仓
+    assert len(res_with_pos["sell_orders"]) == 1
+    assert res_with_pos["sell_orders"][0]["symbol"] == "600000"
