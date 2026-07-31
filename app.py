@@ -313,31 +313,31 @@ elif menu == "⚙️ 数据与回测控制台":
                     st.error(f"重新计算失败: {ex}")
                     
     st.markdown("---")
-    st.subheader("🍏 富途 OpenD A 股模拟盘自动同步 (macOS)")
-    st.write("将最新的 Top 39 优质选股名单自动比对平仓旧持仓，并按单股 ≤30% 限制与 100 股一手粒度向富途模拟盘下发买单。")
+    st.subheader("🍏 富途 OpenD 港股模拟盘自动同步 (macOS TrdMarket.HK)")
+    st.write("将最新的 Top 39 优质选股名单自动映射为港股/港股通标的 (HK.xxxxx)，比对平仓旧持仓，并按单股 ≤30% 限制与 100 股一手粒度向富途港股模拟盘下发买单。")
     
-    if st.button("🍏 一键同步交易指令至富途 Mac 模拟盘", key="futu_sync_btn"):
-        with st.spinner("正在连接本地 Mac 富途 OpenD (127.0.0.1:11111) 并计算调仓买卖指令..."):
+    if st.button("🍏 一键同步交易指令至富途 Mac 港股模拟盘", key="futu_sync_btn"):
+        with st.spinner("正在连接本地 Mac 富途 OpenD (127.0.0.1:11111, 港股模拟盘) 并计算调仓买卖指令..."):
             try:
                 from src.execution.futu_trader import FutuSimTrader
                 trader = FutuSimTrader(host="127.0.0.1", port=11111)
                 sync_res = trader.execute_rebalance(engine_data['top_portfolio'])
                 
-                st.success(f"🎉 调仓同步计算完成！当前引擎模式: `{sync_res['mode']}`")
+                st.success(f"🎉 港股调仓同步计算完成！当前引擎模式: `{sync_res['mode']}`")
                 
                 # 账户资产摘要
                 acc = sync_res['account_summary']
                 acc_c1, acc_c2, acc_c3 = st.columns(3)
-                acc_c1.metric("模拟总资产 (CNY)", f"¥{acc['total_assets']:,.2f}")
+                acc_c1.metric("港股模拟总资产 (HKD/CNY)", f"¥{acc['total_assets']:,.2f}")
                 acc_c2.metric("可用现金 (Cash)", f"¥{acc['cash']:,.2f}")
                 acc_c3.metric("持仓市值 (Market Value)", f"¥{acc['market_value']:,.2f}")
                 
                 # 卖单列表
                 s_orders = sync_res['sell_orders']
                 if s_orders:
-                    st.markdown("##### 📋 提交的平仓/卖出订单列表")
+                    st.markdown("##### 📋 提交的港股平仓/卖出订单列表")
                     s_df = pd.DataFrame(s_orders).rename(columns={
-                        "futu_code": "富途代码", "symbol": "A股代码", "name": "股票名称",
+                        "futu_code": "富途港股代码", "symbol": "原始代码", "name": "股票名称",
                         "sell_qty": "卖出股数", "price": "挂单价格", "sell_amount": "卖出金额", "status": "订单状态"
                     })
                     st.dataframe(s_df, use_container_width=True)
@@ -347,9 +347,9 @@ elif menu == "⚙️ 数据与回测控制台":
                 # 买单列表
                 b_orders = sync_res['buy_orders']
                 if b_orders:
-                    st.markdown("##### 🛒 提交的建仓/买入订单列表")
+                    st.markdown("##### 🛒 提交的港股建仓/买入订单列表")
                     b_df = pd.DataFrame(b_orders).rename(columns={
-                        "futu_code": "富途代码", "symbol": "A股代码", "name": "股票名称",
+                        "futu_code": "富途港股代码", "symbol": "原始代码", "name": "股票名称",
                         "buy_qty": "买入股数(100整倍)", "price": "挂单价格", "buy_amount": "占用资金(元)", "status": "订单状态"
                     })
                     st.dataframe(b_df, use_container_width=True)
@@ -357,7 +357,7 @@ elif menu == "⚙️ 数据与回测控制台":
                     st.info("ℹ️ 当前无可新买入建仓的标的或资金不足 100 股。")
                     
             except Exception as ex_futu:
-                st.error(f"同步至富途模拟盘失败: {ex_futu}")
+                st.error(f"同步至富途港股模拟盘失败: {ex_futu}")
                 
     st.markdown("---")
     st.subheader("📁 本地存储文件状态")
