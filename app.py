@@ -433,14 +433,16 @@ elif menu == "🔥 今日 AI 优质推荐榜":
                 st.info("ℹ️ 近 24 小时无重大官方事件，行情由量化技术面驱动。")
                 
         with s_col2:
-            st.markdown("##### 🔥 散户/社会情绪风向标 (雪球/股吧)")
+            st.markdown("##### 🔥 散户与社会情绪风向标 (雪球/股吧/B站)")
             ret_s = sentiment_res.get('retail_sentiment', {})
             if ret_s:
-                r_c1, r_c2 = st.columns(2)
-                r_c1.metric("雪球/股吧看多比例", ret_s.get("bullish_pct", "75%"))
-                r_c2.metric("散户看空比例", ret_s.get("bearish_pct", "25%"))
-                st.success(f"💬 **市场讨论热度**: {ret_s.get('discussion_heat', '⚡ 升温')}")
-                st.caption(ret_s.get("summary", ""))
+                r_c1, r_c2, r_c3 = st.columns(3)
+                r_c1.metric("散户看多比例", f"{ret_s.get('bullish_pct', 75)}%")
+                r_c2.metric("看空比例", f"{ret_s.get('bearish_pct', 25)}%")
+                r_c3.metric("热度指数", f"{ret_s.get('social_heat_index', 85)} / 100")
+                
+                st.success(f"💬 **散户情绪标签**: `{ret_s.get('emotion_badge', '🔥 极度高涨')}`")
+                st.caption(f"📊 **讨论数据**: {ret_s.get('description', '')} (雪球关注帖: {ret_s.get('xueqiu_posts', 200)} 条 | 股吧热度帖: {ret_s.get('guba_posts', 500)} 条)")
 
 
 # =============================================================================

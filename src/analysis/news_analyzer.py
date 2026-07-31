@@ -15,6 +15,8 @@ from typing import Dict, Any, List
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("news_analyzer")
 
+from src.analysis.dual_sentiment_engine import filter_authority_media, fetch_social_sentiment
+
 # 顶级重磅催化关键词权重 (High-Impact Catalysts)
 HIGH_IMPACT_CATALYSTS = {
     "业绩大增": 0.5, "净利润大增": 0.5, "扭亏为盈": 0.5,
@@ -29,7 +31,7 @@ NEGATIVE_WORDS = ["下跌", "减持", "亏损", "预警", "处罚", "风险", "�
 
 def fetch_latest_news(max_items: int = 100) -> pd.DataFrame:
     """
-    抓取 7x24 小时全球财经新闻快讯 (带原文 URL 链接与 5s 容错)
+    抓取 7x24 小时全球财经新闻快讯 (带官方权威媒体白名单限制与原文 URL 链接)
     """
     try:
         df = ak.stock_info_global_cls()
@@ -40,12 +42,13 @@ def fetch_latest_news(max_items: int = 100) -> pd.DataFrame:
                 '发布日期': 'date',
                 '发布时间': 'time'
             })
-            # 补全来源 URL
+            df['source'] = "财联社"
             df['url'] = "https://www.cls.cn/detail/" + df.index.astype(str)
             df['full_text'] = df['title'].fillna('') + ' ' + df['content'].fillna('')
-            return df.head(max_items)
+            filtered_df = filter_authority_media(df)
+            return filtered_df.head(max_items)
     except Exception as e:
-        logger.warning(f"获取财联社全球新闻快讯异常 ({e})，切换为备用新闻源...")
+        logger.warning(f"获取财联社快讯异常 ({e})，使用权威备用新闻源...")
 
     # 备用带真实可访问 URL 链接的新闻源
     fallback_news = [
@@ -202,17 +205,8 @@ def analyze_stock_sentiment(symbol: str, name: str, news_df: pd.DataFrame) -> Di
 
     label = "🟢 正面乐观" if final_score >= 0.2 else ("🔴 负面预警" if final_score <= -0.2 else "🟡 中性平稳")
 
-    # 模拟雪球/股吧散户讨论度与看多/看空比例 (🔥 散户/社会情绪风向标)
-    bullish_pct = int(np.clip(55 + final_score * 35, 10, 95))
-    bearish_pct = 100 - bullish_pct
-    discussion_heat = "🔥 极高 (雪球热搜 Top 10)" if abs(final_score) > 0.4 else ("⚡ 升温 (散户关注度上升)" if abs(final_score) > 0.1 else "⚖️ 正常 (讨论平稳)")
-
-    retail_sentiment = {
-        "bullish_pct": f"{bullish_pct}%",
-        "bearish_pct": f"{bearish_pct}%",
-        "discussion_heat": discussion_heat,
-        "summary": f"雪球/股吧散户看多占比 {bullish_pct}%，看空占比 {bearish_pct}%。市场热度: {discussion_heat}。"
-    }
+    # 散户与社会情绪指数计算 (🔥 散户/社会情绪风向标)
+    retail_sentiment = fetch_social_sentiment(sym_str, name_str, final_score)
 
     return {
         "sentiment_score": round(final_score, 2),
