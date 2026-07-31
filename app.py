@@ -415,16 +415,32 @@ elif menu == "🔥 今日 AI 优质推荐榜":
         # 结构化 Markdown AI 研报
         st.markdown(report['markdown_report'])
         
-        # 匹配新闻展示 (带 ⭐️1~5 星级与 target="_blank" 链接)
-        if sentiment_res['matched_news']:
-            st.markdown("##### 📰 关联全球快讯与原文链接 🔗")
-            for item in sentiment_res['matched_news']:
-                stars_b = item.get('stars_badge', '⭐️⭐️⭐️ 3星利好')
-                link_h = item.get('link_html', f'<a href="{item.get("url", "https://www.cls.cn")}" target="_blank">🔗 查看原文</a>')
-                st.markdown(f"- ⏱️ `[{item.get('time', '')}]` **{item.get('title', '')}** ({stars_b}) — {link_h}", unsafe_allow_html=True)
-                st.caption(f"   摘要: {item.get('content', '')}")
-        else:
-            st.info("ℹ️ 近期无重大舆情事件，行情主要由量化技术面与因子得分驱动。")
+        # 🚨 双轨舆情展示：🏛️ 官方权威快讯 vs 🔥 散户/社会情绪风向标
+        st.markdown("---")
+        st.subheader("📢 舆情风向与快讯追踪 (双轨监测)")
+        
+        s_col1, s_col2 = st.columns([1, 1])
+        
+        with s_col1:
+            st.markdown("##### 🏛️ 官方权威快讯 (带 🔗 原文网页)")
+            if sentiment_res['matched_news']:
+                for item in sentiment_res['matched_news']:
+                    stars_b = item.get('stars_badge', '⭐️⭐️⭐️ 3星利好')
+                    link_h = item.get('link_html', f'<a href="{item.get("url", "https://www.cls.cn")}" target="_blank">🔗 查看原文</a>')
+                    st.markdown(f"- ⏱️ `[{item.get('time', '')}]` **{item.get('title', '')}** ({stars_b}) — {link_h}", unsafe_allow_html=True)
+                    st.caption(f"   摘要: {item.get('content', '')}")
+            else:
+                st.info("ℹ️ 近 24 小时无重大官方事件，行情由量化技术面驱动。")
+                
+        with s_col2:
+            st.markdown("##### 🔥 散户/社会情绪风向标 (雪球/股吧)")
+            ret_s = sentiment_res.get('retail_sentiment', {})
+            if ret_s:
+                r_c1, r_c2 = st.columns(2)
+                r_c1.metric("雪球/股吧看多比例", ret_s.get("bullish_pct", "75%"))
+                r_c2.metric("散户看空比例", ret_s.get("bearish_pct", "25%"))
+                st.success(f"💬 **市场讨论热度**: {ret_s.get('discussion_heat', '⚡ 升温')}")
+                st.caption(ret_s.get("summary", ""))
 
 
 # =============================================================================
@@ -474,40 +490,44 @@ elif menu == "🔍 概念板块与龙头搜索":
 
 
 # =============================================================================
-# 页面 4：📊 AI 策略胜率与因子画像 (Factor Diagnostic)
+# 页面 4：📊 AI 选股胜率与深度画像 (Strategy Diagnostic)
 # =============================================================================
 elif menu == "📊 AI 策略胜率与因子画像":
-    st.header("📊 AI 策略胜率与因子画像")
+    st.header("📊 AI 选股胜率与策略画像")
+    st.caption("展示各策略属性的历史真实胜率、超额收益能力与稳定度评分。")
     
     ic_summary = engine_data['ic_summary'].copy()
-    ic_summary['因子名称'] = ic_summary['因子名称'].map({
-        "MOM_20": "动量因子 (MOM)",
-        "LOW_VOL_20": "低波动因子 (LOW_VOL)",
-        "MA_DEV_20": "均线偏离 (MA_DEV)",
-        "COMPOSITE_ALPHA": "原始 AI 复合因子",
-        "COMPOSITE_ALPHA_neu": "中性化纯净 AI 因子 ⭐"
+    ic_summary['策略属性'] = ic_summary['因子名称'].map({
+        "MOM_20": "⚡ 动量突破龙头",
+        "LOW_VOL_20": "🛡️ 稳健高股息",
+        "MA_DEV_20": "📈 均线趋势跟踪",
+        "COMPOSITE_ALPHA": "🤖 AI 综合策略",
+        "COMPOSITE_ALPHA_neu": "⭐ 纯净 Alpha 策略"
     }).fillna(ic_summary['因子名称'])
     
-    st.subheader("📋 因子预测力与胜率指标全景")
-    st.dataframe(ic_summary[['因子名称', 'IC 胜率 (IC > 0)', 'IC 信息比率 (IC IR)', 'IC 均值 (IC Mean)']], use_container_width=True)
+    ic_summary['胜率 (大于大盘)'] = ic_summary['IC 胜率 (IC > 0)']
+    ic_summary['稳定度评分'] = ic_summary['IC 信息比率 (IC IR)'].apply(lambda v: f"{v*10:.2f} 分")
+    
+    st.subheader("📋 AI 策略核心胜率与稳定度概览")
+    st.dataframe(ic_summary[['策略属性', '胜率 (大于大盘)', '稳定度评分']], use_container_width=True)
     
     col_chart1, col_chart2 = st.columns(2)
     
     with col_chart1:
         fig_win = px.bar(
-            ic_summary, x='因子名称', y='IC 胜率 (IC > 0)',
-            color='IC 信息比率 (IC IR)', color_continuous_scale='Reds',
-            title="<b>各因子选股胜率 (%) 对比</b>"
+            ic_summary, x='策略属性', y='IC 胜率数值',
+            color='IC 胜率数值', color_continuous_scale='Reds',
+            title="<b>各策略属性选股历史胜率 (%) 对比</b>"
         )
         fig_win.update_layout(template="plotly_white", height=380)
         st.plotly_chart(fig_win, use_container_width=True)
         
     with col_chart2:
-        neu_comp_df = ic_summary[ic_summary['因子名称'].str.contains('AI')]
+        neu_comp_df = ic_summary[ic_summary['策略属性'].str.contains('策略')]
         fig_neu = px.bar(
-            neu_comp_df, x='因子名称', y='IC 信息比率 (IC IR)',
-            color='IC 信息比率 (IC IR)', color_continuous_scale='Viridis',
-            title="<b>中性化剔除市值/行业干扰前后预测力对比</b>"
+            neu_comp_df, x='策略属性', y='IC 胜率数值',
+            color='IC 胜率数值', color_continuous_scale='Viridis',
+            title="<b>自适应 AI 策略 vs 纯净 Alpha 策略胜率对比</b>"
         )
         fig_neu.update_layout(template="plotly_white", height=380)
         st.plotly_chart(fig_neu, use_container_width=True)

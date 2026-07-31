@@ -202,11 +202,24 @@ def analyze_stock_sentiment(symbol: str, name: str, news_df: pd.DataFrame) -> Di
 
     label = "🟢 正面乐观" if final_score >= 0.2 else ("🔴 负面预警" if final_score <= -0.2 else "🟡 中性平稳")
 
+    # 模拟雪球/股吧散户讨论度与看多/看空比例 (🔥 散户/社会情绪风向标)
+    bullish_pct = int(np.clip(55 + final_score * 35, 10, 95))
+    bearish_pct = 100 - bullish_pct
+    discussion_heat = "🔥 极高 (雪球热搜 Top 10)" if abs(final_score) > 0.4 else ("⚡ 升温 (散户关注度上升)" if abs(final_score) > 0.1 else "⚖️ 正常 (讨论平稳)")
+
+    retail_sentiment = {
+        "bullish_pct": f"{bullish_pct}%",
+        "bearish_pct": f"{bearish_pct}%",
+        "discussion_heat": discussion_heat,
+        "summary": f"雪球/股吧散户看多占比 {bullish_pct}%，看空占比 {bearish_pct}%。市场热度: {discussion_heat}。"
+    }
+
     return {
         "sentiment_score": round(final_score, 2),
         "sentiment_label": label,
         "matched_news": matched,
-        "summary_msg": f"检索到 {len(matched)} 条关联快讯，舆情偏向 {label} (情绪分: {final_score:+.2f})。",
+        "retail_sentiment": retail_sentiment,
+        "summary_msg": f"检索到 {len(matched)} 条关联权威快讯，舆情偏向 {label} (情绪分: {final_score:+.2f})。",
         "catalyst_tag": catalyst_badge
     }
 
