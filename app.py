@@ -194,7 +194,7 @@ st.sidebar.caption("中大盘优质标的池 (总市值 ≥ 90 亿元)")
 
 menu = st.sidebar.radio(
     "终端功能导航",
-    ["🏠 AI 选股大盘总览", "🔥 今日 AI 优质推荐榜", "📊 AI 策略胜率与因子画像", "🚀 一键跟投智能调仓"],
+    ["🏠 AI 选股大盘总览", "🔥 今日 AI 优质推荐榜", "🔍 概念板块与龙头搜索", "📊 AI 策略胜率与因子画像", "🚀 一键跟投智能调仓"],
     index=0
 )
 
@@ -415,17 +415,66 @@ elif menu == "🔥 今日 AI 优质推荐榜":
         # 结构化 Markdown AI 研报
         st.markdown(report['markdown_report'])
         
-        # 匹配新闻展示
+        # 匹配新闻展示 (带 ⭐️1~5 星级与 target="_blank" 链接)
         if sentiment_res['matched_news']:
-            st.markdown("##### 📰 关联全球快讯")
+            st.markdown("##### 📰 关联全球快讯与原文链接 🔗")
             for item in sentiment_res['matched_news']:
-                st.caption(f"⏱️ [{item.get('time', '')}] **{item.get('title', '')}** — {item.get('content', '')}")
+                stars_b = item.get('stars_badge', '⭐️⭐️⭐️ 3星利好')
+                link_h = item.get('link_html', f'<a href="{item.get("url", "https://www.cls.cn")}" target="_blank">🔗 查看原文</a>')
+                st.markdown(f"- ⏱️ `[{item.get('time', '')}]` **{item.get('title', '')}** ({stars_b}) — {link_h}", unsafe_allow_html=True)
+                st.caption(f"   摘要: {item.get('content', '')}")
         else:
             st.info("ℹ️ 近期无重大舆情事件，行情主要由量化技术面与因子得分驱动。")
 
 
 # =============================================================================
-# 页面 3：📊 AI 策略胜率与因子画像 (Factor Diagnostic)
+# 页面 3：🔍 概念板块与产业链龙头搜索 (Concept Leader Search)
+# =============================================================================
+elif menu == "🔍 概念板块与龙头搜索":
+    st.header("🔍 全市场概念板块与产业链龙头自动识别")
+    st.caption("基于市值占比 (40%) + 成交额占比 (30%) + Beta 动量 (30%) 算法，智能打标标注板块内的 👑 龙一 (Leader) 与 🥈 龙二 (Co-Leader)。")
+    
+    from src.analysis.concept_leader_engine import search_concept_or_stock, PRESET_CONCEPT_BOARDS
+    
+    col_c1, col_c2 = st.columns([3, 1])
+    with col_c1:
+        kw_input = st.text_input("🔍 输入概念板块关键词或股票代码/名称 (如：AI算力, 半导体, 600941):", "AI算力/半导体龙头")
+    with col_c2:
+        st.write("")
+        st.write("")
+        search_btn = st.button("🚀 检索龙头板块")
+        
+    search_res = search_concept_or_stock(kw_input, engine_data['df_composite'])
+    
+    st.subheader(f"🏷️ 检索结果: {search_res['concept_name']}")
+    
+    res_data = search_res['data']
+    if not res_data.empty:
+        c_display_cols = ['symbol', 'name', 'close', '龙头角色', 'leader_score', 'COMPOSITE_ALPHA_norm']
+        c_exist_cols = [c for c in c_display_cols if c in res_data.columns]
+        
+        c_df = res_data[c_exist_cols].rename(columns={
+            'symbol': '股票代码', 'name': '股票名称', 'close': '最新价格 (元)',
+            'leader_score': '龙头综合得分', 'COMPOSITE_ALPHA_norm': 'AI 得分'
+        })
+        
+        st.dataframe(
+            c_df.style.background_gradient(subset=['龙头综合得分'], cmap='Reds'),
+            use_container_width=True,
+            height=450
+        )
+        
+        # 龙一龙二高亮卡片
+        leader_1 = res_data[res_data['龙头角色'] == "👑 龙一 (Leader)"]
+        if not leader_1.empty:
+            l1_row = leader_1.iloc[0]
+            st.success(f"👑 **板块龙头 (龙一)**: `{l1_row['name']} ({l1_row['symbol']})` | 最新价格: ¥{l1_row['close']:.2f} | 龙头得分: {l1_row.get('leader_score', 0):.4f}")
+    else:
+        st.warning("未检索到相关概念股票，请尝试其他关键词。")
+
+
+# =============================================================================
+# 页面 4：📊 AI 策略胜率与因子画像 (Factor Diagnostic)
 # =============================================================================
 elif menu == "📊 AI 策略胜率与因子画像":
     st.header("📊 AI 策略胜率与因子画像")

@@ -35,7 +35,7 @@ def process_single_stock_download(stock_info: dict, end_date: str = "20260731", 
     single_path = os.path.join(STOCKS_DIR, f"{sym}.parquet")
 
     old_df = pd.DataFrame()
-    fetch_start = "20230101"
+    fetch_start = "20130101"
 
     if os.path.exists(single_path):
         try:
@@ -130,6 +130,25 @@ def update_quality_universe_data(max_workers: int = 8, end_date: str = "20260731
         return combined_all
     else:
         raise RuntimeError("未成功获取到任何股票数据！")
+
+
+def query_history_with_duckdb(parquet_path: str, start_date: str = "2013-01-01") -> pd.DataFrame:
+    """
+    针对 2013 至今跨 13 年海量 Parquet 数据的 DuckDB 懒加载 (Lazy Scanning) 查询
+    避免一次性载入挤爆内存
+    """
+    if not os.path.exists(parquet_path):
+        raise FileNotFoundError(f"Parquet 数据文件不存在: {parquet_path}")
+
+    try:
+        import duckdb
+        conn = duckdb.connect(database=':memory:')
+        query = f"SELECT * FROM read_parquet('{parquet_path}') WHERE date >= '{start_date}' ORDER BY date, symbol"
+        return conn.execute(query).fetchdf()
+    except Exception:
+        df = pd.read_parquet(parquet_path)
+        df['date'] = pd.to_datetime(df['date'])
+        return df[df['date'] >= pd.to_datetime(start_date)].sort_values(['date', 'symbol']).reset_index(drop=True)
 
 
 if __name__ == "__main__":

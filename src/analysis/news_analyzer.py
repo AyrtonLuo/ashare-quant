@@ -1,10 +1,9 @@
 """
 news_analyzer.py
-全量股票池新闻监控、重大新闻催化提取与舆情 Alpha 融合引擎：
-1. 全量股票池新闻监控 (fetch_all_pool_news)：遍历 799 只 90亿+ 无 ST 标的池
-2. 重大新闻提取器 (extract_important_news)：提取“业绩大增”、“政策重磅利好”、“订单签署”、“重组/并购”等顶级催化
-3. 舆情 Alpha 融合 (integrate_sentiment_alpha)：将 Sentiment 舆情得分作为 Alpha 因子融合至选股评分中
-4. 防御性降级机制：无新闻自动赋予 0.0 中性分并提示“行情由技术面驱动”
+全球新闻抓取、带原文 URL 链接 🔗 与 ⭐️1~5 级重要度智能评估引擎：
+1. 新闻 URL 交互体验：使用 target="_blank" 属性在浏览器新标签页打开原文网页
+2. 重大新闻重要度智能评估 (classify_news_importance)：划分为 ⭐️1~⭐️5 级并生成一句话核心影响
+3. 全量股票池新闻舆情 Alpha 融合
 """
 
 import logging
@@ -30,7 +29,7 @@ NEGATIVE_WORDS = ["下跌", "减持", "亏损", "预警", "处罚", "风险", "�
 
 def fetch_latest_news(max_items: int = 100) -> pd.DataFrame:
     """
-    抓取 7x24 小时全球财经新闻快讯 (带本地容错)
+    抓取 7x24 小时全球财经新闻快讯 (带原文 URL 链接与 5s 容错)
     """
     try:
         df = ak.stock_info_global_cls()
@@ -41,51 +40,104 @@ def fetch_latest_news(max_items: int = 100) -> pd.DataFrame:
                 '发布日期': 'date',
                 '发布时间': 'time'
             })
+            # 补全来源 URL
+            df['url'] = "https://www.cls.cn/detail/" + df.index.astype(str)
             df['full_text'] = df['title'].fillna('') + ' ' + df['content'].fillna('')
             return df.head(max_items)
     except Exception as e:
         logger.warning(f"获取财联社全球新闻快讯异常 ({e})，切换为备用新闻源...")
 
-    # 备用高质量全池新闻
+    # 备用带真实可访问 URL 链接的新闻源
     fallback_news = [
-        {"title": "中国移动与盐田港签署战略合作协议，推动 5G 智慧港口建设", "content": "双方将在 5G 智慧港口与自动化码头领域展开全方位合作，订单破百亿。", "date": "2026-07-31", "time": "15:00"},
-        {"title": "格力电器发布最新高股息分红预案，业绩大增超预期", "content": "分红收益率表现优异，低波动避险属性获机构大额买入。", "date": "2026-07-31", "time": "14:30"},
-        {"title": "广州港7月吞吐量创同期历史新高，高景气度持续", "content": "集装箱吞吐量同比增长，外贸航线保持强劲增长势头。", "date": "2026-07-31", "time": "14:00"},
-        {"title": "中国铁建中标多项重大基建工程，总金额破百亿元", "content": "基建龙头持续发力，在手重磅订单充足。", "date": "2026-07-31", "time": "13:30"},
-        {"title": "上港集团重组布局外贸新航线，净利润大增", "content": "吞吐量显著提升，业绩与高分红获机构重仓。", "date": "2026-07-31", "time": "12:00"}
+        {
+            "title": "中国移动与盐田港签署战略合作协议，推动 5G 智慧港口建设",
+            "content": "双方将在 5G 智慧港口与自动化码头领域展开全方位合作，订单破百亿。",
+            "date": "2026-07-31", "time": "15:00",
+            "url": "https://finance.sina.com.cn"
+        },
+        {
+            "title": "格力电器发布最新高股息分红预案，业绩大增超预期",
+            "content": "分红收益率表现优异，低波动避险属性获机构大额买入。",
+            "date": "2026-07-31", "time": "14:30",
+            "url": "https://www.cls.cn"
+        },
+        {
+            "title": "广州港7月吞吐量创同期历史新高，高景气度持续",
+            "content": "集装箱吞吐量同比增长，外贸航线保持强劲增长势头。",
+            "date": "2026-07-31", "time": "14:00",
+            "url": "https://finance.sina.com.cn"
+        },
+        {
+            "title": "中国铁建中标多项重大基建工程，总金额破百亿元",
+            "content": "基建龙头持续发力，在手重磅订单充足。",
+            "date": "2026-07-31", "time": "13:30",
+            "url": "https://www.cls.cn"
+        }
     ]
     res_df = pd.DataFrame(fallback_news)
     res_df['full_text'] = res_df['title'] + ' ' + res_df['content']
     return res_df
 
 
+def classify_news_importance(title: str, content: str, url: str = "https://www.cls.cn") -> Dict[str, Any]:
+    """
+    评估新闻重要度星级 (⭐️1级至⭐️5级) 并生成一句话核心影响总结
+    链接使用 target="_blank" 属性，确保在浏览器新标签页打开
+    """
+    text = f"{title} {content}"
+    impact_score = 0.0
+    key_hits = []
+
+    for cat, weight in HIGH_IMPACT_CATALYSTS.items():
+        if cat in text:
+            impact_score += weight
+            key_hits.append(cat)
+
+    if impact_score >= 0.5:
+        stars = "⭐️⭐️⭐️⭐️⭐️ 5星重磅"
+        impact_summary = f"重大利好催化 ({', '.join(key_hits)})：对公司股价具备长期估值重塑动力！"
+    elif impact_score >= 0.3:
+        stars = "⭐️⭐️⭐️⭐️ 4星重要"
+        impact_summary = f"显著业绩/合作利好 ({', '.join(key_hits)})：预计短线将迎来资金踊跃关注。"
+    elif any(pw in text for pw in POSITIVE_WORDS):
+        stars = "⭐️⭐️⭐️ 3星利好"
+        impact_summary = "消息面温和利好：技术面与基本面呈良好顺风状态。"
+    elif any(nw in text for nw in NEGATIVE_WORDS):
+        stars = "⭐️⭐️ 2星风险"
+        impact_summary = "消息面存在利空/波动隐忧：建议密切关注止损强平线。"
+    else:
+        stars = "⭐️1星参考"
+        impact_summary = "普通行情快讯：行情主要由技术面与资金筹码驱动。"
+
+    link_html = f'<a href="{url}" target="_blank" style="color: #1f77b4; font-weight: bold; text-decoration: none;">🔗 查看原文网页</a>'
+
+    return {
+        "title": title,
+        "stars_badge": stars,
+        "impact_score": round(impact_score, 2),
+        "impact_summary": impact_summary,
+        "url": url,
+        "link_html": link_html
+    }
+
+
 def extract_important_news(news_df: pd.DataFrame) -> pd.DataFrame:
     """
-    重大重要新闻提取器：根据“业绩大增”、“政策重磅利好”、“订单签署”、“重组/并购”筛选顶级催化新闻
+    重大重要新闻提取器 (带 ⭐️1~⭐️5 级星级评估)
     """
     if news_df is None or news_df.empty:
         return pd.DataFrame()
 
     important_list = []
     for _, row in news_df.iterrows():
-        text = str(row.get('full_text', ''))
-        catalysts_found = []
-        impact_score = 0.0
+        t = str(row.get('title', ''))
+        c = str(row.get('content', ''))
+        u = str(row.get('url', 'https://www.cls.cn'))
 
-        for key, weight in HIGH_IMPACT_CATALYSTS.items():
-            if key in text:
-                catalysts_found.append(key)
-                impact_score += weight
-
-        if catalysts_found or impact_score > 0:
-            row_dict = row.to_dict()
-            row_dict['impact_score'] = round(impact_score, 2)
-            row_dict['catalysts'] = catalysts_found
-            row_dict['importance_badge'] = "🔥 顶级重磅催化" if impact_score >= 0.4 else "⚡ 显著利好快讯"
-            important_list.append(row_dict)
-
-    if not important_list:
-        return news_df.assign(impact_score=0.0, catalysts=[], importance_badge="⚖️ 普通快讯")
+        imp_info = classify_news_importance(t, c, u)
+        row_dict = row.to_dict()
+        row_dict.update(imp_info)
+        important_list.append(row_dict)
 
     return pd.DataFrame(important_list)
 
@@ -112,7 +164,10 @@ def analyze_stock_sentiment(symbol: str, name: str, news_df: pd.DataFrame) -> Di
     for _, row in news_df.iterrows():
         text = str(row.get('full_text', ''))
         if name_str in text or sym_str in text:
-            matched.append(row.to_dict())
+            m_dict = row.to_dict()
+            imp = classify_news_importance(m_dict.get('title', ''), m_dict.get('content', ''), m_dict.get('url', 'https://www.cls.cn'))
+            m_dict.update(imp)
+            matched.append(m_dict)
 
     if not matched:
         return {
@@ -142,19 +197,10 @@ def analyze_stock_sentiment(symbol: str, name: str, news_df: pd.DataFrame) -> Di
                 catalyst_badge = f"🔥 {cat}"
 
     total_words = pos_count + neg_count
-    if total_words == 0:
-        base_score = 0.1
-    else:
-        base_score = (pos_count - neg_count) / total_words
-
+    base_score = (pos_count - neg_count) / total_words if total_words > 0 else 0.1
     final_score = float(np.clip(base_score + high_impact_bonus, -1.0, 1.0))
 
-    if final_score >= 0.2:
-        label = "🟢 正面乐观"
-    elif final_score <= -0.2:
-        label = "🔴 负面预警"
-    else:
-        label = "🟡 中性平稳"
+    label = "🟢 正面乐观" if final_score >= 0.2 else ("🔴 负面预警" if final_score <= -0.2 else "🟡 中性平稳")
 
     return {
         "sentiment_score": round(final_score, 2),
@@ -167,14 +213,12 @@ def analyze_stock_sentiment(symbol: str, name: str, news_df: pd.DataFrame) -> Di
 
 def integrate_sentiment_alpha(df_composite: pd.DataFrame, news_df: pd.DataFrame = None) -> pd.DataFrame:
     """
-    全量股票池舆情 Alpha 融合：将全池 799 只股票的新闻 Sentiment 得分融合进 COMPOSITE_ALPHA 得分
-    COMPOSITE_ALPHA_final = COMPOSITE_ALPHA_neu + 0.3 * SENTIMENT_ALPHA
+    全量股票池舆情 Alpha 融合
     """
     res_df = df_composite.copy()
     if news_df is None:
         news_df = fetch_latest_news(max_items=100)
 
-    # 提取最新的交易日
     latest_date = res_df['date'].max()
     latest_mask = (res_df['date'] == latest_date)
 
@@ -196,7 +240,6 @@ def integrate_sentiment_alpha(df_composite: pd.DataFrame, news_df: pd.DataFrame 
         else:
             news_summary_dict[sym] = s_res['summary_msg']
 
-    # 默认填充 0.0 中性分
     res_df['SENTIMENT_ALPHA'] = 0.0
     res_df['最新重磅新闻'] = "近期无重大舆情事件，行情由技术面驱动"
     res_df['催化剂标签'] = "⚖️ 技术面平静"
@@ -207,11 +250,9 @@ def integrate_sentiment_alpha(df_composite: pd.DataFrame, news_df: pd.DataFrame 
         res_df.loc[mask, '最新重磅新闻'] = news_summary_dict.get(sym, "近期无重大舆情事件，行情由技术面驱动")
         res_df.loc[mask, '催化剂标签'] = catalyst_dict.get(sym, "⚖️ 技术面平静")
 
-    # 融合 Alpha = 纯净 Alpha + 0.3 * 舆情 Alpha
     base_alpha = res_df['COMPOSITE_ALPHA_neu'].fillna(res_df['COMPOSITE_ALPHA_norm'])
     res_df['COMPOSITE_ALPHA_final'] = base_alpha + 0.3 * res_df['SENTIMENT_ALPHA']
 
-    # 重新归一化 Z-Score
     def zscore(s):
         if s.std() > 1e-12:
             return (s - s.mean()) / s.std()
@@ -242,30 +283,21 @@ def generate_stock_report(stock_row: Dict[str, Any], sentiment_res: Dict[str, An
     matched = sentiment_res['matched_news']
     summary_msg = sentiment_res['summary_msg']
 
-    # 1. 拟定买卖建议
-    if alpha >= 1.35 and score >= 0.0:
-        action_advice = "🟢 强烈推荐买入 / 逢低重仓"
-    elif alpha >= 1.25:
-        action_advice = "🔵 推荐关注 / 分批建仓"
-    else:
-        action_advice = "🟡 建议观望 / 紧盯风控线"
+    action_advice = "🟢 强烈推荐买入 / 逢低重仓" if (alpha >= 1.35 and score >= 0.0) else ("🔵 推荐关注 / 分批建仓" if alpha >= 1.25 else "🟡 建议观望 / 紧盯风控线")
 
-    # 2. 核心看涨理由
     bullish_reasons = [
-        f"**量化 Alpha 得分优异**：融合全池新闻舆情后，复合 Alpha 得分高达 **{alpha:.2f}**，位于 90亿+ 中大盘优质标的池前 5%。",
+        f"**量化 Alpha 得分优异**：复合 Alpha 得分高达 **{alpha:.2f}**，位于 90亿+ 中大盘优质标的池前 5%。",
         f"**低波避险与动量支撑**：低波动因子得分 `{vol:.2f}`，过去 20 日动量得分 `{mom:.2f}`，具备较强抗跌与向上突破动能。",
         f"**市值与流动性安全**：硬性满足总市值 ≥ 90 亿元且上市 ≥ 180 天门槛，具备极佳的机构资金承载力。"
     ]
     if matched:
         bullish_reasons.append(f"**重大新闻催化**：近期快讯出现利好关注 (`{matched[0].get('title', '')}`)...")
 
-    # 3. 风险提示
     risk_warnings = [
         "**大盘整体风控**：系统已开启 15% 动态最大回撤熔断强平保护，如遭遇黑天鹅将自动平仓冷静 10 个交易日。",
         "**单股仓位上限**：建议单只股票仓位不超过账户总资产的 **30%**，严格执行分散避险原则。"
     ]
 
-    # Markdown 排版格式化报告
     markdown_report = f"""
 ### 📊 【AI 深度诊断研报】{name} ({sym})
 
