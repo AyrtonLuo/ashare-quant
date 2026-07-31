@@ -285,7 +285,7 @@ elif menu == "🔬 因子 IC 诊断实验室":
 # =============================================================================
 elif menu == "⚙️ 数据与回测控制台":
     st.header("⚙️ 数据管道与量化引擎控制台")
-    st.caption("在控制台可进行数据的实时增量更新或重新运行量化研报计算。")
+    st.caption("在控制台可进行数据的实时增量更新、重新运行量化研报计算或一键同步买卖指令至富途 OpenD 网关。")
     
     col_btn1, col_btn2 = st.columns(2)
     
@@ -296,9 +296,6 @@ elif menu == "⚙️ 数据与回测控制台":
             with st.spinner("正在并发抓取与增量更新数据，请稍候..."):
                 try:
                     update_quality_universe_data(max_workers=8)
-                    # =========================================================
-                    # 🚀 性能优化 2：刷新 Streamlit 缓存
-                    # =========================================================
                     st.cache_data.clear()
                     st.success("🎉 数据增量更新成功！已自动清空缓存并刷新最新行情。")
                 except Exception as ex:
@@ -315,6 +312,53 @@ elif menu == "⚙️ 数据与回测控制台":
                 except Exception as ex:
                     st.error(f"重新计算失败: {ex}")
                     
+    st.markdown("---")
+    st.subheader("🍏 富途 OpenD A 股模拟盘自动同步 (macOS)")
+    st.write("将最新的 Top 39 优质选股名单自动比对平仓旧持仓，并按单股 ≤30% 限制与 100 股一手粒度向富途模拟盘下发买单。")
+    
+    if st.button("🍏 一键同步交易指令至富途 Mac 模拟盘", key="futu_sync_btn"):
+        with st.spinner("正在连接本地 Mac 富途 OpenD (127.0.0.1:11111) 并计算调仓买卖指令..."):
+            try:
+                from src.execution.futu_trader import FutuSimTrader
+                trader = FutuSimTrader(host="127.0.0.1", port=11111)
+                sync_res = trader.execute_rebalance(engine_data['top_portfolio'])
+                
+                st.success(f"🎉 调仓同步计算完成！当前引擎模式: `{sync_res['mode']}`")
+                
+                # 账户资产摘要
+                acc = sync_res['account_summary']
+                acc_c1, acc_c2, acc_c3 = st.columns(3)
+                acc_c1.metric("模拟总资产 (CNY)", f"¥{acc['total_assets']:,.2f}")
+                acc_c2.metric("可用现金 (Cash)", f"¥{acc['cash']:,.2f}")
+                acc_c3.metric("持仓市值 (Market Value)", f"¥{acc['market_value']:,.2f}")
+                
+                # 卖单列表
+                s_orders = sync_res['sell_orders']
+                if s_orders:
+                    st.markdown("##### 📋 提交的平仓/卖出订单列表")
+                    s_df = pd.DataFrame(s_orders).rename(columns={
+                        "futu_code": "富途代码", "symbol": "A股代码", "name": "股票名称",
+                        "sell_qty": "卖出股数", "price": "挂单价格", "sell_amount": "卖出金额", "status": "订单状态"
+                    })
+                    st.dataframe(s_df, use_container_width=True)
+                else:
+                    st.info("ℹ️ 当前持仓无须平仓出局的标的。")
+                    
+                # 买单列表
+                b_orders = sync_res['buy_orders']
+                if b_orders:
+                    st.markdown("##### 🛒 提交的建仓/买入订单列表")
+                    b_df = pd.DataFrame(b_orders).rename(columns={
+                        "futu_code": "富途代码", "symbol": "A股代码", "name": "股票名称",
+                        "buy_qty": "买入股数(100整倍)", "price": "挂单价格", "buy_amount": "占用资金(元)", "status": "订单状态"
+                    })
+                    st.dataframe(b_df, use_container_width=True)
+                else:
+                    st.info("ℹ️ 当前无可新买入建仓的标的或资金不足 100 股。")
+                    
+            except Exception as ex_futu:
+                st.error(f"同步至富途模拟盘失败: {ex_futu}")
+                
     st.markdown("---")
     st.subheader("📁 本地存储文件状态")
     if os.path.exists(DAILY_PARQUET):
