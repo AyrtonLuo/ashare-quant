@@ -33,7 +33,7 @@ def test_search_concept_or_stock():
     ])
     
     search_res = search_concept_or_stock("中国移动", mock_df)
-    assert search_res["matched_type"] in ["stock", "concept", "fallback"]
+    assert search_res["matched_type"] in ["stock_code", "stock_name", "stock", "concept", "small_cap", "fallback"]
     assert not search_res["data"].empty
 
 

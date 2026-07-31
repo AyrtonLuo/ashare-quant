@@ -470,7 +470,13 @@ elif menu == "🔍 概念板块与龙头搜索":
         
     search_res = search_concept_or_stock(kw_input, engine_data['df_composite'])
     
-    st.subheader(f"🏷️ 检索结果: {search_res['concept_name']}")
+    m_type = search_res.get('matched_type', '')
+    if m_type == 'small_cap':
+        st.warning(search_res['concept_name'])
+    elif m_type == 'fallback':
+        st.info(search_res['concept_name'])
+    else:
+        st.success(f"🏷️ 检索结果: {search_res['concept_name']}")
     
     res_data = search_res['data']
     if not res_data.empty:
