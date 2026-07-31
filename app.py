@@ -327,12 +327,18 @@ elif menu == "🔥 今日 AI 优质推荐榜":
     st.caption(f"更新时间: {latest_date_str} | 智能算法在 {engine_data['num_stocks']} 只标的中甄选出得分前 5% 优质股票 (共 {len(top_df)} 只)")
     
     # 搜索框
-    search_term = st.text_input("🔍 搜索股票代码或股票名称...", "")
+    # 搜索框平滑响应
+    search_term = st.text_input("🔍 搜索股票代码或股票名称 (如：600941 或 中国移动)...", "")
     if search_term:
-        top_df = top_df[
+        filtered = top_df[
             top_df['symbol'].str.contains(search_term, case=False, na=False) |
             top_df['name'].str.contains(search_term, case=False, na=False)
         ]
+        if not filtered.empty:
+            top_df = filtered
+        else:
+            st.warning(f"🔍 推荐榜单中未找到与 [{search_term}] 匹配的股票，已为您保留全量 AI 精选推荐榜单。")
+            top_df = engine_data['top_portfolio'].copy()
         
     display_cols = ['symbol', 'name', 'close', 'AI推荐星级', '推荐理由标签', '催化剂标签', '最新重磅新闻', 'COMPOSITE_ALPHA_norm']
     existing_cols = [c for c in display_cols if c in top_df.columns]
@@ -351,7 +357,7 @@ elif menu == "🔥 今日 AI 优质推荐榜":
         use_container_width=True,
         height=400
     )
-    st.info("💡 提示：点击表格任意列标题即可重新按该字段排序。在下方选择特定股票查看 【🔍 单股 AI 深度诊断研报】。")
+    st.info("💡 提示：在上方输入股票代码/名称或在下方选择特定股票，查看对应的【🔍 单股 AI 深度诊断研报】。")
     
     st.markdown("---")
     st.subheader("🔍 单股 AI 深度诊断研报与舆情风向")
@@ -507,28 +513,45 @@ elif menu == "📊 AI 策略胜率与因子画像":
         "COMPOSITE_ALPHA_neu": "⭐ 纯净 Alpha 策略"
     }).fillna(ic_summary['因子名称'])
     
-    ic_summary['胜率 (大于大盘)'] = ic_summary['IC 胜率 (IC > 0)']
-    ic_summary['稳定度评分'] = ic_summary['IC 信息比率 (IC IR)'].apply(lambda v: f"{v*10:.2f} 分")
+    # 转换为数值型胜率与稳定度
+    def parse_win_rate(v):
+        try:
+            if isinstance(v, str):
+                return float(v.replace("%", "").strip())
+            return float(v) * 100.0 if float(v) <= 1.0 else float(v)
+        except Exception:
+            return 50.0
+
+    ic_summary['胜率数值'] = ic_summary['IC 胜率 (IC > 0)'].apply(parse_win_rate)
+    ic_summary['AI 选股胜率'] = ic_summary['胜率数值'].apply(lambda v: f"{v:.2f}%")
+    ic_summary['选股稳定性得分'] = ic_summary['IC 信息比率 (IC IR)'].apply(lambda v: f"{v*10:.2f} 分" if isinstance(v, (int, float)) else str(v))
+    ic_summary['AI 因子看涨强度'] = ic_summary['IC 均值 (IC Mean)'].apply(lambda v: f"{v:+.4f}" if isinstance(v, (int, float)) else str(v))
     
     st.subheader("📋 AI 策略核心胜率与稳定度概览")
-    st.dataframe(ic_summary[['策略属性', '胜率 (大于大盘)', '稳定度评分']], use_container_width=True)
+    st.dataframe(ic_summary[['策略属性', 'AI 选股胜率', '选股稳定性得分', 'AI 因子看涨强度']], use_container_width=True)
     
     col_chart1, col_chart2 = st.columns(2)
     
+    # 防御性列名匹配
+    y_col = '胜率数值' if '胜率数值' in ic_summary.columns else ic_summary.columns[1]
+    
     with col_chart1:
         fig_win = px.bar(
-            ic_summary, x='策略属性', y='IC 胜率数值',
-            color='IC 胜率数值', color_continuous_scale='Reds',
+            ic_summary, x='策略属性', y=y_col,
+            color=y_col, color_continuous_scale='Reds',
             title="<b>各策略属性选股历史胜率 (%) 对比</b>"
         )
         fig_win.update_layout(template="plotly_white", height=380)
         st.plotly_chart(fig_win, use_container_width=True)
         
     with col_chart2:
-        neu_comp_df = ic_summary[ic_summary['策略属性'].str.contains('策略')]
+        neu_comp_df = ic_summary[ic_summary['策略属性'].str.contains('策略')].copy()
+        if neu_comp_df.empty:
+            neu_comp_df = ic_summary.head(2).copy()
+            
         fig_neu = px.bar(
-            neu_comp_df, x='策略属性', y='IC 胜率数值',
-            color='IC 胜率数值', color_continuous_scale='Viridis',
+            neu_comp_df, x='策略属性', y=y_col,
+            color=y_col, color_continuous_scale='Viridis',
             title="<b>自适应 AI 策略 vs 纯净 Alpha 策略胜率对比</b>"
         )
         fig_neu.update_layout(template="plotly_white", height=380)

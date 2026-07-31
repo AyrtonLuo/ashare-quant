@@ -140,10 +140,10 @@ def search_concept_or_stock(keyword: str, stock_df: pd.DataFrame) -> Dict[str, A
             "data": latest_matched
         }
 
-    # 3. 未找到则默认返回龙头列表
+    # 3. 未匹配到则提供热点板块龙头推荐
     default_df = leader_stock_identifier("高股息央企/稳健避险", stock_df)
     return {
         "matched_type": "fallback",
-        "concept_name": "推荐优质板块: 高股息央企/稳健避险",
+        "concept_name": f"未匹配到关键词 [{kw}]，已为您推荐优质热点板块: 高股息央企/稳健避险",
         "data": default_df
     }

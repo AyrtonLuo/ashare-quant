@@ -86,12 +86,13 @@ def build_composite_alpha_factor(df: pd.DataFrame, method: str = "equal_weight")
     else:
         raise ValueError(f"未知的合成方法: {method}")
 
-    # 最后对合成因子在每日横截面上再做一次 Z-Score 标准化
+    # 最后对合成因子在每日横截面上再做一次 Z-Score 标准化 (防御性 fillna)
     def process_series(s):
         if s.dropna().empty or len(s.dropna()) < 3:
-            return s
-        return zscore_series(mad_clip_series(s))
+            return s.fillna(0.0)
+        res = zscore_series(mad_clip_series(s))
+        return res.fillna(0.0)
         
-    data['COMPOSITE_ALPHA_norm'] = data.groupby('date')['COMPOSITE_ALPHA_raw'].transform(process_series)
+    data['COMPOSITE_ALPHA_norm'] = data.groupby('date')['COMPOSITE_ALPHA_raw'].transform(process_series).fillna(0.0)
     data['COMPOSITE_ALPHA'] = data['COMPOSITE_ALPHA_norm']
     return data

@@ -90,14 +90,15 @@ def build_adaptive_alpha_factor(df_processed: pd.DataFrame, macro_sentiment: flo
     res_df['target_position_cap'] = target_pos_series
     res_df['market_regime'] = regime_series
 
-    # 每日横截面 Z-Score 标准化
+    # 每日横截面 Z-Score 标准化 (防御性 fillna)
     def zscore(s):
         if s.dropna().empty or len(s.dropna()) < 3 or s.std() < 1e-12:
-            return s
-        return (s - s.mean()) / s.std()
+            return s.fillna(0.0)
+        res = (s - s.mean()) / s.std()
+        return res.fillna(0.0)
 
     res_df['COMPOSITE_ALPHA_adaptive_norm'] = res_df.groupby('date')['COMPOSITE_ALPHA_adaptive_raw'].transform(zscore)
-    res_df['COMPOSITE_ALPHA_norm'] = res_df['COMPOSITE_ALPHA_adaptive_norm']
+    res_df['COMPOSITE_ALPHA_norm'] = res_df['COMPOSITE_ALPHA_adaptive_norm'].fillna(0.0)
     res_df['COMPOSITE_ALPHA'] = res_df['COMPOSITE_ALPHA_norm']
 
     return res_df
