@@ -79,9 +79,14 @@ def run_pipeline():
     # 扩展窗口动态 IC-IR 合成
     df_composite = build_composite_alpha_factor(df_processed, method="dynamic_ic_ir")
     
+    # 步骤 3.5: 机构级市值与行业中性化 & 对称正交化
+    from src.strategy.factor_neutralizer import neutralize_factors_cross_section, orthogonalize_factors
+    df_composite = neutralize_factors_cross_section(df_composite, ["COMPOSITE_ALPHA"])
+    df_composite = orthogonalize_factors(df_composite, ["MOM_20_norm", "LOW_VOL_20_norm", "MA_DEV_20_norm"])
+    
     # 步骤 4: 全因子 IC 诊断分析
-    print("\n【步骤 4/5】全因子 IC 诊断分析...")
-    all_factor_cols = ["MOM_20", "LOW_VOL_20", "MA_DEV_20", "COMPOSITE_ALPHA"]
+    print("\n【步骤 4/5】全因子 IC 诊断分析 (含中性化对比)...")
+    all_factor_cols = ["MOM_20", "LOW_VOL_20", "MA_DEV_20", "COMPOSITE_ALPHA", "COMPOSITE_ALPHA_neu"]
     ic_summary = summarize_factor_ic(df_composite, all_factor_cols)
     
     print("\n" + "=" * 85)

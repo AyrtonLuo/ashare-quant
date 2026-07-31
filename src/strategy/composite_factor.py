@@ -93,4 +93,5 @@ def build_composite_alpha_factor(df: pd.DataFrame, method: str = "equal_weight")
         return zscore_series(mad_clip_series(s))
         
     data['COMPOSITE_ALPHA_norm'] = data.groupby('date')['COMPOSITE_ALPHA_raw'].transform(process_series)
+    data['COMPOSITE_ALPHA'] = data['COMPOSITE_ALPHA_norm']
     return data

@@ -61,8 +61,13 @@ def load_and_process_quant_engine():
     # 动态 IC-IR 合成 Alpha
     df_composite = build_composite_alpha_factor(df_processed, method="dynamic_ic_ir")
     
-    # IC 总结
-    all_factor_cols = ["MOM_20", "LOW_VOL_20", "MA_DEV_20", "COMPOSITE_ALPHA"]
+    # 机构级市值与行业中性化 & 多因子对称正交化
+    from src.strategy.factor_neutralizer import neutralize_factors_cross_section, orthogonalize_factors
+    df_composite = neutralize_factors_cross_section(df_composite, ["COMPOSITE_ALPHA"])
+    df_composite = orthogonalize_factors(df_composite, ["MOM_20_norm", "LOW_VOL_20_norm", "MA_DEV_20_norm"])
+    
+    # IC 总结 (对比中性化前后)
+    all_factor_cols = ["MOM_20", "LOW_VOL_20", "MA_DEV_20", "COMPOSITE_ALPHA", "COMPOSITE_ALPHA_neu"]
     ic_summary = summarize_factor_ic(df_composite, all_factor_cols)
     
     # Top 5% 周频回测与 15% MaxDD 风控熔断
@@ -255,6 +260,20 @@ elif menu == "🔬 因子 IC 诊断实验室":
         )
         fig_win.update_layout(template="plotly_white", height=380)
         st.plotly_chart(fig_win, use_container_width=True)
+        
+    st.markdown("---")
+    st.subheader("🛡️ 因子中性化 (Neutralization) 前后预测力对比分析")
+    st.caption("采用 OLS 多元线性回归剔除市值因子 (log_mc) 与申万一级行业偏差后的净 Alpha IC 表现。")
+    
+    neu_comp_df = ic_summary[ic_summary['因子名称'].isin(['COMPOSITE_ALPHA', 'COMPOSITE_ALPHA_neu'])].copy()
+    if not neu_comp_df.empty:
+        fig_neu = px.bar(
+            neu_comp_df, x='因子名称', y=['IC 信息比率 (IC IR)', 'IC 胜率数值'],
+            barmode='group',
+            title="<b>复合 Alpha 因子市值/行业中性化前后 IC IR 与 IC 胜率 (%) 对比</b>"
+        )
+        fig_neu.update_layout(template="plotly_white", height=380)
+        st.plotly_chart(fig_neu, use_container_width=True)
         
     st.markdown("---")
     st.subheader("📉 复合 Alpha 因子 60日 Rolling IC 移动跟踪")
