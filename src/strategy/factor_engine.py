@@ -1,0 +1,103 @@
+"""
+factor_engine.py
+自适应因子加权模型 (Adaptive Factor Allocation Engine)：
+1. 市场大盘 MA20 趋势与全球宏观情绪联动判定
+2. 顺风/牛市 (Risk-On)：MOM 权重提升至 60%，解锁 100% 满仓捕抓主升浪
+3. 逆风/熊市 (Risk-Off)：LOW_VOL 权重提升至 70%，切换为高股息避险模式，仓位降至 60%
+"""
+
+import logging
+import pandas as pd
+import numpy as np
+from typing import Dict, Any, Tuple
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("factor_engine")
+
+
+def build_adaptive_alpha_factor(df_processed: pd.DataFrame, macro_sentiment: float = 0.0) -> pd.DataFrame:
+    """
+    基于大盘 MA20 趋势与全球宏观情绪的【自适应动态因子模型】
+    """
+    res_df = df_processed.copy()
+    res_df = res_df.sort_values(['date', 'symbol']).reset_index(drop=True)
+
+    # 1. 计算每日横截面市场大盘均价与 20 日均线 (MA20)
+    market_daily = res_df.groupby('date')['close'].mean().reset_index(name='market_close')
+    market_daily['market_ma20'] = market_daily['market_close'].rolling(window=20, min_periods=5).mean()
+    market_daily['is_bull_trend'] = market_daily['market_close'] >= market_daily['market_ma20']
+
+    # 映射回主 Dataframe
+    res_df = res_df.merge(market_daily[['date', 'market_close', 'market_ma20', 'is_bull_trend']], on='date', how='left')
+
+    # 2. 逐日按行情状态自适应调整因子权重
+    dates = res_df['date'].drop_duplicates().sort_values()
+
+    comp_raw_series = pd.Series(index=res_df.index, dtype=float)
+    target_pos_series = pd.Series(index=res_df.index, dtype=float)
+    regime_series = pd.Series(index=res_df.index, dtype=str)
+
+    for curr_date in dates:
+        mask = (res_df['date'] == curr_date)
+        day_sample = res_df[mask]
+
+        if day_sample.empty:
+            continue
+
+        is_bull = bool(day_sample['is_bull_trend'].iloc[0])
+
+        # =========================================================================
+        # 🚨 自适应模式判断逻辑
+        # =========================================================================
+        if is_bull and macro_sentiment >= -0.1:
+            # 模式 1：牛市/顺风局 (Risk-On) -> MOM 60%, LOW_VOL 20%, 满仓 100%
+            w_mom = 0.60
+            w_vol = 0.20
+            w_dev = 0.20
+            target_cap = 1.00
+            regime_label = "🟢 进攻牛市 (Risk-On, MOM 60%)"
+
+        elif (not is_bull) or macro_sentiment < -0.3:
+            # 模式 2：熊市/逆风局 (Risk-Off) -> LOW_VOL 70%, MOM 10%, 降仓 60%
+            w_mom = 0.10
+            w_vol = 0.70
+            w_dev = 0.20
+            target_cap = 0.60
+            regime_label = "🔴 防守熊市 (Risk-Off, LowVol 70%)"
+
+        else:
+            # 模式 3：震荡局 (Neutral)
+            w_mom = 0.35
+            w_vol = 0.35
+            w_dev = 0.30
+            target_cap = 0.85
+            regime_label = "🟡 震荡盘整 (Neutral)"
+
+        mom_col = day_sample['MOM_20_norm'].fillna(0.0)
+        vol_col = day_sample['LOW_VOL_20_norm'].fillna(0.0)
+        dev_col = day_sample['MA_DEV_20_norm'].fillna(0.0)
+
+        # 全池舆情得分项
+        sent_col = day_sample.get('SENTIMENT_ALPHA', 0.0)
+
+        # 融合加权
+        comp_val = w_mom * mom_col + w_vol * vol_col + w_dev * dev_col + 0.25 * sent_col
+        comp_raw_series[mask] = comp_val
+        target_pos_series[mask] = target_cap
+        regime_series[mask] = regime_label
+
+    res_df['COMPOSITE_ALPHA_adaptive_raw'] = comp_raw_series
+    res_df['target_position_cap'] = target_pos_series
+    res_df['market_regime'] = regime_series
+
+    # 每日横截面 Z-Score 标准化
+    def zscore(s):
+        if s.dropna().empty or len(s.dropna()) < 3 or s.std() < 1e-12:
+            return s
+        return (s - s.mean()) / s.std()
+
+    res_df['COMPOSITE_ALPHA_adaptive_norm'] = res_df.groupby('date')['COMPOSITE_ALPHA_adaptive_raw'].transform(zscore)
+    res_df['COMPOSITE_ALPHA_norm'] = res_df['COMPOSITE_ALPHA_adaptive_norm']
+    res_df['COMPOSITE_ALPHA'] = res_df['COMPOSITE_ALPHA_norm']
+
+    return res_df

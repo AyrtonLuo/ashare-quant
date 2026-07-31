@@ -1,6 +1,7 @@
 """
 risk_manager.py
 组合风控熔断器：实现单股仓位上限限制 (<= 30%) 与 15% 动态最大回撤熔断保护状态机。
+支持【大盘趋势确认 (Trend-Confirmed Circuit Breaker)】：牛市上升通道回调不误杀强平，确认破位时强平冷静。
 """
 
 import pandas as pd
@@ -15,17 +16,14 @@ def apply_risk_managed_backtest(res_df: pd.DataFrame,
     """
     对回测组合施加风控约束：
     1. 单股仓位上限 30% (若有 3 只股票，最高使用 90% 仓位，10% 留存现金)
-    2. 15% 动态最大回撤熔断保护：回撤破 15% 立即平仓，进入 10 个交易日冷静期 (收益率设为 0%)
-    
-    返回:
-        (data_with_risk, risk_metrics_dict)
+    2. 15% 动态最大回撤熔断保护 (配合大盘趋势确认)：破 15% 且大盘跌破 MA20 趋势变坏时触发平仓冷静
     """
     data = res_df.copy()
     data = data.sort_values('date').reset_index(drop=True)
     n = len(data)
     
     # 1. 计算受单股 30% 上限约束后的有效策略日收益率 (90% 股票仓位 + 10% 现金)
-    portfolio_exposure = min(1.0, num_top_stocks * max_stock_weight) # 3 * 0.30 = 0.90
+    portfolio_exposure = min(1.0, num_top_stocks * max_stock_weight)
     data['raw_top_return'] = data['top_return'].fillna(0.0)
     data['scaled_top_return'] = data['raw_top_return'] * portfolio_exposure
     
@@ -50,7 +48,6 @@ def apply_risk_managed_backtest(res_df: pd.DataFrame,
             # 冷静期满复牌重置
             if cooldown_counter <= 0:
                 is_broken = False
-                # 冷静期满后，重置历史峰值基准为当前净值
                 peak_equity = curr_equity
         else:
             # 正常交易状态
@@ -67,8 +64,13 @@ def apply_risk_managed_backtest(res_df: pd.DataFrame,
             # 计算动态回撤
             current_dd = (peak_equity - curr_equity) / peak_equity
             
-            # 触及 15% 动态回撤熔断门槛
-            if current_dd >= max_dd_limit:
+            # 大盘趋势确认：检查大盘是否破位 (无列时默认 False 保持标准熔断)
+            is_market_bull = False
+            if 'is_bull_trend' in data.columns:
+                is_market_bull = bool(data['is_bull_trend'].iloc[t])
+                
+            # 触及 15% 动态回撤熔断门槛，且大盘确认非强牛局才触发行强平
+            if current_dd >= max_dd_limit and (not is_market_bull):
                 is_broken = True
                 cooldown_counter = cooldown_days
                 trigger_count += 1
