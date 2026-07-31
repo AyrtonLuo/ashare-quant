@@ -84,9 +84,9 @@ def summarize_factor_ic(df: pd.DataFrame, factor_cols: list[str]) -> pd.DataFram
     return pd.DataFrame(summary)
 
 
-def run_layered_backtest(df: pd.DataFrame, factor_col: str, rebalance_freq: int = 5, top_k: int = 3) -> tuple[pd.DataFrame, dict]:
+def run_layered_backtest(df: pd.DataFrame, factor_col: str, rebalance_freq: int = 5, top_pct: float = 0.05) -> tuple[pd.DataFrame, dict]:
     """
-    运行周频 (每 5 个交易日) 分层回测 (Top 组 vs Bottom 组 vs Benchmark 等权)
+    运行周频 (每 5 个交易日) 分层回测 (Top 组 5% vs Bottom 组 5% vs Benchmark 等权)
     """
     data = df.copy()
     data = data.sort_values(['date', 'symbol']).reset_index(drop=True)
@@ -96,7 +96,6 @@ def run_layered_backtest(df: pd.DataFrame, factor_col: str, rebalance_freq: int 
     
     daily_returns_list = []
     
-    # 初始化账户持仓组合 (Top 组、Bottom 组、Benchmark 组)
     top_stocks = []
     bottom_stocks = []
     
@@ -107,8 +106,10 @@ def run_layered_backtest(df: pd.DataFrame, factor_col: str, rebalance_freq: int 
         # 判断是否为调仓日 (每 rebalance_freq 天调仓一次)
         if i % rebalance_freq == 0:
             day_data = data[data['date'] == curr_date].dropna(subset=[factor_col])
-            if len(day_data) >= top_k * 2:
-                # 排序选取得分最高 Top K 与最低 Bottom K
+            num_valid = len(day_data)
+            if num_valid >= 10:
+                top_k = max(1, int(num_valid * top_pct))
+                # 排序选取得分最高前 5% 与最低前 5%
                 sorted_day = day_data.sort_values(factor_col, ascending=False)
                 top_stocks = sorted_day['symbol'].iloc[:top_k].tolist()
                 bottom_stocks = sorted_day['symbol'].iloc[-top_k:].tolist()
@@ -119,7 +120,6 @@ def run_layered_backtest(df: pd.DataFrame, factor_col: str, rebalance_freq: int 
             continue
             
         next_day_data = next_day_data.set_index('symbol')
-        all_symbols = next_day_data.index.tolist()
         
         # 全集等权基准日收益
         bench_ret = next_day_data['asset_return'].mean()

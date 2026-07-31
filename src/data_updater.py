@@ -1,112 +1,123 @@
 """
 data_updater.py
-增量数据更新管道：自动读取本地 Parquet 数据缓存的最大日期，通过 akshare 增量抓取新交易日数据，
-去重并正序排列后完成合并更新。
+多线程并发增量数据更新管道：
+使用 ThreadPoolExecutor 对 90 亿+ 市值优质股票池进行并发抓取，
+包含指数退避重试 (Exponential Backoff)、断点续传、正序排列 (sort_values('date')) 与日志记录。
 """
 
 import os
 import sys
 import time
+import random
 import logging
 import pandas as pd
-import akshare as ak
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 确保项目根目录在 sys.path 中
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from src.data_fetch import TARGET_STOCKS, fetch_stock_daily
+from src.data_fetch import get_quality_stock_universe, fetch_stock_daily, get_stock_prefix
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+STOCKS_DIR = os.path.join(DATA_DIR, "stocks")
 
-# 日志模块配置
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("data_updater")
 
 
-def update_incremental_stock_data(end_date: str = None) -> bool:
+def process_single_stock_download(stock_info: dict, end_date: str = "20260731", max_retries: int = 4) -> tuple[str, pd.DataFrame, int]:
     """
-    检查并增量更新本地 Parquet 股票数据
-    
-    参数:
-        end_date: 抓取目标截止日期 (默认今天 YYYYMMDD)
-        
-    返回:
-        bool: 是否更新了新数据
+    单只股票抓取 worker 函数（含指数退避重试与断点续传）
     """
-    if end_date is None:
-        end_date = datetime.now().strftime("%Y%m%d")
+    sym = stock_info["symbol"]
+    prefix = stock_info.get("prefix", get_stock_prefix(sym))
+    name = stock_info["name"]
+    single_path = os.path.join(STOCKS_DIR, f"{sym}.parquet")
 
-    os.makedirs(DATA_DIR, exist_ok=True)
-    all_dfs = []
-    updated_count = 0
+    old_df = pd.DataFrame()
+    fetch_start = "20230101"
 
-    logger.info("开始检验本地数据缓存并执行增量更新检测...")
+    if os.path.exists(single_path):
+        try:
+            old_df = pd.read_parquet(single_path)
+            old_df['date'] = pd.to_datetime(old_df['date'])
+            latest_date_dt = old_df['date'].max()
+            latest_date_str = latest_date_dt.strftime("%Y%m%d")
+            
+            if latest_date_str >= end_date:
+                return sym, old_df, 0
+            fetch_start = latest_date_str
+        except Exception:
+            old_df = pd.DataFrame()
 
-    for stock in TARGET_STOCKS:
-        sym = stock["symbol"]
-        prefix = stock["prefix"]
-        name = stock["name"]
-        single_path = os.path.join(DATA_DIR, f"{sym}.parquet")
+    # 指数退避重试循环
+    new_df = pd.DataFrame()
+    for attempt in range(1, max_retries + 1):
+        try:
+            new_df = fetch_stock_daily(symbol=sym, prefix=prefix, start_date=fetch_start, end_date=end_date)
+            new_df['name'] = name
+            break
+        except Exception as e:
+            if attempt == max_retries:
+                logger.warning(f"  ✗ [{name}]({sym}) 重试 {max_retries} 次仍失败，保留原有数据。")
+            else:
+                # 指数退避延迟 + 随机抖动 (Exponential Backoff with Jitter)
+                delay = (2 ** (attempt - 1)) + random.uniform(0.1, 0.5)
+                time.sleep(delay)
 
-        if os.path.exists(single_path):
-            try:
-                old_df = pd.read_parquet(single_path)
-                old_df['date'] = pd.to_datetime(old_df['date'])
-                
-                # 获取本地最大的已有交易日
-                latest_date_dt = old_df['date'].max()
-                latest_date_str = latest_date_dt.strftime("%Y%m%d")
-                
-                # 若已有数据已是最新，跳过重复请求
-                if latest_date_str >= end_date:
-                    logger.info(f"[{name}]({sym}) 已是最新数据 ({latest_date_str})，跳过增量更新。")
-                    all_dfs.append(old_df)
-                    continue
-
-                # 仅从最新日期的下一天起开始增量抓取
-                fetch_start = latest_date_dt.strftime("%Y%m%d")
-                logger.info(f"[{name}]({sym}) 本地最大日期: {latest_date_str}，开始从 {fetch_start} 抓取增量数据...")
-                
-                new_df = fetch_stock_daily(symbol=sym, prefix=prefix, start_date=fetch_start, end_date=end_date)
-                new_df['name'] = name
-                
-                # 合并新旧数据
-                combined_df = pd.concat([old_df, new_df], ignore_index=True)
-                
-                # =========================================================================
-                # 🚨 【工程规范】：1. 去重按 date ; 2. 必须正序排列 sort_values('date')
-                # =========================================================================
-                combined_df = combined_df.drop_duplicates(subset=['date']).sort_values('date').reset_index(drop=True)
-                
-                combined_df.to_parquet(single_path, index=False)
-                new_rows = len(combined_df) - len(old_df)
-                logger.info(f"  ✓ [{name}]({sym}) 成功更新 {new_rows} 条新数据，最新纪录共 {len(combined_df)} 条。")
-                
-                all_dfs.append(combined_df)
-                updated_count += 1
-                time.sleep(0.3)
-                continue
-                
-            except Exception as e:
-                logger.warning(f"增量更新股票 [{name}]({sym}) 出现异常 ({e})，保留原有本地数据。")
-                if os.path.exists(single_path):
-                    all_dfs.append(pd.read_parquet(single_path))
+    if not new_df.empty:
+        if not old_df.empty:
+            combined_df = pd.concat([old_df, new_df], ignore_index=True)
         else:
-            # 文件不存在，全量抓取
+            combined_df = new_df
+            
+        # =========================================================================
+        # 🚨 【工程规范】：1. 按 date 去重 ; 2. 必须正序排列 sort_values('date')
+        # =========================================================================
+        combined_df = combined_df.drop_duplicates(subset=['date']).sort_values('date').reset_index(drop=True)
+        combined_df.to_parquet(single_path, index=False)
+        new_added = len(combined_df) - len(old_df)
+        return sym, combined_df, new_added
+
+    return sym, old_df, 0
+
+
+def update_quality_universe_data(max_workers: int = 8, end_date: str = "20260731") -> pd.DataFrame:
+    """
+    多线程并发抓取 90 亿+ 市值股票池日线数据
+    """
+    os.makedirs(STOCKS_DIR, exist_ok=True)
+    
+    # 1. 筛选优质股票池
+    universe_df = get_quality_stock_universe(min_mv_yi=90.0, min_listing_days=180)
+    stock_list = universe_df.to_dict('records')
+    total_stocks = len(stock_list)
+    
+    logger.info(f"🚀 开始使用 ThreadPoolExecutor ({max_workers} 线程并发) 抓取 {total_stocks} 只 90亿+ 市值标的日线数据...\n")
+    
+    all_dfs = []
+    completed_count = 0
+    total_new_rows = 0
+
+    # 2. 多线程并发调度
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_stock = {
+            executor.submit(process_single_stock_download, stock, end_date): stock
+            for stock in stock_list
+        }
+        
+        for future in as_completed(future_to_stock):
+            stock = future_to_stock[future]
+            completed_count += 1
             try:
-                logger.info(f"本地缺少 [{name}]({sym}) 缓存，开始全量抓取...")
-                df = fetch_stock_daily(symbol=sym, prefix=prefix, start_date="20230101", end_date=end_date)
-                df['name'] = name
-                df = df.sort_values('date').reset_index(drop=True)
-                df.to_parquet(single_path, index=False)
-                all_dfs.append(df)
-                updated_count += 1
-            except Exception as e:
-                logger.error(f"全量抓取股票 [{name}]({sym}) 失败: {e}")
+                sym, df, new_rows = future.result()
+                if not df.empty:
+                    all_dfs.append(df)
+                    total_new_rows += new_rows
+                if completed_count % 10 == 0 or completed_count == total_stocks:
+                    logger.info(f"进度: [{completed_count}/{total_stocks}] (已完成 {completed_count/total_stocks*100:.1f}%)")
+            except Exception as exc:
+                logger.error(f"股票 {stock['name']}({stock['symbol']}) 线程处理抛出异常: {exc}")
 
     if all_dfs:
         combined_all = pd.concat(all_dfs, ignore_index=True)
@@ -115,9 +126,11 @@ def update_incremental_stock_data(end_date: str = None) -> bool:
         
         combined_path = os.path.join(DATA_DIR, "stocks_daily.parquet")
         combined_all.to_parquet(combined_path, index=False)
-        logger.info(f"🎉 本地汇总数据更新完成: {combined_path} (涵盖 {len(all_dfs)} 只股票，共 {len(combined_all)} 条记录)。")
+        logger.info(f"\n🎉 90亿+ 市值全标的数据并发更新完成！汇总文件: {combined_path} (涵盖 {len(all_dfs)} 只股票，共 {len(combined_all)} 条记录)。")
+        return combined_all
+    else:
+        raise RuntimeError("未成功获取到任何股票数据！")
 
-    return updated_count > 0
 
 if __name__ == "__main__":
-    update_incremental_stock_data()
+    update_quality_universe_data()
