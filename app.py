@@ -161,6 +161,13 @@ def get_styled_recommendations(df_composite: pd.DataFrame, style_mode: str, top_
     return sorted_df
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def cached_stock_news(symbol: str, name: str, concept: str = ""):
+    """个股专属新闻缓存抓取与三级精准过滤引擎 (10分钟本地缓存)"""
+    from src.analysis.news_analyzer import filter_news_for_stock
+    return filter_news_for_stock(symbol, name, concept_name=concept)
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_and_process_quant_engine(style: str = "⚖️ 攻守兼备型 (自适应)"):
     """读取本地 Parquet 数据，并运行 AI 多因子计算、IC 诊断与风控回测"""
@@ -610,28 +617,30 @@ elif menu == "🔍 概念板块与龙头搜索":
         m_c3.metric("日换手率", f"{float(turnover_val):.2f}%")
         m_c4.metric("20日动量", f"{target_row.get('MOM_20_norm', 0.0):.2f}")
         m_c5.metric("低波避险得分", f"{target_row.get('LOW_VOL_20_norm', 0.0):.2f}")
-        m_c6.metric("AI 综合得分", f"{target_row.get('COMPOSITE_ALPHA_norm', 0.0):.2f}")
-        
-        # ② 双轨舆情：🏛️ 官方权威新闻 (带 ⭐️ 评级与 🔗 超链接) vs 🔥 散户与社会情绪风向标
+        # ② 双轨舆情：🏛️ 选中标的专属权威新闻 (带 ⭐️ 评级与 🔗 超链接) vs 🔥 散户与社会情绪风向标
         c_news_col, c_sent_col = st.columns([1, 1])
         
-        from src.analysis.news_analyzer import fetch_latest_news
-        from src.analysis.dual_sentiment_engine import filter_authority_media, social_sentiment_analyzer
-        
-        raw_news = fetch_latest_news(max_items=5)
-        auth_news = filter_authority_media(raw_news)
+        from src.analysis.dual_sentiment_engine import social_sentiment_analyzer
         
         with c_news_col:
-            st.markdown("##### 🏛️ 官方权威媒体新闻快讯 (带 ⭐️ 评级 & 🔗 原文)")
-            if not auth_news.empty:
-                for _, n_item in auth_news.head(3).iterrows():
+            st.markdown("##### 🏛️ 选中标的专属权威快讯 (带 ⭐️ 评级 & 🔗 原文)")
+            stock_news_res = cached_stock_news(selected_sym, target_row['name'], concept=search_res.get('concept_name', ''))
+            
+            matched_news = stock_news_res.get('matched_news', [])
+            prompt_str = stock_news_res.get('prompt', '')
+            
+            st.caption(prompt_str)
+            
+            if matched_news:
+                for n_item in matched_news[:3]:
+                    badge = n_item.get('match_badge', '📌 [个股重磅利好]')
                     stars_b = n_item.get('stars_badge', '⭐️⭐️⭐️ 3星利好')
                     url_val = n_item.get('url', 'https://www.cls.cn')
-                    link_h = f'<a href="{url_val}" target="_blank">🔗 查看原文</a>'
-                    st.markdown(f"- ⏱️ `[{n_item.get('time', '')}]` **{n_item.get('title', '')}** ({stars_b}) — {link_h}", unsafe_allow_html=True)
-                    st.caption(f"   摘要: {n_item.get('content', '')}")
+                    link_h = f'<a href="{url_val}" target="_blank" style="color: #1f77b4; font-weight: bold; text-decoration: none;">🔗 查看原文网页</a>'
+                    st.markdown(f"- ⏱️ `[{n_item.get('time', '')}]` `{badge}` **{n_item.get('title', '')}** ({stars_b}) — {link_h}", unsafe_allow_html=True)
+                    st.caption(f"   影响评估: {n_item.get('impact_summary', '')}")
             else:
-                st.info("ℹ️ 近 24 小时无重大官方新闻。")
+                st.info("ℹ️ 近 72 小时内无个股及概念重大事件，行情由量化技术面驱动。")
                 
         with c_sent_col:
             st.markdown("##### 🔥 散户与社会情绪风向标 (雪球/股吧/B站)")
