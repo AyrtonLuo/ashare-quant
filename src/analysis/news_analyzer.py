@@ -324,7 +324,6 @@ def integrate_sentiment_alpha(df: pd.DataFrame, news_df: pd.DataFrame = None) ->
     return res_df
 
 
-@st.cache_data(ttl=600, show_spinner=False)
 def get_stock_timeline_news(
     symbol: str,
     name: str,
