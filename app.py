@@ -1154,7 +1154,14 @@ elif menu == "🚀 智能跟投与一键调仓":
             })
 
     if preview_rows:
-        st.dataframe(pd.DataFrame(preview_rows).style.background_gradient(subset=['动态风控目标权重 %'], cmap='Reds'), use_container_width=True)
+        preview_df = pd.DataFrame(preview_rows)
+        st.dataframe(
+            preview_df.style.format({
+                "当前持仓权重 %": "{:.2f}%",
+                "动态风控目标权重 %": "{:.2f}%"
+            }).background_gradient(subset=['动态风控目标权重 %'], cmap='Reds'),
+            use_container_width=True
+        )
 
     st.markdown("---")
 
@@ -1164,14 +1171,29 @@ elif menu == "🚀 智能跟投与一键调仓":
     with tab_p1:
         pos_df = acc_summary['positions_df']
         if not pos_df.empty:
-            st.dataframe(pos_df.style.background_gradient(subset=['浮动盈亏 %'], cmap='RdYlGn'), use_container_width=True)
+            st.dataframe(
+                pos_df.style.format({
+                    "持仓成本价": "¥{:.2f}",
+                    "最新价": "¥{:.2f}",
+                    "持仓市值": "¥{:,.2f}",
+                    "浮动盈亏 %": "{:+.2f}%"
+                }).background_gradient(subset=['浮动盈亏 %'], cmap='RdYlGn'),
+                use_container_width=True
+            )
         else:
             st.info("当前模拟盘暂无任何股票持仓，请点击上方【⚡ 一键按动态权重自动调仓】完成建仓！")
 
     with tab_p2:
         log_df = acc_summary['trade_logs_df']
         if not log_df.empty:
-            st.dataframe(log_df, use_container_width=True)
+            st.dataframe(
+                log_df.style.format({
+                    "成交价格": "¥{:.2f}",
+                    "成交金额": "¥{:,.2f}",
+                    "印花税+佣金": "¥{:.2f}"
+                }),
+                use_container_width=True
+            )
         else:
             st.info("暂无历史模拟交易日志。")
 
