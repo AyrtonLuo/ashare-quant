@@ -539,18 +539,49 @@ elif menu == "🔥 今日 AI 优质推荐榜":
 # 页面 3：🔍 概念板块与产业链龙头搜索 (Concept Leader Search)
 # =============================================================================
 elif menu == "🔍 概念板块与龙头搜索":
-    st.header("🔍 全市场概念板块与产业链龙头自动识别")
-    st.caption("基于市值占比 (40%) + 成交额占比 (30%) + Beta 动量 (30%) 算法，智能打标标注板块内的 👑 龙一 (Leader) 与 🥈 龙二 (Co-Leader)。")
+    st.header("🔍 全市场概念板块与产业链龙头自动识别 & 资金买入配置")
+    st.caption("基于市值占比 (40%) + 成交额占比 (30%) + Beta 动量 (30%) 算法，智能识别 👑 龙头，并结合 1 手 (100股) 建仓约束计算订单。")
     
-    from src.analysis.concept_leader_engine import search_concept_or_stock, PRESET_CONCEPT_BOARDS
+    from src.analysis.concept_leader_engine import (
+        search_concept_or_stock,
+        PRESET_CONCEPT_BOARDS,
+        allocate_concept_capacity_portfolio
+    )
+    from src.strategy.portfolio_optimizer import auto_calculate_portfolio_size
     
     col_c1, col_c2 = st.columns([3, 1])
     with col_c1:
-        kw_input = st.text_input("🔍 输入概念板块关键词或股票中文名称/代码 (如：双杰电气, 中国移动, 立讯精密, 002792):", "双杰电气", key="stock_search_input")
+        kw_input = st.text_input("🔍 输入概念板块关键词或股票中文名称/代码 (如：双杰电气, 中国移动, 立讯精密, 002792):", "AI算力/半导体龙头", key="stock_search_input")
     with col_c2:
         st.write("")
         st.write("")
         search_btn = st.button("🚀 检索龙头板块", key="btn_stock_search")
+
+    # 资金与持仓微调控制组件
+    st.markdown("#### 💰 概念龙头资金容量与持仓微调控制")
+    col_cap1, col_cap2 = st.columns([1, 1])
+    with col_cap1:
+        concept_capital = st.number_input(
+            "💰 拟建仓总资金 (元):",
+            min_value=10000.0,
+            max_value=100000000.0,
+            value=500000.0,
+            step=50000.0,
+            key="concept_capital_input"
+        )
+        auto_n = auto_calculate_portfolio_size(concept_capital)
+        st.info(f"💡 根据资金量 **¥{concept_capital:,.2f}**，算法自动推荐建仓 **{auto_n}** 只龙头股票。")
+
+    with col_cap2:
+        custom_n = st.slider(
+            "🔢 手动微调持仓股票数 (只):",
+            min_value=1,
+            max_value=20,
+            value=auto_n,
+            step=1,
+            key="concept_slider_n"
+        )
+        st.caption(f"当前生效龙头持仓数: `{custom_n}` 只 | 可拉动滑块覆写 AI 推荐数。")
         
     search_res = search_concept_or_stock(kw_input, engine_data['df_composite'])
     
@@ -564,28 +595,33 @@ elif menu == "🔍 概念板块与龙头搜索":
     
     res_data = search_res['data'].copy()
     if not res_data.empty:
-        # 动态计算 AI推荐星级 与 所属概念板块
-        stars_list = []
-        for _, row in res_data.iterrows():
-            st_val, _ = generate_stock_tag(row)
-            stars_list.append(st_val)
-        res_data['AI推荐星级'] = stars_list
-        res_data['所属概念板块'] = search_res.get('concept_name', '通用A股板块')
+        # 龙头建仓二次精选与 100 股限制计算
+        alloc_concept = allocate_concept_capacity_portfolio(res_data, total_capital=concept_capital, target_count=custom_n)
+        alloc_df = alloc_concept['allocated_df']
         
-        c_display_cols = ['symbol', 'name', 'close', 'AI推荐星级', '龙头角色', '所属概念板块', 'leader_score']
-        c_exist_cols = [c for c in c_display_cols if c in res_data.columns]
+        st.markdown("#### 🛒 概念龙头拟买入建仓清单 (一手 100 股向下取整)")
         
-        c_df = res_data[c_exist_cols].rename(columns={
-            'symbol': '股票代码', 'name': '股票名称', 'close': '最新价格 (元)',
-            'leader_score': '龙头综合得分', '龙头角色': '👑 龙头定位 (Leader/Follower)'
-        })
-        
-        st.dataframe(
-            c_df.style.background_gradient(subset=['龙头综合得分'], cmap='Reds'),
-            use_container_width=True,
-            height=450
-        )
-        
+        if alloc_concept['skipped_stocks']:
+            for sk in alloc_concept['skipped_stocks']:
+                st.warning(f"{sk['reason']}: 股票 `{sk['symbol']} {sk['name']}` 最新价 ¥{sk['price']:.2f} 导致资金不足购买 1 手 (100股)，已自动顺延下一个龙头。")
+
+        if not alloc_df.empty:
+            display_alloc_df = alloc_df[['symbol', 'name', '龙头角色', 'close', 'target_weight_pct', 'shares', 'actual_amount']].copy()
+            display_alloc_df = display_alloc_df.rename(columns={
+                'symbol': '股票代码',
+                'name': '股票名称',
+                'close': '最新价 (元)',
+                'target_weight_pct': '建议权重 %',
+                'shares': '拟买入股数 (股)',
+                'actual_amount': '拟成交金额 (元)'
+            })
+            st.dataframe(
+                display_alloc_df.style.background_gradient(subset=['拟成交金额 (元)'], cmap='Reds'),
+                use_container_width=True
+            )
+        else:
+            st.dataframe(res_data[['symbol', 'name', 'close', '龙头角色']], use_container_width=True)
+
         # 龙一龙二高亮卡片
         leader_1 = res_data[res_data['龙头角色'] == "👑 龙一 (Leader)"]
         if not leader_1.empty:
@@ -596,11 +632,12 @@ elif menu == "🔍 概念板块与龙头搜索":
         st.markdown("---")
         st.subheader("📌 选中标的 AI 深度研报、技术指标与散户情绪智脑")
         
-        target_stock_options = [f"{row['symbol']} - {row['name']}" for _, row in res_data.iterrows()]
+        target_stock_options = [f"{row['symbol']} - {row['name']}" for _, row in (alloc_df if not alloc_df.empty else res_data).iterrows()]
         selected_target_str = st.selectbox("🎯 选择需调取 AI 研报与散户情绪的标的:", target_stock_options, index=0)
         
         selected_sym = selected_target_str.split(" - ")[0]
-        target_row = res_data[res_data['symbol'] == selected_sym].iloc[0]
+        sub_rows = res_data[res_data['symbol'] == selected_sym]
+        target_row = sub_rows.iloc[0] if not sub_rows.empty else (alloc_df[alloc_df['symbol'] == selected_sym].iloc[0] if not alloc_df.empty else res_data.iloc[0])
         
         # ① 核心技术与基本面指标 (6 维展开: 最新价, PE市盈率, 日换手率, 20日动量, 低波避险, AI综合分)
         pe_val = target_row.get('pe_ratio', target_row.get('pe', 18.5))

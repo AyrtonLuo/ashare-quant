@@ -4,7 +4,7 @@ concept_leader_engine.py
 1. 代码与名称倒排索引字典 (COMMON_A_SHARE_NAME_MAP & resolve_search_query_code)：
    支持中文股票名称（如“双杰电气”、“中国移动”、“立讯精密”、“贵州茅台”）与 6 位代码（如 002792、300444）100% 精确互查解析。
 2. 官方 API 真实行情与总市值校准 (fetch_realtime_stock_api)：直连官方 Eastmoney API 获取最新价与准确总市值。
-3. 搜索调试日志 (Search Debug Logging)：控制台清晰打印匹配路径。
+3. 资金容量按“手(100股)”二次精选算法 (allocate_concept_capacity_portfolio): 自动根据资金限制向下取整为 100 股整数倍并顺延。
 """
 
 import re
@@ -205,6 +205,81 @@ def leader_stock_identifier(concept_name: str, stock_df: pd.DataFrame) -> pd.Dat
     return latest_sub
 
 
+def allocate_concept_capacity_portfolio(
+    leader_df: pd.DataFrame,
+    total_capital: float,
+    target_count: int
+) -> Dict[str, Any]:
+    """
+    针对概念识别结果，根据拟投入总资金与 1 手 (100股) 建仓约束计算二次建仓清单
+    """
+    if leader_df is None or leader_df.empty:
+        return {"allocated_df": pd.DataFrame(), "skipped_stocks": [], "total_allocated": 0.0, "cash_left": total_capital}
+
+    df = leader_df.copy()
+    avail_cap = float(total_capital)
+
+    allocated_rows = []
+    skipped_rows = []
+
+    for _, row in df.iterrows():
+        if len(allocated_rows) >= target_count:
+            break
+
+        sym = str(row['symbol']).zfill(6)
+        name = str(row['name'])
+        price = float(row.get('close', 10.0))
+        role = str(row.get('龙头角色', '⚡ 弹性跟风 (Follower)'))
+
+        if price <= 0:
+            continue
+
+        eq_weight = 1.0 / target_count
+        target_amount = avail_cap * eq_weight
+
+        hands = int(target_amount // (price * 100))
+        shares = hands * 100
+
+        if shares < 100:
+            skipped_rows.append({
+                "symbol": sym,
+                "name": name,
+                "price": price,
+                "reason": "⚠️ 分配资金不足 100 股（1手）"
+            })
+            continue
+
+        actual_amount = shares * price
+        allocated_rows.append({
+            "symbol": sym,
+            "name": name,
+            "龙头角色": role,
+            "close": price,
+            "target_weight_pct": round(eq_weight * 100, 2),
+            "shares": shares,
+            "actual_amount": round(actual_amount, 2),
+            "COMPOSITE_ALPHA_norm": row.get("COMPOSITE_ALPHA_norm", 1.0),
+            "total_mv_yi": row.get("total_mv_yi", 100.0)
+        })
+
+    alloc_df = pd.DataFrame(allocated_rows)
+
+    if not alloc_df.empty:
+        total_used = float(alloc_df['actual_amount'].sum())
+        alloc_df['target_weight_pct'] = (alloc_df['actual_amount'] / total_used * 100).round(2)
+        cash_left = total_capital - total_used
+    else:
+        total_used = 0.0
+        cash_left = total_capital
+
+    return {
+        "allocated_df": alloc_df,
+        "skipped_stocks": skipped_rows,
+        "total_allocated": round(total_used, 2),
+        "cash_left": round(cash_left, 2)
+    }
+
+
 def search_concept_or_stock(keyword: str, stock_df: pd.DataFrame = None) -> Dict[str, Any]:
     """
     全市场股票 & 概念板块强力归一化搜索 (支持中文名称双杰电气、中国移动、立讯精密、002792等)
@@ -214,13 +289,10 @@ def search_concept_or_stock(keyword: str, stock_df: pd.DataFrame = None) -> Dict
     if not kw:
         return {"matched_type": "none", "concept_name": "未输入搜索关键词", "data": pd.DataFrame()}
 
-    # 1. 尝试解析代码与名称
     matched_code, matched_name = resolve_search_query_code(kw, stock_df)
     print(f"[SEARCH DEBUG] 原始输入: {kw} -> 匹配到代码: {matched_code}, 匹配到名称: {matched_name}")
 
-    # 2. 若解析出具体股票代码
     if matched_code and len(matched_code) == 6:
-        # A. 检查当前 stock_df 数据集
         if stock_df is not None and not stock_df.empty:
             df = stock_df.copy()
             df['norm_symbol'] = df['symbol'].astype(str).str.zfill(6)
@@ -239,7 +311,6 @@ def search_concept_or_stock(keyword: str, stock_df: pd.DataFrame = None) -> Dict
                     "data": latest_res
                 }
 
-        # B. 查官方 API 实时校准真实行情与市值
         live_name, live_price, live_mv = fetch_realtime_stock_api(matched_code)
         display_name = live_name or matched_name
         
@@ -265,7 +336,6 @@ def search_concept_or_stock(keyword: str, stock_df: pd.DataFrame = None) -> Dict
             "data": fallback_row
         }
 
-    # 3. 匹配概念板块名称
     for concept_name in PRESET_CONCEPT_BOARDS.keys():
         if kw in concept_name or concept_name in kw:
             leader_df = leader_stock_identifier(concept_name, stock_df)
@@ -275,7 +345,6 @@ def search_concept_or_stock(keyword: str, stock_df: pd.DataFrame = None) -> Dict
                 "data": leader_df
             }
 
-    # 4. 未匹配到，自动降级切换至通用热门板块
     default_df = leader_stock_identifier("高股息央企/稳健避险", stock_df)
     return {
         "matched_type": "fallback",
