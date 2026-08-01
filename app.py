@@ -722,29 +722,103 @@ elif menu == "📊 AI 策略胜率与因子画像":
 # 页面 4：🚀 一键跟投智能调仓 (Auto Trading Console)
 # =============================================================================
 elif menu == "🚀 一键跟投智能调仓":
-    st.header("🚀 一键跟投：富途模拟盘智能调仓")
-    st.caption("自动比对最新【今日 AI 优质推荐榜】，平仓旧持仓并按单股 ≤30% 限制向富途模拟盘下发买单。")
+    st.header("🚀 个人资金容量与买入清单生成器 & 富途跟投")
+    st.caption("基于个人投资总额与 1 手 (100股) 建仓约束，自动过滤高价股并生成精准交易下单清单。")
+    
+    from src.strategy.portfolio_optimizer import auto_calculate_portfolio_size, filter_and_allocate_portfolio
+    
+    st.subheader("💰 个人资金容量与持仓微调控制台")
+    col_cap1, col_cap2 = st.columns([1, 1])
+    with col_cap1:
+        user_capital = st.number_input(
+            "💰 输入您的个人总投资资金量 (元):",
+            min_value=10000.0,
+            max_value=100000000.0,
+            value=500000.0,
+            step=50000.0,
+            key="input_user_capital"
+        )
+        auto_n = auto_calculate_portfolio_size(user_capital)
+        st.info(f"💡 根据资金额 **¥{user_capital:,.2f}**，AI 算法自动推荐分散持仓 **{auto_n}** 只股票。")
+        
+    with col_cap2:
+        custom_n = st.slider(
+            "⚙️ 手动微调持仓股票数量 (N 只):",
+            min_value=1,
+            max_value=30,
+            value=auto_n,
+            step=1,
+            key="slider_custom_n"
+        )
+        st.caption(f"当前生效持仓数量: `{custom_n}` 只 | 可自由拉动滑块覆写 AI 推荐数。")
+        
+    # 二次精选与 100 股建仓约束过滤
+    styled_pool = get_styled_recommendations(engine_data['df_composite'], style_choice, top_pct=0.20)
+    alloc_res = filter_and_allocate_portfolio(styled_pool, total_capital=user_capital, target_count=custom_n)
+    
+    p_df = alloc_res['portfolio_df']
+    
+    if not p_df.empty:
+        st.markdown("#### 🛒 今日建议调仓/买入清单 (一手 100 股向下取整)")
+        
+        m_a1, m_a2, m_a3 = st.columns(3)
+        m_a1.metric("拟投入资金总额", f"¥{alloc_res['total_allocated']:,.2f}")
+        m_a2.metric("预计剩余现金", f"¥{alloc_res['cash_left']:,.2f}")
+        m_a3.metric("拟建仓股票只数", f"{len(p_df)} 只")
+        
+        if alloc_res['skipped_stocks']:
+            for sk in alloc_res['skipped_stocks']:
+                st.warning(f"⚠️ 股票 `{sk['symbol']} {sk['name']}` 最新价 ¥{sk['price']:.2f} 导致资金不足购买 1 手 (100股)，已自动顺延下一个优质标的。")
+                
+        display_alloc = p_df[['symbol', 'name', 'AI推荐星级', 'target_weight_pct', 'close', 'shares', 'actual_amount', '推荐理由标签']].copy()
+        display_alloc = display_alloc.rename(columns={
+            'symbol': '股票代码',
+            'name': '股票名称',
+            'target_weight_pct': '建议目标权重 (%)',
+            'close': '最新价格 (元)',
+            'shares': '拟买入股数 (股)',
+            'actual_amount': '拟买入总金额 (元)'
+        })
+        
+        st.dataframe(
+            display_alloc.style.background_gradient(subset=['拟买入总金额 (元)'], cmap='Reds'),
+            use_container_width=True
+        )
+        
+        col_btn1, col_btn2 = st.columns([1, 1])
+        with col_btn1:
+            csv_data = display_alloc.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 一键导出今日买入清单 CSV 文件",
+                data=csv_data,
+                file_name=f"ai_buy_order_list_{engine_data['latest_date'].strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                key="btn_download_csv",
+                use_container_width=True
+            )
+        with col_btn2:
+            st.button("🚀 一键发送订单至富途模拟盘", key="btn_send_futu_direct", use_container_width=True)
+
+    st.markdown("---")
+    st.subheader("🤖 富途 OpenD 自动同步控制台")
     
     col_sync1, col_sync2 = st.columns([2, 1])
     
     with col_sync1:
-        # 大按钮
         if st.button("🚀 一键跟投：同步今日最新推荐至富途模拟盘", key="auto_sync_btn", use_container_width=True):
-            # 🚀 UX 体验点 2：清晰的 Spinner 提示
             with st.spinner("正在连接富途 OpenD 柜台 (127.0.0.1:11111) 并计算调仓买卖订单..."):
                 try:
                     from src.execution.futu_trader import FutuSimTrader
                     trader = FutuSimTrader(host="127.0.0.1", port=11111)
-                    sync_res = trader.execute_rebalance(engine_data['top_portfolio'])
+                    target_to_sync = p_df if not p_df.empty else engine_data['top_portfolio']
+                    sync_res = trader.execute_rebalance(target_to_sync)
                     
                     s_orders = sync_res['sell_orders']
                     b_orders = sync_res['buy_orders']
                     acc = sync_res['account_summary']
                     
-                    # 通俗提示卡片
                     st.success(f"🎉 跟投调仓同步成功！成功下发 **{len(b_orders)}** 只买入订单，**{len(s_orders)}** 只卖出订单。 (当前模式: `{sync_res['mode']}`)")
                     
-                    # 账户资产
                     st.markdown("#### 💰 调仓后模拟账户资产概览")
                     acc_c1, acc_c2, acc_c3 = st.columns(3)
                     acc_c1.metric("模拟总资产", f"¥{acc['total_assets']:,.2f}")
