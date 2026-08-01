@@ -236,12 +236,21 @@ def render_backtest(services: Dict[str, Any]):
             st.json(wf_rep.to_dict())
 
     st.divider()
+    st.markdown("### 📊 7 大策略基准全矩阵比对 (Full Benchmark Comparison Suite)")
+    if st.button("运行 7 大策略基准全矩阵对比 (Buy&Hold / CSI300 / CSI1000 / EqualWeight / Momentum / MultiFactor / ML)", use_container_width=True):
+        from src.benchmarks.suite import BenchmarkComparisonSuite
+        bench_df = BenchmarkComparisonSuite.run_full_benchmark_comparison(["600519", "000001"], services["provider"])
+        st.dataframe(bench_df, use_container_width=True, hide_index=True)
+
+
+    st.divider()
     st.markdown("### 📊 统计显著性面板 (Statistical Significance Panel)")
     if st.button("运行 Bootstrap 95% 置信区间与 Naive Baseline 检验", use_container_width=True):
         from src.stats.significance import StatisticalSignificanceTester
         rets = pd.Series(np.random.normal(0.001, 0.015, 252))
         sig_rep = StatisticalSignificanceTester.test_sharpe_significance(rets)
         st.json(sig_rep.to_dict())
+
 
 
 def render_risk():
@@ -293,7 +302,9 @@ def render_portfolio(portfolio_svc: PortfolioService):
 
 
 def render_experiments(services: Dict[str, Any]):
-    st.markdown("# 📄 Experiment Registry & Reproducibility Card")
+    st.markdown("# 📄 Experiment Registry & Research Evidence Card")
+    st.caption("全溯源实验管理、双重重跑 100% 精确一致性审计证书 (Reproducibility Certificate)")
+
     reg: ExperimentRegistry = st.session_state["exp_registry"]
     exps = reg.list_experiments()
 
@@ -301,6 +312,16 @@ def render_experiments(services: Dict[str, Any]):
         st.info("暂无落盘实验。运行回测后可保存实验配置与指标对比。")
     else:
         st.dataframe(pd.DataFrame(exps), use_container_width=True, hide_index=True)
+
+    st.divider()
+    st.markdown("### 🔬 真实研究双重重跑与可复现性审计 (Research Evidence & Double-Run Verification)")
+    exp_choice = st.selectbox("选择审计实验类型", ["ExpA_MultiFactor", "ExpB_MLAlpha", "ExpC_Momentum"])
+    if st.button("🚀 执行 Run #1 vs Run #2 双重重跑审计", use_container_width=True):
+        from src.experiments.reproducibility import ResearchReproducibilityRunner
+        cert = ResearchReproducibilityRunner.verify_reproducibility(exp_choice, ["600519", "000001"], services["provider"])
+        st.success(f"实验 {exp_choice} 重跑完成！一致性验证: `{cert.is_exact_match}` | Data Hash: `{cert.data_hash}`")
+        st.json(cert.to_dict())
+
 
 
 def render_ai_analyst(services: Dict[str, Any]):

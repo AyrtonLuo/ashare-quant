@@ -6,13 +6,14 @@ Ashare Quant Pro 目标是从当前的 A 股量化研究 MVP，升级为一套�
 
 ## 当前基础
 
+- 数据溯源与研究诚信审计 (Data Provenance Audit): 落盘 `DATA_PROVENANCE_AUDIT.md`，对全量行情、PIT 基本面、因子衰减、Barra 暴露、冲击力模型与演练数据进行透明源审计。
+- 实验双重重跑与可复现性验证 (Double-Run Reproducibility): `src/experiments/reproducibility.py` (`ResearchReproducibilityRunner`) 对多因子 (Exp A)、ML Alpha (Exp B) 和 Momentum (Exp C) 策略从零重跑 Run #1 vs Run #2，校验 100% 一致性并生成 `ReproducibilityCertificate`。
+- 全策略基准矩阵对比 (Benchmark Comparison Suite): `src/benchmarks/suite.py` (`BenchmarkComparisonSuite`) 贯通 Buy&Hold、CSI300、CSI1000、等权重、朴素 Momentum、多因子与 ML Alpha 7 大策略在 CAGR, Sharpe, Sortino, Max DD, Vol, Turnover, Costs %, IC 与 OOS Return 上的对比。
 - 外部数据交叉验证系统 (External Data Validation): `src/data/validation/cross_validator.py` (`ExternalDataValidator`) 自动将系统内行情数据与外部权威基准数据点比对，校验误差率 ($< 0.01\%$) 并输出审计表。
 - Walk-Forward 滚动稳定性验证: `src/strategy/walk_forward.py` (`WalkForwardRunner`) 划分为 5 个连续 Fold (2018-2026) 进行滚动 Out-of-Sample 验证与时间维度 Alpha 稳定性检测。
-- Alpha 因子半衰期衰减与 IC 分析: `src/factors/analytics.py` (`FactorAnalytics`) 自动计算 1D/5D/10D/20D/60D 预测半衰期指数衰减曲线、IC Mean、ICIR 与 Rank IC。
 - 假设检验与 Naive Baseline 显著性面板: `src/stats/significance.py` (`StatisticalSignificanceTester`) 基于 500 次 Bootstrap 自采样计算 Sharpe 95% 置信区间 (CI)、t 统计量、p 值与 Naive Baseline 检验。
-- 组合压力测试引擎 (Stress Testing): `src/risk_model/stress_test.py` (`PortfolioStressTester`) 模拟大盘暴跌 (-10%/-20%/-30%)、波动率 x1.5、流动性减半与摩擦加倍下组合损失与修复周期。
-- 智能研报分层解释器 (Source-Grounded AI Interpreter): 严格分层输出 `FACT`, `MODEL RESULT`, `INTERPRETATION`, `UNCERTAINTY` 四大板块。
 - 控制台与产品架构：Streamlit 产品级 10 大导航 (Dashboard, Market, Research, Backtest, Risk & Barra 风险归因, Portfolio, Experiments, AI Analyst, Operations 运维监控, Settings)、金融终端暗色风格与 System Mode 切换开关.
+
 
 
 
