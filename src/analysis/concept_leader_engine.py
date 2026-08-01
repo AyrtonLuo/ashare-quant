@@ -172,20 +172,24 @@ def search_concept_or_stock(keyword: str, stock_df: pd.DataFrame) -> Dict[str, A
                 "data": leader_df
             }
 
-    # ④ 90亿+ 池外标的 (如 300444 双杰电气、002792 环球印务，总市值 < 90亿) 友好提示与展现
+    # ④ 90亿+ 池外标的 (如 300444 双杰电气、002792 通宇通讯，总市值 < 90亿) 友好提示与展现
     sub_90b_map = {
         "300444": "双杰电气",
-        "002792": "环球印务",
+        "002792": "通宇通讯",
+        "002799": "环球印务",
     }
     
-    if len(norm_code) == 6 or re.search(r"\d{4,6}", kw) or "双杰" in kw or "环球" in kw:
+    if len(norm_code) == 6 or re.search(r"\d{4,6}", kw) or "双杰" in kw or "通宇" in kw or "环球" in kw:
         if norm_code in sub_90b_map:
             sub_90b_name = sub_90b_map[norm_code]
         elif "双杰" in kw:
             norm_code = "300444"
             sub_90b_name = "双杰电气"
-        elif "环球" in kw:
+        elif "通宇" in kw:
             norm_code = "002792"
+            sub_90b_name = "通宇通讯"
+        elif "环球" in kw:
+            norm_code = "002799"
             sub_90b_name = "环球印务"
         else:
             sub_90b_name = f"A股标的 ({norm_code})"
