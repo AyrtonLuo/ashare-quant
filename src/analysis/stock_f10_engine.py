@@ -249,9 +249,9 @@ def build_interactive_kline_chart(
     df = calculate_technical_indicators(kline_df)
     date_str = df['date'].dt.strftime('%Y-%m-%d')
 
-    # A股红涨绿跌经典配色
-    color_up = "#FF3B30"    # 亮红色 (涨)
-    color_down = "#34C759"  # 亮绿色 (跌)
+    # A股高亮红绿经典配色与深色对比度强化
+    color_up = "#FF3333"    # 鲜艳高亮红 (涨)
+    color_down = "#00E676"  # 鲜艳高亮绿 (跌)
 
     fig = make_subplots(
         rows=3, cols=1,
@@ -266,7 +266,7 @@ def build_interactive_kline_chart(
     )
 
     # -------------------------------------------------------------------------
-    # Row 1: 主图 (Candlestick K 线 + MA / BOLL)
+    # Row 1: 主图 (Candlestick 高亮 K 线 + 降权半透明 MA / BOLL)
     # -------------------------------------------------------------------------
     fig.add_trace(
         go.Candlestick(
@@ -277,27 +277,30 @@ def build_interactive_kline_chart(
             close=df['close'],
             increasing_line_color=color_up,
             increasing_fillcolor=color_up,
+            increasing_line_width=2.0,
             decreasing_line_color=color_down,
             decreasing_fillcolor=color_down,
+            decreasing_line_width=2.0,
             name="K线"
         ),
         row=1, col=1
     )
 
+    # 降权均线系统：调整为 1.0 细线 + 40%~50% 半透明度，凸显 K 线主体
     if "均线" in main_indicator or "MA" in main_indicator:
-        fig.add_trace(go.Scatter(x=date_str, y=df['MA5'], mode='lines', name='MA5', line=dict(color='#F1C40F', width=1.2)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['MA10'], mode='lines', name='MA10', line=dict(color='#3498DB', width=1.2)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['MA20'], mode='lines', name='MA20', line=dict(color='#9B59B6', width=1.2)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['MA60'], mode='lines', name='MA60', line=dict(color='#2ECC71', width=1.2)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['MA5'], mode='lines', name='MA5', line=dict(color='rgba(241, 196, 15, 0.45)', width=1.0)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['MA10'], mode='lines', name='MA10', line=dict(color='rgba(52, 152, 219, 0.45)', width=1.0)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['MA20'], mode='lines', name='MA20', line=dict(color='rgba(155, 89, 182, 0.45)', width=1.0)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['MA60'], mode='lines', name='MA60', line=dict(color='rgba(46, 204, 113, 0.45)', width=1.0)), row=1, col=1)
         if len(df) >= 120:
-            fig.add_trace(go.Scatter(x=date_str, y=df['MA120'], mode='lines', name='MA120 (半年线)', line=dict(color='#E67E22', width=1.5)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=date_str, y=df['MA120'], mode='lines', name='MA120 (半年线)', line=dict(color='rgba(230, 126, 34, 0.50)', width=1.0)), row=1, col=1)
         if len(df) >= 250:
-            fig.add_trace(go.Scatter(x=date_str, y=df['MA250'], mode='lines', name='MA250 (年线)', line=dict(color='#E74C3C', width=1.5)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=date_str, y=df['MA250'], mode='lines', name='MA250 (年线)', line=dict(color='rgba(231, 76, 60, 0.50)', width=1.0)), row=1, col=1)
 
     elif "布林" in main_indicator or "BOLL" in main_indicator:
-        fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_MID'], mode='lines', name='BOLL中轨', line=dict(color='#F1C40F', width=1.5)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_UPPER'], mode='lines', name='BOLL上轨', line=dict(color='#E74C3C', width=1.2, dash='dash')), row=1, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_LOWER'], mode='lines', name='BOLL下轨', line=dict(color='#2ECC71', width=1.2, dash='dash')), row=1, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_MID'], mode='lines', name='BOLL中轨', line=dict(color='rgba(241, 196, 15, 0.50)', width=1.0)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_UPPER'], mode='lines', name='BOLL上轨', line=dict(color='rgba(231, 76, 60, 0.45)', width=1.0, dash='dash')), row=1, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_LOWER'], mode='lines', name='BOLL下轨', line=dict(color='rgba(46, 204, 113, 0.45)', width=1.0, dash='dash')), row=1, col=1)
 
     # -------------------------------------------------------------------------
     # Row 2: 副图 1 - 成交量 Volume (固定在 Row 2)

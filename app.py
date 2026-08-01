@@ -154,6 +154,36 @@ def cached_social_sentiment(symbol: str, name: str, alpha_score: float = 0.8) ->
     return social_sentiment_analyzer(symbol, name, sentiment_score=alpha_score)
 
 
+@st.dialog("单日 K 线与行情细节下钻")
+def show_daily_detail_dialog(card_data: dict):
+    """点击 K 线弹出的独立 Modal 对话框"""
+    c_date = card_data['date_str']
+    st.markdown(f"#### `[{c_date}]` 盘后行情细节与 AI 形态研判")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(
+            "收盘价 (元)",
+            f"¥{card_data['close']:.2f}",
+            delta=f"{card_data['chg_pct']:+.2f}% (¥{card_data['chg_amount']:+.2f})"
+        )
+        st.caption(f"开盘: ¥{card_data['open']:.2f} | 最高: ¥{card_data['high']:.2f} | 最低: ¥{card_data['low']:.2f}")
+    with col2:
+        st.metric("成交量 (手)", f"{card_data['volume_hands']:,.0f}")
+        st.caption(f"估算成交额: ¥{card_data['amount_w']:,.2f} 万元")
+        
+    st.markdown("---")
+    col3, col4 = st.columns(2)
+    with col3:
+        st.metric("均线 MA5 / MA20", f"¥{card_data['ma5']:.2f} / ¥{card_data['ma20']:.2f}")
+        st.caption(f"MA10: ¥{card_data['ma10']:.2f} | MA60: ¥{card_data['ma60']:.2f}")
+    with col4:
+        st.metric("MACD 柱状强弱", f"{card_data['macd_h']:+.4f}")
+        st.caption(f"DIF: {card_data['dif']:.3f} | DEA: {card_data['dea']:.3f}")
+
+    st.info(f"AI 盘后形态研判: `{card_data['pattern']}`")
+
+
 def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.DataFrame):
     """
     单股全景 K 线行情终端与 F10 诊断面板
@@ -229,44 +259,17 @@ def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.Da
         config={"scrollZoom": True, "displayModeBar": True}
     )
     
-    # 解析点击的具体日期
-    clicked_date = ""
+    # 解析点击的具体日期并自动唤醒 @st.dialog 独立 Modal 弹窗
     if event_data and isinstance(event_data, dict):
         selection = event_data.get("selection", {})
         points = selection.get("points", [])
         if points:
             clicked_date = str(points[0].get("x", ""))
-            
-    # 渲染【点击日深度行情下钻卡片】
-    from src.analysis.stock_f10_engine import get_single_day_review_card
-    card_data = get_single_day_review_card(kline_df, target_date_str=clicked_date)
-    
-    if card_data:
-        c_date = card_data['date_str']
-        st.markdown(f"##### `[{c_date}]` 单日深度行情下钻与 AI 盘后形态研判 (点击 K 线图任意节点查看)")
-        
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.metric(
-                "收盘价 (元)",
-                f"¥{card_data['close']:.2f}",
-                delta=f"{card_data['chg_pct']:+.2f}% (¥{card_data['chg_amount']:+.2f})"
-            )
-            st.caption(f"开盘: ¥{card_data['open']:.2f} | 最高: ¥{card_data['high']:.2f} | 最低: ¥{card_data['low']:.2f}")
-            
-        with c2:
-            st.metric("成交量 (手)", f"{card_data['volume_hands']:,.0f}")
-            st.caption(f"估算成交额: ¥{card_data['amount_w']:,.2f} 万元")
-            
-        with c3:
-            st.metric("均线 MA5 / MA20", f"¥{card_data['ma5']:.2f} / ¥{card_data['ma20']:.2f}")
-            st.caption(f"MA10: ¥{card_data['ma10']:.2f} | MA60: ¥{card_data['ma60']:.2f}")
-            
-        with c4:
-            st.metric("MACD 柱状强弱", f"{card_data['macd_h']:+.4f}")
-            st.caption(f"DIF: {card_data['dif']:.3f} | DEA: {card_data['dea']:.3f}")
-
-        st.info(f"AI 盘后形态研判: `{card_data['pattern']}`")
+            if clicked_date:
+                from src.analysis.stock_f10_engine import get_single_day_review_card
+                card_data = get_single_day_review_card(kline_df, target_date_str=clicked_date)
+                if card_data:
+                    show_daily_detail_dialog(card_data)
 
     st.markdown("---")
     
