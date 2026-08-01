@@ -345,10 +345,19 @@ def build_interactive_kline_chart(
     recent_start = date_str.iloc[-120] if len(date_str) > 120 else date_str.iloc[0]
     recent_end = date_str.iloc[-1]
 
-    # 彻底关闭 RangeSlider 溢出杂影，保持所有 X 轴精准无缝对齐
-    fig.update_xaxes(range=[recent_start, recent_end], rangeslider_visible=False, row=1, col=1)
-    fig.update_xaxes(range=[recent_start, recent_end], rangeslider_visible=False, row=2, col=1)
-    fig.update_xaxes(range=[recent_start, recent_end], rangeslider_visible=False, row=3, col=1)
+    # 计算休市日与节假日断层节点
+    all_days = pd.date_range(start=df['date'].min(), end=df['date'].max(), freq='D')
+    trading_set = set(date_str)
+    missing_dates = [d.strftime('%Y-%m-%d') for d in all_days if d.strftime('%Y-%m-%d') not in trading_set]
+
+    r_breaks = [dict(bounds=["sat", "mon"])]
+    if missing_dates:
+        r_breaks.append(dict(values=missing_dates))
+
+    # 彻底关闭 RangeSlider 溢出杂影，并剔除周末/节假日空白断层，保持交易日无缝顺畅连接
+    fig.update_xaxes(range=[recent_start, recent_end], rangebreaks=r_breaks, rangeslider_visible=False, row=1, col=1)
+    fig.update_xaxes(range=[recent_start, recent_end], rangebreaks=r_breaks, rangeslider_visible=False, row=2, col=1)
+    fig.update_xaxes(range=[recent_start, recent_end], rangebreaks=r_breaks, rangeslider_visible=False, row=3, col=1)
 
     # Y 轴自适应缩放与成交量格式化
     fig.update_yaxes(autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=1, col=1)
