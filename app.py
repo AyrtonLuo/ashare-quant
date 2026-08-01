@@ -1028,18 +1028,36 @@ elif menu == "🚀 智能跟投与一键调仓":
     paper_acc = PaperAccount(initial_capital=1000000.0)
     
     from src.execution.futu_trader import is_opend_port_open
-    auto_detect_connected = is_opend_port_open("127.0.0.1", 11111)
     
     # 对接富途 OpenD 模拟盘
-    c_f1, c_f2 = st.columns([2.5, 1.5])
+    c_f1, c_f2, c_f3 = st.columns([2, 1.5, 0.8])
     with c_f1:
-        use_futu_opend = st.toggle("🔌 对接富途牛牛模拟盘 API (Futu OpenD Gateway)", value=auto_detect_connected, key="toggle_futu_opend")
+        use_futu_opend = st.toggle("🔌 对接富途牛牛模拟盘 API (Futu OpenD Gateway)", value=False, key="toggle_futu_opend")
     with c_f2:
-        opend_host = st.text_input("OpenD 网关 IP (Mac 本地为 127.0.0.1):", value="127.0.0.1", key="input_opend_host")
+        opend_host = st.text_input("网关 IP / 公网域名:", value="127.0.0.1", key="input_opend_host")
+    with c_f3:
+        opend_port = st.number_input("端口:", value=11111, step=1, key="input_opend_port")
         
-    futu_trader = FutuSimTrader(host=opend_host, port=11111)
+    auto_detect_connected = is_opend_port_open(opend_host, int(opend_port))
+    futu_trader = FutuSimTrader(host=opend_host, port=int(opend_port))
     futu_acc = futu_trader.get_futu_paper_account() if use_futu_opend else {"is_connected": False, "mode": "Off"}
     
+    with st.expander("📖 解决方案：如何让其他人/亲朋好友在网页版上也连接富途模拟盘？", expanded=False):
+        st.markdown("""
+### 🌐 让别人在网页版使用富途模拟盘的 2 种方案：
+
+#### 方案 A：共享您的 Mac 富途账号 (通过内网穿透 / 公网 IP)
+1. 在您 Mac 的 Futu OpenD 软件设置中，勾选 **“允许外部IP连接”**；
+2. 在 Terminal 运行内网穿透工具暴露 11111 端口（例：`ngrok tcp 11111` 或使用局域网 IP `192.168.x.x`）；
+3. 将得到的公网地址 (例 `x.tcp.ngrok.io`) 填入上面的 **【网关 IP / 公网域名】** 输入框；
+4. 任何人在云端网页上打开该开关，就能共同连接并操控您的富途模拟盘！
+
+#### 方案 B：让别人使用他们自己的富途账号
+1. 别人只需在他们自己的电脑上下载并运行 **Futu OpenD** 软件并登录他们自己的牛牛账号；
+2. 运行本地客户端或在输入框填入他们自己电脑的 IP；
+3. 网页将实时读取并下发订单至他们自己的富途模拟盘中！
+""")
+
     # 1. 评估大盘风控状态
     idx_tick = get_stream_tick("000001")
     sh_price = float(idx_tick.get("price", 3200.0))
@@ -1066,7 +1084,7 @@ elif menu == "🚀 智能跟投与一键调仓":
     if use_futu_opend and futu_acc['is_connected']:
         st.success(f"""
 🍊 **富途牛牛原生模拟盘 (TrdEnv.SIMULATE) API 连接成功！**
-- **当前连接网关**：`Futu OpenD ({opend_host}:11111)`
+- **当前连接网关**：`Futu OpenD ({opend_host}:{opend_port})`
 - **牛牛账户状态**：已就绪 (可直接读取真实模拟盘资金与下发调仓挂单)
 - **数据来源**：富途官方 OpenD `accinfo_query` / `position_list_query` 实时接口
 """)
