@@ -366,10 +366,10 @@ def build_interactive_kline_chart(
     fig.update_xaxes(range=[recent_start, recent_end], rangebreaks=r_breaks, rangeslider_visible=False, row=2, col=1)
     fig.update_xaxes(range=[recent_start, recent_end], rangebreaks=r_breaks, rangeslider_visible=False, row=3, col=1)
 
-    # Y 轴自适应缩放与成交量格式化
-    fig.update_yaxes(autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=1, col=1)
-    fig.update_yaxes(title_text="成交量 (手)", autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=2, col=1)
-    fig.update_yaxes(autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=3, col=1)
+    # Y 轴自适应缩放与成交量格式化 (rangemode="normal" 放置主图 Y 轴伸拉至 0 刻度)
+    fig.update_yaxes(rangemode="normal", autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=1, col=1)
+    fig.update_yaxes(title_text="成交量 (手)", rangemode="tozero", autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=2, col=1)
+    fig.update_yaxes(rangemode="normal", autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=3, col=1)
 
     # 布局美化 (TradingView 暗黑主题)
     fig.update_layout(
@@ -377,6 +377,7 @@ def build_interactive_kline_chart(
         paper_bgcolor="#131722",
         plot_bgcolor="#131722",
         dragmode="pan",
+        clickmode="event+select",
         hovermode="x unified",
         height=660,
         showlegend=True,
