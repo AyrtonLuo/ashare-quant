@@ -175,6 +175,83 @@ def cached_social_sentiment(symbol: str, name: str, alpha_score: float = 0.1):
     return social_sentiment_analyzer(symbol, name, sentiment_score=alpha_score)
 
 
+def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.DataFrame):
+    """
+    同花顺 F10 级单股 AI 深度诊断专区全景面板：
+    1. 📈 K线图与均线/MACD 技术指标 Plotly 交互图表 (MA5/10/20/60 + 成交量 + MACD)
+    2. 🏛️ 机构共识评级与业绩基本面 F10 速览卡片
+    3. 📜 近 1~6 个月全景新闻与催化剂时间线 (带分类标签与 ⭐️ 评级，倒序排列)
+    4. 🔥 散户与社会情绪风向标
+    """
+    from src.analysis.stock_f10_engine import get_stock_kline_data, build_interactive_kline_chart, get_broker_ratings_and_f10
+    from src.analysis.news_analyzer import get_stock_timeline_news
+    
+    sym = str(symbol).zfill(6)
+    
+    st.markdown("---")
+    st.subheader(f"📌 [{sym} {name}] 同花顺 F10 级全景诊断与技术面智脑")
+    
+    # 1. 📈 K线图与均线/MACD 技术指标
+    kline_df = get_stock_kline_data(sym, name, df_composite, days=120)
+    fig_kline = build_interactive_kline_chart(kline_df, stock_name=f"{sym} {name}")
+    st.plotly_chart(fig_kline, use_container_width=True)
+    
+    # 2. 🏛️ 机构评级共识与业绩基本面 F10 模块
+    latest_price = float(kline_df['close'].iloc[-1]) if not kline_df.empty else 10.0
+    f10_info = get_broker_ratings_and_f10(sym, name, latest_price=latest_price)
+    
+    st.markdown("#### 🏛️ 机构共识评级与业绩基本面 F10")
+    f_c1, f_c2, f_c3, f_c4, f_c5 = st.columns(5)
+    f_c1.metric("券商评级共识", f10_info['broker_rating'])
+    f_c2.metric("覆盖机构 / 看多占比", f"{f10_info['coverage_count']}家 ({f10_info['buy_ratio']})")
+    f_c3.metric("机构目标均价", f"¥{f10_info['target_price']:.2f}", delta=f10_info['upside_pct'])
+    f_c4.metric("营业收入 YoY", f10_info['rev_yoy'])
+    f_c5.metric("归母净利润 YoY", f10_info['profit_yoy'])
+    
+    st.info(f"📊 **估值与基本面速览**: 动态 PE `{f10_info['pe_ratio']}` | PB 市净率 `{f10_info['pb_ratio']}` | 估值百分位 `{f10_info['percentile']}`")
+    
+    # 3. 📜 近 1~6 个月全景新闻与催化剂时间线流 (倒序排列)
+    st.markdown("---")
+    st.markdown(f"#### 📜 [{sym} {name}] 近 1~6 个月全景事件与催化剂时间线 (最新事件倒序排列)")
+    
+    t_col1, t_col2 = st.columns([2, 1])
+    with t_col1:
+        time_range = st.radio(
+            "⏱️ 新闻事件时间范围:",
+            ["近1个月", "近3个月", "近6个月"],
+            index=1,
+            horizontal=True,
+            key=f"timeline_radio_{sym}"
+        )
+        
+    timeline_events = get_stock_timeline_news(sym, name, time_range=time_range)
+    st.caption(f"已按时间从最新到最旧（倒序）检索到 **{len(timeline_events)}** 条重大催化事件：")
+    
+    for evt in timeline_events:
+        t_stamp = evt['timestamp']
+        badge = evt['category_badge']
+        stars = evt['stars_badge']
+        title = evt['title']
+        summary = evt['impact_summary']
+        link_h = evt['link_html']
+        
+        st.markdown(f"- ⏱️ `[{t_stamp}]` `{badge}` **{title}** ({stars}) — {link_h}", unsafe_allow_html=True)
+        st.caption(f"   影响评估: {summary}")
+        
+    # 4. 🔥 散户与社会情绪风向标
+    st.markdown("---")
+    soc_res = cached_social_sentiment(sym, name, alpha_score=0.8)
+    st.markdown(f"##### 🔥 [{name}] 散户与社会情绪智脑 (`⏱️ 上次更新: {soc_res.get('update_time', '')}`)")
+    
+    s_m1, s_m2, s_m3 = st.columns(3)
+    s_m1.metric("散户看多比例", f"{soc_res.get('bullish_pct', 75)}%")
+    s_m2.metric("看空比例", f"{soc_res.get('bearish_pct', 25)}%")
+    s_m3.metric("热度指数", f"{soc_res.get('social_heat_index', 85)} / 100")
+    
+    st.success(f"💬 **情绪状态**: `{soc_res.get('emotion_badge', '🟢 散户理性看多 / 情绪平稳')}`")
+    st.caption(f"📊 **舆情洞察**: {soc_res.get('description', '')} (雪球关注帖: {soc_res.get('xueqiu_posts', 200)} 条 | 股吧热度帖: {soc_res.get('guba_posts', 500)} 条)")
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_and_process_quant_engine(style: str = "⚖️ 攻守兼备型 (自适应)"):
     COMPOSITE_PARQUET = os.path.join(DATA_DIR, "df_composite.parquet")
@@ -475,106 +552,14 @@ elif menu == "🔥 今日 AI 优质推荐榜":
     )
     st.info("💡 提示：在上方输入股票代码/名称或在下方选择特定股票，查看对应的【🔍 单股 AI 深度诊断研报】。")
     
-    st.markdown("---")
-    st.subheader("🔍 单股 AI 深度诊断研报与舆情风向")
-    
-    # 标的选择下拉框
+    # 📌 选定标的同花顺 F10 级单股 AI 深度诊断全景面板
     stock_options = [f"{row['symbol']} - {row['name']}" for _, row in top_df.iterrows()]
-    selected_option = st.selectbox("🎯 选择需要查看深度 AI 研报的推荐标的:", stock_options, index=0)
+    selected_option = st.selectbox("🎯 选择需调取 F10 全景 AI 研报与 K 线指标的推荐标的:", stock_options, index=0)
     
     if selected_option:
         sel_sym = selected_option.split(" - ")[0]
         sel_row = top_df[top_df['symbol'] == sel_sym].iloc[0].to_dict()
-        
-        # 实时分析舆情与个股新闻
-        from src.analysis.news_analyzer import generate_stock_report
-        stock_news_res = cached_stock_news(sel_row['symbol'], sel_row['name'])
-        soc_res = cached_social_sentiment(sel_row['symbol'], sel_row['name'], alpha_score=float(sel_row.get('COMPOSITE_ALPHA_norm', 0.1)))
-        
-        sentiment_res = {
-            "symbol": sel_row['symbol'],
-            "name": sel_row['name'],
-            "matched_news": stock_news_res.get('matched_news', []),
-            "retail_sentiment": soc_res
-        }
-        report = generate_stock_report(sel_row, sentiment_res)
-        
-        st.markdown(f"#### 📌 `[{sel_row['symbol']} {sel_row['name']}]` AI 选股深度画像与情绪仪表盘")
-        
-        diag_col1, diag_col2 = st.columns([1, 1])
-        
-        with diag_col1:
-            # 散户热度 Plotly Gauge 仪表盘 (0~100)
-            heat_val = soc_res.get('social_heat_index', 75)
-            fig_gauge = go.Figure(go.Indicator(
-                mode="gauge+number",
-                value=heat_val,
-                domain={'x': [0, 1], 'y': [0, 1]},
-                title={'text': f"<b>{sel_row['name']} 散户热度指数 (0~100)</b>", 'font': {'size': 16}},
-                gauge={
-                    'axis': {'range': [0, 100], 'tickwidth': 1},
-                    'bar': {'color': "#d62728" if heat_val > 85 else ("#1f77b4" if heat_val < 45 else "#2ca02c")},
-                    'steps': [
-                        {'range': [0, 45], 'color': "#e6f2ff"},
-                        {'range': [45, 85], 'color': "#e6ffe6"},
-                        {'range': [85, 100], 'color': "#ffe6e6"}
-                    ],
-                    'threshold': {
-                        'line': {'color': "black", 'width': 3},
-                        'thickness': 0.75,
-                        'value': heat_val
-                    }
-                }
-            ))
-            fig_gauge.update_layout(height=260, margin=dict(l=20, r=20, t=40, b=20))
-            st.plotly_chart(fig_gauge, use_container_width=True)
-            
-        with diag_col2:
-            # 量化因子得分对比柱状图
-            factor_df = pd.DataFrame([
-                {"因子名称": "动量得分 (MOM)", "得分": sel_row.get("MOM_20_norm", 0.0)},
-                {"因子名称": "低波避险 (LOW_VOL)", "得分": sel_row.get("LOW_VOL_20_norm", 0.0)},
-                {"因子名称": "复合 Alpha (COMPOSITE)", "得分": sel_row.get("COMPOSITE_ALPHA_norm", 0.0)}
-            ])
-            fig_factors = px.bar(
-                factor_df, x="因子名称", y="得分",
-                color="得分", color_continuous_scale="Reds",
-                title=f"<b>{sel_row['name']} 多因子得分画像</b>"
-            )
-            fig_factors.update_layout(height=260, template="plotly_white", margin=dict(l=20, r=20, t=40, b=20))
-            st.plotly_chart(fig_factors, use_container_width=True)
-            
-        # 结构化 Markdown AI 研报
-        st.markdown(report['markdown_report'])
-        
-        # 🚨 双轨舆情展示：🏛️ 官方权威快讯 vs 🔥 散户/社会情绪风向标
-        st.markdown("---")
-        st.subheader(f"📢 [{sel_row['symbol']} {sel_row['name']}] 舆情风向与专属快讯追踪")
-        
-        s_col1, s_col2 = st.columns([1, 1])
-        
-        with s_col1:
-            st.markdown("##### 🏛️ 个股专属权威快讯 (带 🔗 原文)")
-            matched_news = stock_news_res.get('matched_news', [])
-            if matched_news:
-                for item in matched_news:
-                    badge = item.get('match_badge', '📌 [个股重磅利好]')
-                    stars_b = item.get('stars_badge', '⭐️⭐️⭐️ 3星利好')
-                    link_h = item.get('link_html', f'<a href="{item.get("url", "https://www.cls.cn")}" target="_blank">🔗 查看原文</a>')
-                    st.markdown(f"- ⏱️ `[{item.get('time', '')}]` `{badge}` **{item.get('title', '')}** ({stars_b}) — {link_h}", unsafe_allow_html=True)
-                    st.caption(f"   影响评估: {item.get('impact_summary', '')}")
-            else:
-                st.info(f"ℹ️ {stock_news_res.get('prompt', '近 72 小时内无个股重大事件，行情由量化技术面驱动。')}")
-                
-        with s_col2:
-            st.markdown(f"##### 🔥 散户与社会情绪仪表盘 (`⏱️ 上次更新: {soc_res.get('update_time', '')}`)")
-            r_c1, r_c2, r_c3 = st.columns(3)
-            r_c1.metric("散户看多比例", f"{soc_res.get('bullish_pct', 75)}%")
-            r_c2.metric("看空比例", f"{soc_res.get('bearish_pct', 25)}%")
-            r_c3.metric("热度指数", f"{soc_res.get('social_heat_index', 85)} / 100")
-            
-            st.success(f"💬 **情绪状态**: `{soc_res.get('emotion_badge', '🟢 散户理性看多 / 情绪平稳')}`")
-            st.caption(f"📊 **舆情洞察**: {soc_res.get('description', '')} (雪球关注帖: {soc_res.get('xueqiu_posts', 200)} 条 | 股吧热度帖: {soc_res.get('guba_posts', 500)} 条)")
+        render_f10_stock_diagnosis_panel(sel_row['symbol'], sel_row['name'], engine_data['df_composite'])
 
 
 # =============================================================================
@@ -627,67 +612,16 @@ elif menu == "🔍 全市场概念板块与龙头自动识别":
             l1_row = leader_1.iloc[0]
             st.success(f"👑 **板块龙头 (龙一)**: `{l1_row['name']} ({l1_row['symbol']})` | 最新价格: ¥{l1_row['close']:.2f} | 龙头得分: {l1_row.get('leader_score', 0):.4f}")
 
-        # 📌 选中标的 AI 深度研报专区 (技术指标 + 官方新闻 + 散户与社会情绪智脑)
-        st.markdown("---")
-        st.subheader("📌 选中标的 AI 深度研报、技术指标与散户情绪智脑")
-        
+        # 📌 同花顺 F10 级单股 AI 深度诊断专区全景面板
         target_stock_options = [f"{row['symbol']} - {row['name']}" for _, row in res_data.iterrows()]
-        selected_target_str = st.selectbox("🎯 选择需调取 AI 研报与散户情绪的标的:", target_stock_options, index=0)
+        selected_target_str = st.selectbox("🎯 选择需调取 F10 全景 AI 研报与 K 线指标的标的:", target_stock_options, index=0)
         
         selected_sym = selected_target_str.split(" - ")[0]
         sub_rows = res_data[res_data['symbol'] == selected_sym]
         target_row = sub_rows.iloc[0] if not sub_rows.empty else res_data.iloc[0]
-        
-        # ① 核心技术与基本面指标 (6 维展开: 最新价, PE市盈率, 日换手率, 20日动量, 低波避险, AI综合分)
-        pe_val = target_row.get('pe_ratio', target_row.get('pe', 18.5))
-        if pd.isna(pe_val) or float(pe_val) <= 0:
-            pe_val = 15.8 + (abs(hash(selected_sym)) % 20)
-            
-        turnover_val = target_row.get('turnover_rate', target_row.get('turnover', 2.8))
-        if pd.isna(turnover_val) or float(turnover_val) <= 0:
-            turnover_val = 1.5 + (abs(hash(selected_sym)) % 45) / 10.0
 
-        m_c1, m_c2, m_c3, m_c4, m_c5, m_c6 = st.columns(6)
-        m_c1.metric("最新价格 (元)", f"¥{target_row.get('close', 0.0):.2f}")
-        m_c2.metric("PE 市盈率", f"{float(pe_val):.1f} 倍")
-        m_c3.metric("日换手率", f"{float(turnover_val):.2f}%")
-        m_c4.metric("20日动量", f"{target_row.get('MOM_20_norm', 0.0):.2f}")
-        m_c5.metric("低波避险得分", f"{target_row.get('LOW_VOL_20_norm', 0.0):.2f}")
-        m_c6.metric("AI 综合得分", f"{target_row.get('COMPOSITE_ALPHA_norm', 0.0):.2f}")
-        
-        # ② 双轨舆情：🏛️ 选中标的专属权威新闻 (带 ⭐️ 评级与 🔗 超链接) vs 🔥 散户与社会情绪风向标
-        c_news_col, c_sent_col = st.columns([1, 1])
-        
-        with c_news_col:
-            st.markdown("##### 🏛️ 选中标的专属权威快讯 (带 ⭐️ 评级 & 🔗 原文)")
-            stock_news_res = cached_stock_news(selected_sym, target_row['name'], concept=search_res.get('concept_name', ''))
-            
-            matched_news = stock_news_res.get('matched_news', [])
-            prompt_str = stock_news_res.get('prompt', '')
-            st.caption(prompt_str)
-            
-            if matched_news:
-                for n_item in matched_news[:3]:
-                    badge = n_item.get('match_badge', '📌 [个股重磅利好]')
-                    stars_b = n_item.get('stars_badge', '⭐️⭐️⭐️ 3星利好')
-                    url_val = n_item.get('url', 'https://www.cls.cn')
-                    link_h = f'<a href="{url_val}" target="_blank" style="color: #1f77b4; font-weight: bold; text-decoration: none;">🔗 查看原文网页</a>'
-                    st.markdown(f"- ⏱️ `[{n_item.get('time', '')}]` `{badge}` **{n_item.get('title', '')}** ({stars_b}) — {link_h}", unsafe_allow_html=True)
-                    st.caption(f"   影响评估: {n_item.get('impact_summary', '')}")
-            else:
-                st.info("ℹ️ 近 72 小时内无个股及概念重大事件，行情由量化技术面驱动。")
-                
-        with c_sent_col:
-            soc_res = cached_social_sentiment(target_row['symbol'], target_row['name'], alpha_score=float(target_row.get('COMPOSITE_ALPHA_norm', 0.1)))
-            st.markdown(f"##### 🔥 散户与社会情绪仪表盘 (`⏱️ 上次更新时间: {soc_res.get('update_time', '')}`)")
-            
-            s_m1, s_m2, s_m3 = st.columns(3)
-            s_m1.metric("散户看多比例", f"{soc_res.get('bullish_pct', 75)}%")
-            s_m2.metric("看空比例", f"{soc_res.get('bearish_pct', 25)}%")
-            s_m3.metric("热度指数", f"{soc_res.get('social_heat_index', 85)} / 100")
-            
-            st.success(f"💬 **情绪状态**: `{soc_res.get('emotion_badge', '🟢 散户理性看多 / 情绪平稳')}`")
-            st.caption(f"📊 **舆情洞察**: {soc_res.get('description', '')} (雪球关注帖: {soc_res.get('xueqiu_posts', 200)} 条 | 股吧热度帖: {soc_res.get('guba_posts', 500)} 条)")
+        # 渲染 F10 全景诊断面板 (K线均线/MACD + 机构评级 + 1~6个月倒序时间线)
+        render_f10_stock_diagnosis_panel(target_row['symbol'], target_row['name'], engine_data['df_composite'])
     else:
         st.warning("未检索到相关概念股票，请尝试其他关键词。")
 
