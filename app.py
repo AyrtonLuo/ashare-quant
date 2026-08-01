@@ -261,7 +261,12 @@ st.sidebar.caption("中大盘优质标的池 (总市值 ≥ 90 亿元)")
 
 menu = st.sidebar.radio(
     "终端功能导航",
-    ["🏠 AI 选股大盘总览", "🔥 今日 AI 优质推荐榜", "🔍 概念板块与龙头搜索", "📊 AI 策略胜率与因子画像", "🚀 一键跟投智能调仓"],
+    [
+        "🏠 AI 选股大盘总览",
+        "🔥 今日 AI 优质推荐榜",
+        "🔍 概念板块与龙头识别 (含资金配置)",
+        "🚀 一键跟投智能调仓"
+    ],
     index=0
 )
 
@@ -538,7 +543,7 @@ elif menu == "🔥 今日 AI 优质推荐榜":
 # =============================================================================
 # 页面 3：🔍 概念板块与产业链龙头搜索 (Concept Leader Search)
 # =============================================================================
-elif menu == "🔍 概念板块与龙头搜索":
+elif menu == "🔍 概念板块与龙头识别 (含资金配置)":
     st.header("🔍 全市场概念板块与产业链龙头自动识别 & 资金买入配置")
     st.caption("基于市值占比 (40%) + 成交额占比 (30%) + Beta 动量 (30%) 算法，智能识别 👑 龙头，并结合 1 手 (100股) 建仓约束计算订单。")
     
@@ -694,65 +699,7 @@ elif menu == "🔍 概念板块与龙头搜索":
         st.warning("未检索到相关概念股票，请尝试其他关键词。")
 
 
-# =============================================================================
-# 页面 4：📊 AI 选股胜率与深度画像 (Strategy Diagnostic)
-# =============================================================================
-elif menu == "📊 AI 策略胜率与因子画像":
-    st.header("📊 AI 选股胜率与策略画像")
-    st.caption("展示各策略属性的历史真实胜率、超额收益能力与稳定度评分。")
-    
-    ic_summary = engine_data['ic_summary'].copy()
-    ic_summary['策略属性'] = ic_summary['因子名称'].map({
-        "MOM_20": "⚡ 动量突破龙头",
-        "LOW_VOL_20": "🛡️ 稳健高股息",
-        "MA_DEV_20": "📈 均线趋势跟踪",
-        "COMPOSITE_ALPHA": "🤖 AI 综合策略",
-        "COMPOSITE_ALPHA_neu": "⭐ 纯净 Alpha 策略"
-    }).fillna(ic_summary['因子名称'])
-    
-    # 转换为数值型胜率与稳定度
-    def parse_win_rate(v):
-        try:
-            if isinstance(v, str):
-                return float(v.replace("%", "").strip())
-            return float(v) * 100.0 if float(v) <= 1.0 else float(v)
-        except Exception:
-            return 50.0
 
-    ic_summary['胜率数值'] = ic_summary['IC 胜率 (IC > 0)'].apply(parse_win_rate)
-    ic_summary['AI 选股胜率'] = ic_summary['胜率数值'].apply(lambda v: f"{v:.2f}%")
-    ic_summary['选股稳定性得分'] = ic_summary['IC 信息比率 (IC IR)'].apply(lambda v: f"{v*10:.2f} 分" if isinstance(v, (int, float)) else str(v))
-    ic_summary['AI 因子看涨强度'] = ic_summary['IC 均值 (IC Mean)'].apply(lambda v: f"{v:+.4f}" if isinstance(v, (int, float)) else str(v))
-    
-    st.subheader("📋 AI 策略核心胜率与稳定度概览")
-    st.dataframe(ic_summary[['策略属性', 'AI 选股胜率', '选股稳定性得分', 'AI 因子看涨强度']], use_container_width=True)
-    
-    col_chart1, col_chart2 = st.columns(2)
-    
-    # 防御性列名匹配
-    y_col = '胜率数值' if '胜率数值' in ic_summary.columns else ic_summary.columns[1]
-    
-    with col_chart1:
-        fig_win = px.bar(
-            ic_summary, x='策略属性', y=y_col,
-            color=y_col, color_continuous_scale='Reds',
-            title="<b>各策略属性选股历史胜率 (%) 对比</b>"
-        )
-        fig_win.update_layout(template="plotly_white", height=380)
-        st.plotly_chart(fig_win, use_container_width=True)
-        
-    with col_chart2:
-        neu_comp_df = ic_summary[ic_summary['策略属性'].str.contains('策略')].copy()
-        if neu_comp_df.empty:
-            neu_comp_df = ic_summary.head(2).copy()
-            
-        fig_neu = px.bar(
-            neu_comp_df, x='策略属性', y=y_col,
-            color=y_col, color_continuous_scale='Viridis',
-            title="<b>自适应 AI 策略 vs 纯净 Alpha 策略胜率对比</b>"
-        )
-        fig_neu.update_layout(template="plotly_white", height=380)
-        st.plotly_chart(fig_neu, use_container_width=True)
 
 
 # =============================================================================
