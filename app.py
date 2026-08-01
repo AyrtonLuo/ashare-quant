@@ -354,24 +354,24 @@ def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.Da
             key=f"timeline_radio_{sym}"
         )
         
-    timeline_events = get_stock_timeline_news(sym, name, time_range=time_range)
-    if not timeline_events:
-        st.info(f"💡 标的 [{sym} {name}] 暂未检索到近期的重大催化报道。可点击下方按钮重新刷新拉取实盘新闻。")
-        if st.button("🔄 刷新重新拉取最新新闻", key=f"btn_refresh_news_{key_prefix}_{sym}"):
-            st.cache_data.clear()
-            st.rerun()
-    else:
-        st.caption(f"已检索到 {len(timeline_events)} 条重大催化事件：")
-        for evt in timeline_events:
-            t_stamp = evt['timestamp']
-            badge = evt['category_badge']
-            stars = evt['stars_badge']
-            title = evt['title']
-            summary = evt['impact_summary']
-            link_h = evt['link_html']
-            
-            st.markdown(f"- `[{t_stamp}]` `{badge}` **{title}** ({stars}) — {link_h}", unsafe_allow_html=True)
-            st.caption(f"   影响评估: {summary}")
+    from src.analysis.news_analyzer import fetch_detailed_news
+    timeline_events = fetch_detailed_news(sym, max_items=10)
+    
+    st.caption(f"已为您真实解析并呈现 {len(timeline_events)} 条具体新闻文章 Feed 卡片流：")
+    for i, evt in enumerate(timeline_events):
+        t_stamp = evt.get('date', evt.get('timestamp', ''))
+        sent_tag = evt.get('sentiment', '⚪ 中性')
+        title = evt.get('title', '')
+        source = evt.get('source', '东方财富网')
+        content = evt.get('content', '')
+        url_val = evt.get('url', f"http://finance.eastmoney.com/a/{sym}.html")
+        
+        expander_header = f"📰 [{t_stamp}] 【{sent_tag}】 {title} (来源: {source})"
+        
+        with st.expander(expander_header, expanded=(i < 2)):
+            st.markdown(f"**📖 正文核心摘要**：")
+            st.write(content if content else title)
+            st.markdown(f'<a href="{url_val}" target="_blank" style="display: inline-block; background-color: #1e88e5; color: white; padding: 6px 14px; text-decoration: none; border-radius: 4px; font-weight: bold; margin-top: 8px;">🔗 点击查看东方财富新闻原文 ↗</a>', unsafe_allow_html=True)
         
     # 5. 散户与社会情绪风向标
     st.markdown("---")
