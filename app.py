@@ -487,12 +487,12 @@ st.sidebar.caption("中大盘优质标的池 (总市值 ≥ 90 亿元)")
 menu = st.sidebar.radio(
     "终端功能导航",
     [
+        "🚀 智能跟投与一键调仓",
         "A股选股大盘总览",
         "⚡ 当日实时分时行情看板",
         "全市场概念板块与龙头识别",
         "资金容量与组合建仓配置",
-        "AI优质精选榜单",
-        "智能跟投调仓"
+        "AI优质精选榜单"
     ],
     index=0
 )
@@ -1012,152 +1012,124 @@ elif menu == "AI优质精选榜单":
 
 
 # =============================================================================
-# 页面 5：智能跟投调仓
+# 页面 1：🚀 智能跟投与一键调仓 (Paper Trading & Rebalance Console)
 # =============================================================================
-elif menu == "智能跟投调仓":
-    st.header("智能跟投与一键调仓")
-    st.caption("基于个人投资总额与 1 手 (100股) 建仓约束，自动过滤高价股并生成精准交易下单清单。")
+elif menu == "🚀 智能跟投与一键调仓":
+    st.header("🚀 智能跟投与一键调仓控制台")
+    st.caption("基于全自动 Alpha 选股与 Markowitz 二次规划调权算子，提供极简 100% 仿真模拟盘自动交易与一键调仓。")
     
+    from src.execution.paper_trader import PaperAccount
     from src.strategy.portfolio_optimizer import auto_calculate_portfolio_size, filter_and_allocate_portfolio
     
-    st.subheader("个人资金容量与持仓微调控制台")
-    col_cap1, col_cap2 = st.columns([1, 1])
-    with col_cap1:
-        user_capital = st.number_input(
-            "输入您的个人总投资资金量 (元):",
-            min_value=10000.0,
-            max_value=100000000.0,
-            value=500000.0,
-            step=50000.0,
-            key="input_user_capital"
-        )
-        auto_n = auto_calculate_portfolio_size(user_capital)
-        st.info(f"根据资金额 **¥{user_capital:,.2f}**，AI 算法自动推荐分散持仓 **{auto_n}** 只股票。")
-        
-    with col_cap2:
-        custom_n = st.slider(
-            "手动微调持仓股票数量 (N 只):",
-            min_value=1,
-            max_value=30,
-            value=auto_n,
-            step=1,
-            key="slider_custom_n"
-        )
-        st.caption(f"当前生效持仓数量: `{custom_n}` 只 | 可自由拉动滑块覆写 AI 推荐数。")
-        
+    paper_acc = PaperAccount(initial_capital=1000000.0)
+    
+    # 算目标持仓
     styled_pool = get_styled_recommendations(engine_data['df_composite'], style_choice, top_pct=0.20)
-    alloc_res = filter_and_allocate_portfolio(styled_pool, total_capital=user_capital, target_count=custom_n)
+    auto_n = auto_calculate_portfolio_size(paper_acc.cash)
+    alloc_res = filter_and_allocate_portfolio(styled_pool, total_capital=paper_acc.initial_capital, target_count=auto_n)
+    target_p_df = alloc_res['portfolio_df']
     
-    p_df = alloc_res['portfolio_df']
+    # 构建价格字典
+    price_dict = {}
+    if not target_p_df.empty:
+        for _, r in target_p_df.iterrows():
+            price_dict[str(r['symbol']).zfill(6)] = float(r.get('close', 10.0))
+            
+    acc_summary = paper_acc.get_summary(price_dict)
     
-    if not p_df.empty:
-        st.markdown("#### 今日建议调仓/买入清单 (一手 100 股向下取整)")
-        
-        m_a1, m_a2, m_a3 = st.columns(3)
-        m_a1.metric("拟投入资金总额", f"¥{alloc_res['total_allocated']:,.2f}")
-        m_a2.metric("预计剩余现金", f"¥{alloc_res['cash_left']:,.2f}")
-        m_a3.metric("拟建仓股票只数", f"{len(p_df)} 只")
-        
-        if alloc_res['skipped_stocks']:
-            for sk in alloc_res['skipped_stocks']:
-                st.warning(f"股票 `{sk['symbol']} {sk['name']}` 最新价 ¥{sk['price']:.2f} 导致资金不足购买 1 手 (100股)，已自动顺延下一个优质标的。")
-                
-        display_cols = []
-        for c in ['symbol', 'name', 'AI推荐星级', 'target_weight_pct', 'close', 'shares', 'actual_amount', '推荐理由标签']:
-            if c in p_df.columns and c not in display_cols:
-                display_cols.append(c)
-                
-        display_alloc = p_df[display_cols].copy()
-        display_alloc = display_alloc.rename(columns={
-            'symbol': '股票代码',
-            'name': '股票名称',
-            'target_weight_pct': '建议目标权重 (%)',
-            'close': '最新价格 (元)',
-            'shares': '拟买入股数 (股)',
-            'actual_amount': '拟买入总金额 (元)'
-        })
-        
-        grad_col = '拟买入总金额 (元)' if '拟买入总金额 (元)' in display_alloc.columns else ('actual_amount' if 'actual_amount' in display_alloc.columns else None)
-        if grad_col:
-            st.dataframe(
-                display_alloc.style.background_gradient(subset=[grad_col], cmap='Reds'),
-                use_container_width=True
-            )
-        else:
-            st.dataframe(display_alloc, use_container_width=True)
-        
-        col_btn1, col_btn2 = st.columns([1, 1])
-        with col_btn1:
-            csv_data = display_alloc.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="导出今日买入清单 CSV 文件",
-                data=csv_data,
-                file_name=f"ai_buy_order_list_{engine_data['latest_date'].strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-                key="btn_download_csv",
-                use_container_width=True
-            )
-        with col_btn2:
-            st.button("一键发送订单至富途模拟盘", key="btn_send_futu_direct", use_container_width=True)
+    # 1. 顶部：账户资产核心 Metrics (st.metric)
+    m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns([1.2, 1.2, 1.2, 1.2, 1])
+    m_col1.metric("总资产", f"¥{acc_summary['total_equity']:,.2f}")
+    m_col2.metric("可用现金", f"¥{acc_summary['cash']:,.2f}")
+    m_col3.metric("持仓市值", f"¥{acc_summary['market_value']:,.2f}")
+    
+    pnl_color = "normal" if acc_summary['pnl_pct'] == 0 else ("inverse" if acc_summary['pnl_pct'] < 0 else "normal")
+    m_col4.metric("累计收益率", f"{acc_summary['pnl_pct']:+.2f}%", delta=f"{acc_summary['pnl_pct']:+.2f}%", delta_color=pnl_color)
+    
+    with m_col5:
+        st.write("")
+        if st.button("🔄 重置账户", key="btn_reset_paper_account", use_container_width=True):
+            paper_acc.reset_account(1000000.0)
+            st.success("模拟账户资金已重置为 ¥1,000,000.00！")
+            st.rerun()
 
     st.markdown("---")
-    st.subheader("富途 OpenD 自动同步控制台")
     
-    col_sync1, col_sync2 = st.columns([2, 1])
+    # 2. 中部：调仓执行控制台
+    c_btn1, c_btn2 = st.columns([2, 2])
+    with c_btn1:
+        if st.button("⚡ 一键完成模拟盘调仓", key="btn_one_click_rebalance", use_container_width=True, type="primary"):
+            with st.spinner("正在根据最新 Markowitz 最佳权重与一手 (100股) 规则自动比对差额并撮合调仓..."):
+                reb_res = paper_acc.rebalance(target_p_df)
+                orders = reb_res.get('executed_orders', [])
+                if orders:
+                    st.success(f"🎉 调仓成功！共完成 {len(orders)} 笔自动撮合订单（买入/卖出已自动扣除 0.03% 模拟印花佣金）。")
+                else:
+                    st.info("当前持仓已与 Markowitz 目标权重完全对齐，无需调仓。")
+                st.rerun()
+
+    with c_btn2:
+        auto_reb_toggle = st.toggle("⏱️ 开启每日盘后自动模拟调仓", value=False, key="toggle_auto_paper_rebalance")
+        if auto_reb_toggle:
+            st.caption("自动跟投开启中：系统检测到新调仓周期时将自动对齐 Markowitz 目标权重。")
+
+    st.markdown("#### 🎯 策略调仓预演对比 (当前持仓 vs Markowitz 目标权重)")
     
-    with col_sync1:
-        if st.button("一键跟投：同步今日最新推荐至富途模拟盘", key="auto_sync_btn", use_container_width=True):
-            with st.spinner("正在连接富途 OpenD 柜台 (127.0.0.1:11111) 并计算调仓买卖订单..."):
-                try:
-                    from src.execution.futu_trader import FutuSimTrader
-                    trader = FutuSimTrader(host="127.0.0.1", port=11111)
-                    target_to_sync = p_df if not p_df.empty else engine_data['top_portfolio']
-                    sync_res = trader.execute_rebalance(target_to_sync)
-                    
-                    s_orders = sync_res['sell_orders']
-                    b_orders = sync_res['buy_orders']
-                    acc = sync_res['account_summary']
-                    
-                    st.success(f"跟投调仓同步成功！成功下发 **{len(b_orders)}** 只买入订单，**{len(s_orders)}** 只卖出订单。 (当前模式: `{sync_res['mode']}`)")
-                    
-                    st.markdown("#### 调仓后模拟账户资产概览")
-                    acc_c1, acc_c2, acc_c3 = st.columns(3)
-                    acc_c1.metric("模拟总资产", f"¥{acc['total_assets']:,.2f}")
-                    acc_c2.metric("可用现金", f"¥{acc['cash']:,.2f}")
-                    acc_c3.metric("持仓市值", f"¥{acc['market_value']:,.2f}")
-                    
-                    if s_orders:
-                        st.markdown("##### 卖出平仓订单列表")
-                        st.dataframe(pd.DataFrame(s_orders), use_container_width=True)
-                        
-                    if b_orders:
-                        st.markdown("##### 买入建仓订单列表")
-                        st.dataframe(pd.DataFrame(b_orders), use_container_width=True)
-                        
-                except Exception as ex_sync:
-                    st.error(f"跟投同步发生异常: {ex_sync}")
-                    
-    with col_sync2:
-        st.info("""
-        **跟投注意事项：**
-        1. 确保 Mac 已运行 Futu OpenD
-        2. 自动适用 100 股一手整倍数
-        3. 单股上限 30% 分散避险
-        """)
-        
+    # 调仓预演对比表
+    preview_rows = []
+    if not target_p_df.empty:
+        for _, r in target_p_df.iterrows():
+            sym = str(r['symbol']).zfill(6)
+            name = str(r['name'])
+            price = float(r.get('close', 10.0))
+            target_w = float(r.get('Markowitz 建议权重 %', 0.0))
+            
+            curr_pos = paper_acc.positions.get(sym, {})
+            curr_shares = curr_pos.get('shares', 0)
+            curr_val = curr_shares * price
+            curr_w = (curr_val / acc_summary['total_equity'] * 100.0) if acc_summary['total_equity'] > 0 else 0.0
+            
+            target_amt = acc_summary['total_equity'] * (target_w / 100.0)
+            target_hands = int(target_amt // (price * 100))
+            target_shares = target_hands * 100
+            diff_shares = target_shares - curr_shares
+            
+            action = "持平"
+            if diff_shares > 0:
+                action = f"买入 +{diff_shares} 股"
+            elif diff_shares < 0:
+                action = f"卖出 {diff_shares} 股"
+                
+            preview_rows.append({
+                "股票代码": sym,
+                "股票名称": name,
+                "当前持股数": curr_shares,
+                "当前持仓权重 %": round(curr_w, 2),
+                "策略目标权重 %": round(target_w, 2),
+                "拟买卖动作与数量": action
+            })
+
+    if preview_rows:
+        st.dataframe(pd.DataFrame(preview_rows).style.background_gradient(subset=['策略目标权重 %'], cmap='Reds'), use_container_width=True)
+
     st.markdown("---")
-    st.subheader("引擎数据维护")
-    col_up1, col_up2 = st.columns(2)
-    with col_up1:
-        if st.button("更新最新行情数据"):
-            with st.spinner("正在更新行情数据..."):
-                update_quality_universe_data(max_workers=8)
-                st.cache_data.clear()
-                st.success("数据更新成功！已刷新缓存。")
-    with col_up2:
-        if st.button("清空缓存重新计算"):
-            st.cache_data.clear()
-            st.success("缓存清空成功！")
+
+    # 3. 下部：两大核心明细表 (当前持仓明细 & 调仓历史交易日志)
+    tab_p1, tab_p2 = st.tabs(["📦 当前持仓明细 (Current Positions)", "📜 调仓历史交易日志 (Trade History Log)"])
+    
+    with tab_p1:
+        pos_df = acc_summary['positions_df']
+        if not pos_df.empty:
+            st.dataframe(pos_df.style.background_gradient(subset=['浮动盈亏 %'], cmap='RdYlGn'), use_container_width=True)
+        else:
+            st.info("当前模拟盘暂无任何股票持仓，请点击上方【⚡ 一键完成模拟盘调仓】完成初始建仓！")
+
+    with tab_p2:
+        log_df = acc_summary['trade_logs_df']
+        if not log_df.empty:
+            st.dataframe(log_df, use_container_width=True)
+        else:
+            st.info("暂无历史模拟交易日志。")
 
 st.markdown("---")
 st.caption(
