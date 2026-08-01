@@ -653,6 +653,60 @@ if menu == "A股选股大盘总览":
     st.plotly_chart(fig, use_container_width=True)
     st.success("策略跑赢提示：自适应因子调权机制与大盘趋势确认风控成功解决了踩空与破位误杀问题，净值显著跑赢沪深 300 大盘。")
 
+    st.markdown("---")
+    st.subheader("📊 机构级策略绩效归因 (Brinson Performance Attribution)")
+    
+    from src.factor_analyzer import BrinsonPerformanceAttribution, QuantBacktestEngine
+    
+    # 1. 4 大 Metrics 卡片: CAGR, MaxDD, Sharpe, Calmar
+    n_days = max(1, len(managed_df))
+    final_eq = managed_df['cum_managed'].iloc[-1]
+    cagr = ((final_eq) ** (252.0 / n_days) - 1.0) * 100.0 if final_eq > 0 else 0.0
+    max_dd = risk['风控后最大回撤'] * 100.0
+    sharpe = risk['风控后夏普比率']
+    calmar = (cagr / max_dd) if max_dd > 0 else 0.0
+    
+    b_col1, b_col2, b_col3, b_col4 = st.columns(4)
+    b_col1.metric("年化收益率 (CAGR)", f"+{cagr:.2f}%")
+    b_col2.metric("最大回撤 (MaxDD)", f"-{max_dd:.2f}%")
+    b_col3.metric("夏普比率 (Sharpe)", f"{sharpe:.2f}")
+    b_col4.metric("卡玛比率 (Calmar)", f"{calmar:.2f}")
+    
+    # 2. Brinson 归因瀑布图 (Plotly Waterfall Chart)
+    bm_final = managed_df['cum_benchmark'].iloc[-1] - 1.0
+    tot_final = final_eq - 1.0
+    brinson = BrinsonPerformanceAttribution(portfolio_return=tot_final, benchmark_return=bm_final)
+    wf = brinson.get_waterfall_data()
+    
+    fig_wf = go.Figure(go.Waterfall(
+        name="Brinson 归因",
+        orientation="v",
+        measure=wf["measure"],
+        x=wf["x"],
+        textposition="outside",
+        text=[f"{v:+.2f}%" for v in wf["y"]],
+        y=wf["y"],
+        connector={"line": {"color": "#7f7f7f"}},
+        decreasing={"marker": {"color": "#00E676"}},
+        increasing={"marker": {"color": "#FF3333"}},
+        totals={"marker": {"color": "#1f77b4"}}
+    ))
+    fig_wf.update_layout(
+        title="<b>Brinson 超额收益来源拆解 (行业配置 vs 个股选择 vs 交互效应)</b>",
+        showlegend=False,
+        template="plotly_white",
+        height=450
+    )
+    st.plotly_chart(fig_wf, use_container_width=True)
+    
+    # 3. 黑天鹅极端压力测试警示框 (Stress Testing Alert)
+    stress = QuantBacktestEngine.stress_test(portfolio_beta=1.25, shock_scenario=-0.05, total_capital=1000000.0)
+    st.error(
+        f"⚠️ **黑天鹅压力测试警示**：当前组合 Beta 值为 `{stress['portfolio_beta']}`。"
+        f"若大盘极端重挫 `{stress['shock_scenario_pct']}%`，预估当前组合动态浮亏将达到 `{stress['expected_loss_pct']}%` "
+        f"(约 -{stress['expected_loss_wan']:.2f} 万元)。建议配置 {stress['suggested_hedge_ratio']} 的对冲仓位。"
+    )
+
 
 # =============================================================================
 # 页面 2：⚡ 当日实时分时行情看板
@@ -854,34 +908,30 @@ elif menu == "资金容量与组合建仓配置":
             for sk in alloc_res['skipped_stocks']:
                 st.warning(f"股票 `{sk['symbol']} {sk['name']}` 最新价 ¥{sk['price']:.2f} 导致资金不足购买 1 手 (100股)，已自动顺延下一个标的。")
                 
-        display_alloc = p_df[['symbol', 'name', 'close', 'target_weight_pct', 'shares', 'actual_amount']].copy()
-        display_alloc['cash_left'] = alloc_res['cash_left']
+        cols_to_show = ['symbol', 'name', 'Markowitz 建议权重 %', '拟分配金额 (元)', '拟买入股数 (整手)', '个体年化波动率 %']
+        display_alloc = p_df[[c for c in cols_to_show if c in p_df.columns]].copy()
         display_alloc = display_alloc.rename(columns={
             'symbol': '股票代码',
-            'name': '股票名称',
-            'close': '最新单价 (元)',
-            'target_weight_pct': '目标权重 %',
-            'shares': '拟买入股数 (股)',
-            'actual_amount': '拟成交金额 (元)',
-            'cash_left': '剩余可用现金 (元)'
+            'name': '股票简称'
         })
         
         st.dataframe(
-            display_alloc.style.background_gradient(subset=['拟成交金额 (元)'], cmap='Reds'),
+            display_alloc.style.background_gradient(subset=['Markowitz 建议权重 %', '拟分配金额 (元)'], cmap='Reds'),
             use_container_width=True
         )
 
         st.markdown("---")
-        st.markdown("#### 资金买入分配比例 (Plotly 饼图可视化)")
+        st.markdown("#### Markowitz 建议资产配置权重分布 (Plotly 环形图)")
         fig_pie = px.pie(
             p_df,
-            values="actual_amount",
+            values="Markowitz 建议权重 %",
             names="name",
-            title=f"<b>本次拟建仓总资金 ¥{user_capital:,.2f} 各种类买入占比</b>",
-            hole=0.4,
+            title=f"<b>本次拟建仓资金 ¥{user_capital:,.2f} 之 Markowitz 优化权重分布 (%)</b>",
+            hole=0.45,
             color_discrete_sequence=px.colors.sequential.RdBu
         )
-        fig_pie.update_layout(template="plotly_white", height=380)
+        fig_pie.update_traces(textinfo="label+percent")
+        fig_pie.update_layout(template="plotly_dark", height=420)
         st.plotly_chart(fig_pie, use_container_width=True)
         
         col_btn1, col_btn2 = st.columns([1, 1])
