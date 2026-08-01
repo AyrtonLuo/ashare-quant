@@ -257,10 +257,10 @@ def build_interactive_kline_chart(
         rows=3, cols=1,
         shared_xaxes=True,
         vertical_spacing=0.04,
-        row_heights=[0.55, 0.20, 0.25],
+        row_heights=[0.55, 0.25, 0.20],
         subplot_titles=[
             f"<b>📈 [{stock_name}] K 线主图 ({main_indicator})</b>",
-            "<b>📊 成交量 Volume</b>",
+            "<b>📊 成交量 Volume (手)</b>",
             f"<b>⚡ 副图指标 ({sub_indicator})</b>"
         ]
     )
@@ -303,12 +303,20 @@ def build_interactive_kline_chart(
         fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_LOWER'], mode='lines', name='BOLL下轨', line=dict(color='rgba(46, 204, 113, 0.45)', width=1.0, dash='dash')), row=1, col=1)
 
     # -------------------------------------------------------------------------
-    # Row 2: 副图 1 - 成交量 Volume (固定在 Row 2)
+    # Row 2: 副图 1 - 高亮成交量 Volume + 5/10日均量线 (固定在 Row 2)
     # -------------------------------------------------------------------------
     vol_colors = np.where(df['close'] >= df['open'], color_up, color_down)
-    fig.add_trace(go.Bar(x=date_str, y=df['volume'], marker_color=vol_colors, name="成交量"), row=2, col=1)
-    fig.add_trace(go.Scatter(x=date_str, y=df['VOL_MA5'], mode='lines', name='VOL_MA5', line=dict(color='#F1C40F', width=1.2)), row=2, col=1)
-    fig.add_trace(go.Scatter(x=date_str, y=df['VOL_MA10'], mode='lines', name='VOL_MA10', line=dict(color='#3498DB', width=1.2)), row=2, col=1)
+    fig.add_trace(
+        go.Bar(
+            x=date_str,
+            y=df['volume'],
+            marker=dict(color=vol_colors, line=dict(width=0)),
+            name="成交量"
+        ),
+        row=2, col=1
+    )
+    fig.add_trace(go.Scatter(x=date_str, y=df['VOL_MA5'], mode='lines', name='VOL_MA5', line=dict(color='#FF9800', width=1.0)), row=2, col=1)
+    fig.add_trace(go.Scatter(x=date_str, y=df['VOL_MA10'], mode='lines', name='VOL_MA10', line=dict(color='#2196F3', width=1.0)), row=2, col=1)
 
     # -------------------------------------------------------------------------
     # Row 3: 副图 2 - 独立技术指标 (固定在 Row 3)
@@ -337,13 +345,14 @@ def build_interactive_kline_chart(
     recent_start = date_str.iloc[-120] if len(date_str) > 120 else date_str.iloc[0]
     recent_end = date_str.iloc[-1]
 
-    fig.update_xaxes(range=[recent_start, recent_end], row=1, col=1)
-    fig.update_xaxes(range=[recent_start, recent_end], row=2, col=1)
-    fig.update_xaxes(range=[recent_start, recent_end], row=3, col=1, rangeslider=dict(visible=True, thickness=0.08))
+    # 彻底关闭 RangeSlider 溢出杂影，保持所有 X 轴精准无缝对齐
+    fig.update_xaxes(range=[recent_start, recent_end], rangeslider_visible=False, row=1, col=1)
+    fig.update_xaxes(range=[recent_start, recent_end], rangeslider_visible=False, row=2, col=1)
+    fig.update_xaxes(range=[recent_start, recent_end], rangeslider_visible=False, row=3, col=1)
 
-    # Y 轴自适应缩放 (autorange=True, fixedrange=False)
+    # Y 轴自适应缩放与成交量格式化
     fig.update_yaxes(autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=1, col=1)
-    fig.update_yaxes(autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=2, col=1)
+    fig.update_yaxes(title_text="成交量 (手)", autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=2, col=1)
     fig.update_yaxes(autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=3, col=1)
 
     # 布局美化 (TradingView 暗黑主题)
