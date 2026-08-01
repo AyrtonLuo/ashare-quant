@@ -157,7 +157,7 @@ def fetch_detailed_news(symbol: str, max_items: int = 10) -> List[Dict[str, Any]
             if url_val and url_val.startswith("http"):
                 url_val = url_val.replace("http://", "https://")
             else:
-                url_val = f"https://quote.eastmoney.com/{prefix}.html"
+                url_val = f"https://finance.sina.com.cn/realstock/company/{prefix}/nc.shtml"
 
             # 简易 NLP 情绪与催化剂打分
             text = f"{title} {content}"
@@ -183,17 +183,17 @@ def fetch_detailed_news(symbol: str, max_items: int = 10) -> List[Dict[str, Any]
                 "source": source,
                 "sentiment": sent_tag,
                 "sentiment_score": sent_score,
-                "link_html": f'<a href="{url_val}" target="_blank" style="color: #1f77b4; font-weight: bold; text-decoration: none;">🔗 点击查看东方财富新闻原文 ↗</a>'
+                "link_html": f'<a href="{url_val}" target="_blank" style="color: #1f77b4; font-weight: bold; text-decoration: none;">🔗 点击查看新闻原文 ↗</a>'
             })
 
             if len(news_items) >= max_items:
                 break
 
-    # 容错保障：若文章数 < 3，补充申万行业研报摘要，链接直达 100% 真实东方财富标的行情与动态页
+    # 容错保障：若文章数 < 3，补充申万行业研报摘要，链接直达 100% 真实新浪财经标的要闻页
     if len(news_items) < 3:
         now_date = pd.Timestamp.now().strftime("%Y-%m-%d")
-        fallback_url = f"https://quote.eastmoney.com/{prefix}.html"
-        link_h = f'<a href="{fallback_url}" target="_blank" style="color: #1f77b4; font-weight: bold; text-decoration: none;">🔗 点击查看东方财富新闻原文 ↗</a>'
+        fallback_url = f"https://finance.sina.com.cn/realstock/company/{prefix}/nc.shtml"
+        link_h = f'<a href="{fallback_url}" target="_blank" style="color: #1f77b4; font-weight: bold; text-decoration: none;">🔗 点击查看新闻原文 ↗</a>'
 
         fallbacks = [
             {

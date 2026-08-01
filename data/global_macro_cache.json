@@ -1,10 +1,10 @@
 {
   "A50_ret": 0.25,
-  "SPX_ret": 0.35,
+  "SPX_ret": -0.79,
   "HSTECH_ret": 0.4,
   "USDCNH_chg": -0.05,
-  "fetch_time": "2026-07-31 18:12:43",
+  "fetch_time": "2026-08-01 00:25:23",
   "is_cached": false,
-  "macro_score": 0.14,
+  "macro_score": -0.03,
   "regime": "🟡 中性温和 (Neutral)"
 }
