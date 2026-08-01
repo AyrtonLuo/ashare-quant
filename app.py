@@ -1056,7 +1056,12 @@ elif menu == "🚀 智能跟投与一键调仓":
             price_dict[sym] = float(tick.get('price') or r.get('close', 10.0))
             
     if use_futu_opend and futu_acc['is_connected']:
-        st.success(f"🟢 **富途牛牛模拟盘 API 连接成功** (`{futu_acc['mode']}`) | 正在实时读取富途官方模拟盘账户数据！")
+        st.success("""
+🍊 **富途牛牛原生模拟盘 (TrdEnv.SIMULATE) API 连接成功！**
+- **当前连接网关**：`Mac 本地 Futu OpenD (127.0.0.1:11111)`
+- **牛牛账户状态**：已就绪 (可直接读取真实模拟盘资金与下发调仓挂单)
+- **数据来源**：富途官方 OpenD `accinfo_query` / `position_list_query` 实时接口
+""")
         acc_summary = {
             "initial_capital": futu_acc['total_assets'],
             "cash": futu_acc['cash'],
@@ -1120,7 +1125,7 @@ elif menu == "🚀 智能跟投与一键调仓":
                     sync_res = futu_trader.execute_rebalance(target_p_df if not target_p_df.empty else engine_data['top_portfolio'])
                     s_orders = sync_res['sell_orders']
                     b_orders = sync_res['buy_orders']
-                    st.success(f"🎉 调仓指令已成功下发至富途牛牛模拟盘账号！(下发卖出单 {len(s_orders)} 笔，买入单 {len(b_orders)} 笔)")
+                    st.success(f"🎉 调仓指令已成功通过 OpenD API 下发至富途牛牛模拟盘账号！(成功下发卖出单 {len(s_orders)} 笔，买入单 {len(b_orders)} 笔)")
                 else:
                     reb_res = paper_acc.rebalance(target_p_df, market_regime_info=regime)
                     orders = reb_res.get('executed_orders', [])
@@ -1192,7 +1197,7 @@ elif menu == "🚀 智能跟投与一键调仓":
     st.markdown("---")
 
     # 下部 Tab 栏：📦 当前持仓明细 & 📜 调仓历史交易日志
-    tab_p1, tab_p2 = st.tabs(["📦 当前持仓明细 (A股 T+1 规则)", "📜 调仓历史交易日志 (印花税+佣金明细)"])
+    tab_p1, tab_p2 = st.tabs(["📦 当前持仓明细 (A股 T+1 规则 / 富途模拟盘)", "📜 调仓历史交易日志 (印花税+佣金明细)"])
     
     with tab_p1:
         pos_df = acc_summary['positions_df']
@@ -1207,7 +1212,10 @@ elif menu == "🚀 智能跟投与一键调仓":
                 use_container_width=True
             )
         else:
-            st.info("当前模拟盘暂无任何股票持仓，请点击上方【⚡ 一键按动态权重自动调仓】完成建仓！")
+            if use_futu_opend and futu_acc['is_connected']:
+                st.info("🍊 **富途牛牛官方模拟盘账户** 中当前暂无股票持仓。点击上方【⚡ 一键按动态权重自动调仓】按钮后，系统将直接通过 OpenD API 批量向您的富途牛牛账户下发订单，下单成功后富途牛牛 App 与本控制台将同步呈现持仓与实时浮动盈亏 %！")
+            else:
+                st.info("当前模拟盘暂无任何股票持仓，请点击上方【⚡ 一键按动态权重自动调仓】完成建仓！")
 
     with tab_p2:
         log_df = acc_summary['trade_logs_df']
