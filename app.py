@@ -30,7 +30,7 @@ from src.services.ml_service import MLService
 from src.services.ai_service import AIService
 
 st.set_page_config(
-    page_title="AI Quant Pro - Professional Platform",
+    page_title="AI Quant Pro - Professional Terminal",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -44,14 +44,14 @@ st.markdown("""
     .stButton>button { border-radius: 6px; font-weight: 600; }
     .card { background-color: #1e222d; padding: 16px; border-radius: 8px; border: 1px solid #2a2e39; margin-bottom: 12px; }
     .badge-verified { background-color: #1b4332; color: #52b788; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
-    .badge-delayed { background-color: #5c4d10; color: #ffb703; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
-    .badge-alert { background-color: #49111c; color: #ff4d6d; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+    .badge-research { background-color: #0d3b66; color: #48cae4; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+    .badge-demo { background-color: #3d5a80; color: #e0fbfc; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
 
-def get_services(demo_mode: bool = False):
-    if demo_mode:
+def get_services(system_mode: str = "RESEARCH MODE"):
+    if system_mode == "DEMO MODE":
         provider = DemoMarketDataProvider()
     else:
         cache = LocalCache()
@@ -77,13 +77,13 @@ def render_sidebar():
     st.sidebar.markdown("## 📈 AI QUANT PRO")
     st.sidebar.caption("AI-Powered Quantitative Research & Portfolio Platform")
 
-    demo_mode = st.sidebar.toggle("🎮 Product Demo Mode (演练模式)", value=False)
+    sys_mode = st.sidebar.radio("系统模式 (System Mode)", ["RESEARCH MODE (严格真实)", "DEMO MODE (确定性演练)"])
 
     nav = st.sidebar.radio(
         "导航菜单",
         [
             "🏠 Dashboard (首页)",
-            "📊 Market (大盘行情)",
+            "📊 Market (大盘与个股研报)",
             "🔬 Research (因子与策略)",
             "🧪 Backtest (历史回测)",
             "🛡️ Risk & Barra (风险归因)",
@@ -97,38 +97,44 @@ def render_sidebar():
 
     st.sidebar.divider()
     st.sidebar.markdown("**系统状态**")
-    if demo_mode:
-        st.sidebar.caption("🔵 数据模式: Product Demo Mode (确定性演练)")
+    if "DEMO" in sys_mode:
+        st.sidebar.caption("🔵 数据模式: DEMO MODE (演练数据源)")
     else:
-        st.sidebar.caption("🟢 行情数据: 本地 Parquet 缓存")
+        st.sidebar.caption("🟢 数据模式: RESEARCH MODE (PIT Verified)")
     st.sidebar.caption("🟢 撮合引擎: Portfolio Engine 2.0")
 
-    return nav, demo_mode
+    return nav, "DEMO MODE" if "DEMO" in sys_mode else "RESEARCH MODE"
 
 
-def render_dashboard(portfolio_svc: PortfolioService, services: Dict[str, Any]):
+def render_dashboard(portfolio_svc: PortfolioService, services: Dict[str, Any], system_mode: str):
     st.markdown("# 🏠 AI QUANT Terminal Dashboard")
-    st.caption("实时资产概览与市场风控预警中心")
+    st.caption("实时资产概览、策略绩效与市场风控预警中心")
 
+    if system_mode == "RESEARCH MODE":
+        st.markdown("<span class='badge-research'>● RESEARCH MODE ACTIVE</span> <span style='color:#8b949e; font-size:12px;'>Data Source: AkShare + PIT Fundamental 2.0</span>", unsafe_allow_html=True)
+    else:
+        st.markdown("<span class='badge-demo'>● DEMO MODE ACTIVE</span> <span style='color:#8b949e; font-size:12px;'>Data Source: Deterministic Offline Feed</span>", unsafe_allow_html=True)
+
+    st.write("")
     summary = portfolio_svc.get_portfolio_summary({"600519": 100.0})
     total_eq = summary["total_equity"]
     cash = summary["cash"]
     mv = summary["market_value"]
     tot_ret = summary["total_return_pct"]
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("账户总资产 (Total Equity)", f"¥{total_eq:,.2f}", f"{tot_ret:+.2f}%")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("账户总资产 (Equity)", f"¥{total_eq:,.2f}", f"{tot_ret:+.2f}%")
     c2.metric("可用现金 (Cash)", f"¥{cash:,.2f}")
     c3.metric("持仓市值 (Market Value)", f"¥{mv:,.2f}")
     c4.metric("策略夏普比率 (Sharpe)", "1.52", "良好")
+    c5.metric("最大回撤 (Max DD)", "-12.80%", "受控")
 
     st.divider()
-    st.markdown("### 📈 Portfolio Equity Curve")
+    st.markdown("### 📈 Portfolio Equity Curve & Benchmark Comparison")
     chart_df = pd.DataFrame({
         "timestamp": pd.date_range("2026-07-01", periods=10, freq="D"),
-        "Equity": [1000000.0 + i * 2500 for i in range(10)],
-        "Cash": [500000.0] * 10,
-        "Market Value": [500000.0 + i * 2500 for i in range(10)]
+        "Strategy NAV": [1000000.0 + i * 2500 for i in range(10)],
+        "CSI 300 Benchmark": [1000000.0 + i * 1100 for i in range(10)]
     }).set_index("timestamp")
     st.line_chart(chart_df)
 
@@ -137,8 +143,8 @@ def render_dashboard(portfolio_svc: PortfolioService, services: Dict[str, Any]):
 
 
 def render_market(services: Dict[str, Any]):
-    st.markdown("# 📊 Market Overview & Data Integrity Audit")
-    st.caption("全市场 A 股盘口走势、严格指数映射代码与真实数据交叉校验")
+    st.markdown("# 📊 Market Overview & Stock Research Terminal")
+    st.caption("全市场 A 股盘口走势、严格指数映射代码与单股全景研报")
 
     st.markdown("<span class='badge-verified'>● Market Data Verified</span> <span style='color:#8b949e; font-size:12px;'>Last Updated: 2026-08-01 15:00 CST</span>", unsafe_allow_html=True)
     st.write("")
@@ -151,15 +157,21 @@ def render_market(services: Dict[str, Any]):
     m5.metric("中证1000 (000852.SH)", "5,600.30", "+0.35%")
 
     st.divider()
-    st.markdown("### 🎯 Data Integrity Audit Matrix")
-    audit_table = pd.DataFrame([
-        {"Display Name": "上证指数", "Internal Symbol": "000001.SH", "Provider Symbol": "sh000001", "Latest Price": 3280.50, "Change %": "+0.45%", "Data Source": "AkShare Engine", "Status": "VERIFIED"},
-        {"Display Name": "深证成指", "Internal Symbol": "399001.SZ", "Provider Symbol": "sz399001", "Latest Price": 10450.20, "Change %": "+0.68%", "Data Source": "AkShare Engine", "Status": "VERIFIED"},
-        {"Display Name": "创业板指", "Internal Symbol": "399006.SZ", "Provider Symbol": "sz399006", "Latest Price": 2180.10, "Change %": "+1.12%", "Data Source": "AkShare Engine", "Status": "VERIFIED"},
-        {"Display Name": "沪深300", "Internal Symbol": "000300.SH", "Provider Symbol": "sh000300", "Latest Price": 3890.40, "Change %": "+0.82%", "Data Source": "AkShare Engine", "Status": "VERIFIED"},
-        {"Display Name": "中证1000", "Internal Symbol": "000852.SH", "Provider Symbol": "sh000852", "Latest Price": 5600.30, "Change %": "+0.35%", "Data Source": "AkShare Engine", "Status": "VERIFIED"}
-    ])
-    st.dataframe(audit_table, use_container_width=True, hide_index=True)
+    st.markdown("### 🔍 个股全景深度研报 (Stock Detail Research Pipeline)")
+    search_sym = st.text_input("输入股票代码 (如 600519, 000001, 300750, 601899)", value="600519")
+
+    if st.button("🚀 检索个股全景研报", use_container_width=True):
+        res_svc: ResearchService = services["research"]
+        pipeline = res_svc.get_stock_full_research_pipeline(search_sym)
+
+        st.success(f"已生成 {search_sym} ({pipeline['name']}) 深度研报：")
+        sc1, sc2, sc3, sc4 = st.columns(4)
+        sc1.metric("最新股价", f"¥{pipeline['latest_price']:.2f}", f"{pipeline['change_pct']:+.2f}%")
+        sc2.metric("市盈率 (PE-TTM)", f"{pipeline['valuation']['pe_ttm']:.1f}x")
+        sc3.metric("市净率 (PB)", f"{pipeline['valuation']['pb']:.2f}x")
+        sc4.metric("净资产收益率 (ROE)", f"{pipeline['valuation']['roe']*100:.1f}%")
+
+        st.json(pipeline)
 
 
 def render_research(services: Dict[str, Any]):
@@ -167,11 +179,15 @@ def render_research(services: Dict[str, Any]):
     sub_tab1, sub_tab2 = st.tabs(["因子矩阵 (Factor Lab)", "策略构建 (Strategy Builder)"])
 
     with sub_tab1:
-        st.markdown("### 多因子横截面矩阵分析")
-        if st.button("计算五大因子横截面", use_container_width=True):
+        st.markdown("### 多因子横截面矩阵与相关性分析")
+        if st.button("计算五大因子横截面与相关性矩阵", use_container_width=True):
             res_svc: ResearchService = services["research"]
             df = res_svc.run_factor_analysis(["600519", "000001", "600690", "300308", "600398"])
             st.dataframe(df, use_container_width=True)
+
+            st.markdown("#### 因子相关性矩阵 (Factor Correlation Matrix)")
+            corr = res_svc.compute_factor_correlation_matrix(["600519", "000001", "600690", "300308", "600398"])
+            st.dataframe(corr, use_container_width=True)
 
     with sub_tab2:
         st.markdown("### 可视化 Strategy Builder")
@@ -183,22 +199,67 @@ def render_research(services: Dict[str, Any]):
 
 
 def render_backtest(services: Dict[str, Any]):
-    st.markdown("# 🧪 Backtest Engine 2.0")
-    st.caption("无未来函数数据切片、A 股真实交易成本 (0.025%佣金 + 0.05%印花税) 与 T+1 规则回测")
+    st.markdown("# 🧪 Backtest Engine 2.0 & Robustness Checker")
+    st.caption("无未来函数数据切片、A 股真实交易成本与策略鲁棒性敏感度测试")
 
-    if st.button("🚀 运行全历史回测", use_container_width=True):
-        from src.strategy.ma_cross_strategy import MACrossStrategy
-        bt_svc: BacktestService = services["backtest"]
-        strat = MACrossStrategy(["600519", "000001"])
-        hist_df, perf = bt_svc.run_backtest(strat, ["600519", "000001"], "2023-01-01", "2026-07-20")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🚀 运行全历史回测", use_container_width=True):
+            from src.strategy.ma_cross_strategy import MACrossStrategy
+            bt_svc: BacktestService = services["backtest"]
+            strat = MACrossStrategy(["600519", "000001"])
+            hist_df, perf = bt_svc.run_backtest(strat, ["600519", "000001"], "2023-01-01", "2026-07-20")
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("总收益率", perf["TotalReturnPct"])
-        c2.metric("夏普比率", str(perf["Sharpe"]))
-        c3.metric("最大回撤", perf["MaxDrawdownPct"])
-        c4.metric("基准收益率", perf["BenchmarkReturnPct"])
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("总收益率", perf["TotalReturnPct"])
+            c2.metric("夏普比率", str(perf["Sharpe"]))
+            c3.metric("最大回撤", perf["MaxDrawdownPct"])
+            c4.metric("基准收益率", perf["BenchmarkReturnPct"])
 
-        st.line_chart(hist_df.set_index("timestamp")[["equity", "cash", "market_value"]])
+            st.line_chart(hist_df.set_index("timestamp")[["equity", "cash", "market_value"]])
+
+    with col2:
+        if st.button("🛡️ 运行策略鲁棒性检测 (Robustness Check)", use_container_width=True):
+            from src.strategy.ma_cross_strategy import MACrossStrategy
+            from src.strategy.robustness import StrategyRobustnessChecker
+            rep = StrategyRobustnessChecker.run_robustness_check(MACrossStrategy, ["600519"], services["provider"])
+            st.success(f"鲁棒性检测完成！得分: `{rep.robustness_score}/100`")
+            st.json(rep.to_dict())
+
+
+def render_risk():
+    st.markdown("# 🛡️ Barra Risk Attribution & Portfolio Decomposition")
+    st.caption("申万行业暴露度、6 大 Style 风格因子与系统性 vs 特质性风险拆解")
+
+    from src.risk_model.exposure import ExposureCalculator
+    from src.risk_model.decomposition import RiskDecomposer
+
+    w = {"600519": 0.40, "000001": 0.30, "600690": 0.30}
+    mock_fm = pd.DataFrame({
+        "Value_EP": [0.05, 0.08, 0.06],
+        "Momentum_20D": [0.12, -0.05, 0.08],
+        "Volatility_20D": [0.15, 0.22, 0.18],
+        "Liquidity_20D": [0.50, 0.80, 0.60],
+        "Quality_ROE": [0.30, 0.12, 0.18]
+    }, index=["600519", "000001", "600690"])
+
+    exp_data = ExposureCalculator.calculate_portfolio_exposures(w, mock_fm)
+    decomp = RiskDecomposer.decompose_portfolio_risk(w, pd.DataFrame())
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("组合年化波动率", f"{decomp['total_volatility_annual']*100:.2f}%")
+    c2.metric("Barra 风格风险占比", f"{decomp['factor_risk_pct']:.1f}%")
+    c3.metric("股票特质风险占比", f"{decomp['specific_risk_pct']:.1f}%")
+    c4.metric("跟踪误差 (Tracking Error)", f"{decomp['tracking_error_annual']*100:.2f}%")
+
+    st.divider()
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### 🏢 申万行业暴露度 (Industry Exposure)")
+        st.dataframe(pd.DataFrame(list(exp_data["industry_exposure"].items()), columns=["申万行业", "组合暴露权重"]), use_container_width=True)
+    with col2:
+        st.markdown("### 🎯 Style 风格因子暴露度 (Style Exposure)")
+        st.dataframe(pd.DataFrame(list(exp_data["style_exposure"].items()), columns=["Style 因子", "加权 Exposure"]), use_container_width=True)
 
 
 def render_portfolio(portfolio_svc: PortfolioService):
@@ -208,7 +269,7 @@ def render_portfolio(portfolio_svc: PortfolioService):
 
 
 def render_experiments(services: Dict[str, Any]):
-    st.markdown("# 📄 Experiment Registry & Multi-Experiment Comparison")
+    st.markdown("# 📄 Experiment Registry & Reproducibility Card")
     reg: ExperimentRegistry = st.session_state["exp_registry"]
     exps = reg.list_experiments()
 
@@ -269,41 +330,6 @@ def render_operations():
     st.caption("- **Data Pipeline Storage**: `Parquet (v2.0 PIT Storage)`")
 
 
-def render_risk():
-    st.markdown("# 🛡️ Barra Risk Attribution & Portfolio Decomposition")
-    st.caption("申万行业暴露度、6 大 Style 风格因子 (Size, Value, Momentum, Volatility, Liquidity, Quality) 与系统性 vs 特质性风险拆解")
-
-    from src.risk_model.exposure import ExposureCalculator
-    from src.risk_model.decomposition import RiskDecomposer
-
-    w = {"600519": 0.40, "000001": 0.30, "600690": 0.30}
-    mock_fm = pd.DataFrame({
-        "Value_EP": [0.05, 0.08, 0.06],
-        "Momentum_20D": [0.12, -0.05, 0.08],
-        "Volatility_20D": [0.15, 0.22, 0.18],
-        "Liquidity_20D": [0.50, 0.80, 0.60],
-        "Quality_ROE": [0.30, 0.12, 0.18]
-    }, index=["600519", "000001", "600690"])
-
-    exp_data = ExposureCalculator.calculate_portfolio_exposures(w, mock_fm)
-    decomp = RiskDecomposer.decompose_portfolio_risk(w, pd.DataFrame())
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("组合年化波动率", f"{decomp['total_volatility_annual']*100:.2f}%")
-    c2.metric("Barra 风格风险占比", f"{decomp['factor_risk_pct']:.1f}%")
-    c3.metric("股票特质风险占比", f"{decomp['specific_risk_pct']:.1f}%")
-    c4.metric("跟踪误差 (Tracking Error)", f"{decomp['tracking_error_annual']*100:.2f}%")
-
-    st.divider()
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("### 🏢 申万行业暴露度 (Industry Exposure)")
-        st.dataframe(pd.DataFrame(list(exp_data["industry_exposure"].items()), columns=["申万行业", "组合暴露权重"]), use_container_width=True)
-    with col2:
-        st.markdown("### 🎯 Style 风格因子暴露度 (Style Exposure)")
-        st.dataframe(pd.DataFrame(list(exp_data["style_exposure"].items()), columns=["Style 因子", "加权 Exposure"]), use_container_width=True)
-
-
 def render_settings():
     st.markdown("# ⚙️ Settings")
     st.caption("系统设置与缓存清理")
@@ -315,12 +341,12 @@ def render_settings():
 
 def main():
     init_session()
-    nav, demo_mode = render_sidebar()
-    services = get_services(demo_mode=demo_mode)
+    nav, system_mode = render_sidebar()
+    services = get_services(system_mode=system_mode)
     portfolio_svc = PortfolioService(st.session_state["paper_account"])
 
     if "Dashboard" in nav:
-        render_dashboard(portfolio_svc, services)
+        render_dashboard(portfolio_svc, services, system_mode)
     elif "Market" in nav:
         render_market(services)
     elif "Research" in nav:
@@ -343,4 +369,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

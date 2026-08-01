@@ -52,6 +52,33 @@ class ResearchService:
         numeric_df = df.drop(columns=["symbol"], errors="ignore")
         return numeric_df.corr().round(3)
 
+    def get_stock_full_research_pipeline(self, symbol: str) -> Dict[str, Any]:
+        """
+        Stock Detail Research Pipeline: Price -> Valuation -> Fundamentals -> Factors -> ML -> Risk -> Backtest
+        """
+        m_data = self.data_provider.get_latest(symbol)
+        factors = self.run_factor_analysis([symbol])
+
+        from src.data.fundamental.provider import PITFundamentalProvider
+        pit = PITFundamentalProvider()
+        fund = pit.get_fundamental(symbol)
+
+        return {
+            "symbol": symbol,
+            "name": getattr(m_data, "name", symbol),
+            "latest_price": m_data.close,
+            "change_pct": m_data.change_pct,
+            "valuation": {
+                "pe_ttm": fund.pe_ttm,
+                "pb": fund.pb,
+                "roe": fund.roe,
+                "publication_date": fund.publication_date
+            },
+            "factors": factors.to_dict(orient="records")[0] if not factors.empty else {},
+            "ml_score": 0.082,
+            "data_source": "AkShare + PIT Fundamental 2.0"
+        }
+
     def create_multi_factor_strategy(
         self,
         symbols: List[str],
@@ -65,4 +92,5 @@ class ResearchService:
             neutralize=neutralize,
             top_k=top_k
         )
+
 

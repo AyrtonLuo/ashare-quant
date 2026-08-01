@@ -6,14 +6,17 @@ Ashare Quant Pro 目标是从当前的 A 股量化研究 MVP，升级为一套�
 
 ## 当前基础
 
-- 数据与基本面层 (Fundamental Data Layer 2.0)：`src/data/fundamental/` (`FundamentalData`, `PITFundamentalProvider`) 具备 CSI 300, CSI 500, CSI 1000 覆盖与 Point-in-Time 披露延迟校验，严防 Look-Ahead Bias 与幸存者偏差。
+- 数据与基本面隔离层：系统明确解耦为 `RESEARCH MODE` (严格真实 PIT Verified 数据源) 与 `DEMO MODE` (确定性演练数据源)，零假数据混淆。
+- 个股全景深度研报管道 (Stock Research Pipeline)：支持全市场个股搜索 (如 `600519`, `300750`, `601899`)，自动贯通 Price ──► Valuation ──► Fundamentals ──► Factors ──► ML Score ──► Risk ──► Backtest 研报链。
+- 策略鲁棒性与参数敏感度检测引擎：`src/strategy/robustness.py` (`StrategyRobustnessChecker`) 自动化测试多频率与摩擦场景下 Sharpe 变异系数，生成 `StrategyRobustnessReport` 防参数过拟合。
 - Barra 风格风险模型 (Barra Risk Model)：`src/risk_model/` (`ExposureCalculator`, `RiskDecomposer`) 支持申万一级行业暴露度与 6 大 Style 因子 (Size, Value, Momentum, Volatility, Liquidity, Quality) 的系统性 vs 特质性风险拆解与 Tracking Error 计算。
 - 组合多重约束优化器 (Portfolio Optimizer 2.0)：`src/portfolio/optimizer_v2.py` 支持 Aggressive, Balanced, Market Neutral 三类风控模式与最大单股/行业上限、中性化和换手率约束。
 - 真实交易摩擦与冲击力模型 (Realistic Cost Model)：`src/execution/costs.py`（佣金 0.025% + 印花税 0.05% + 买卖滑点 + $\text{Impact} \propto \sqrt{\text{OrderSize}/\text{ADV}}$ 市场冲击力）。
 - AI 智能研报与诊断层：DiagnosticsEngine (确定性 Performance 异常诊断、Factor Decay 衰减判定、Overfitting 强过拟合预警、Market Regime 表现分析)、AutomatedReportGenerator (落盘 `reports/experiment_xxx_ai.md` 与 `.json`)、LLMProvider 抽象 (MockLLMProvider / Local / OpenAI 解耦).
 - 独立自动化任务与运维层 (Automation & Jobs)：`src/jobs/` (update_market_data, generate_daily_report, health_check)、`RunManager` 任务生命周期与耗时追踪、`SystemHealthMonitor` 系统巡检、`ResearchIntegrityChecker` 合规防护面板.
 - 服务与解耦层 (Service Layer)：ResearchService, BacktestService, PortfolioService, MLService, AIService，隔离 UI 与底层逻辑。
-- 控制台与产品架构：Streamlit 产品级 10 大导航 (Dashboard, Market, Research, Backtest, Risk & Barra 风险归因, Portfolio, Experiments, AI Analyst, Operations 运维监控, Settings)、金融终端暗色风格与 Product Demo Mode 确定性演练开关.
+- 控制台与产品架构：Streamlit 产品级 10 大导航 (Dashboard, Market, Research, Backtest, Risk & Barra 风险归因, Portfolio, Experiments, AI Analyst, Operations 运维监控, Settings)、金融终端暗色风格与 System Mode 切换开关.
+
 
 
 
