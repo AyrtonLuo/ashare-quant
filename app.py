@@ -1062,23 +1062,29 @@ elif menu == "智能跟投调仓":
             for sk in alloc_res['skipped_stocks']:
                 st.warning(f"股票 `{sk['symbol']} {sk['name']}` 最新价 ¥{sk['price']:.2f} 导致资金不足购买 1 手 (100股)，已自动顺延下一个优质标的。")
                 
-        desired_cols = ['symbol', 'name', 'AI推荐星级', 'target_weight_pct', 'Markowitz 建议权重 %', 'close', 'shares', 'actual_amount', '推荐理由标签']
-        display_cols = [c for c in desired_cols if c in p_df.columns]
+        display_cols = []
+        for c in ['symbol', 'name', 'AI推荐星级', 'target_weight_pct', 'close', 'shares', 'actual_amount', '推荐理由标签']:
+            if c in p_df.columns and c not in display_cols:
+                display_cols.append(c)
+                
         display_alloc = p_df[display_cols].copy()
         display_alloc = display_alloc.rename(columns={
             'symbol': '股票代码',
             'name': '股票名称',
             'target_weight_pct': '建议目标权重 (%)',
-            'Markowitz 建议权重 %': '建议目标权重 (%)',
             'close': '最新价格 (元)',
             'shares': '拟买入股数 (股)',
             'actual_amount': '拟买入总金额 (元)'
         })
         
-        st.dataframe(
-            display_alloc.style.background_gradient(subset=['拟买入总金额 (元)'], cmap='Reds'),
-            use_container_width=True
-        )
+        grad_col = '拟买入总金额 (元)' if '拟买入总金额 (元)' in display_alloc.columns else ('actual_amount' if 'actual_amount' in display_alloc.columns else None)
+        if grad_col:
+            st.dataframe(
+                display_alloc.style.background_gradient(subset=[grad_col], cmap='Reds'),
+                use_container_width=True
+            )
+        else:
+            st.dataframe(display_alloc, use_container_width=True)
         
         col_btn1, col_btn2 = st.columns([1, 1])
         with col_btn1:

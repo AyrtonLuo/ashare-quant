@@ -279,6 +279,8 @@ def filter_and_allocate_portfolio(
         total_used = float(result_df['actual_amount'].sum())
         result_df['Markowitz 建议权重 %'] = (result_df['actual_amount'] / total_used * 100).round(2)
         result_df['target_weight_pct'] = result_df['Markowitz 建议权重 %']
+        result_df['拟分配金额 (元)'] = result_df['actual_amount']
+        result_df['拟买入总金额 (元)'] = result_df['actual_amount']
         cash_left = total_capital - total_used
     else:
         total_used = 0.0
