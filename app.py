@@ -487,6 +487,7 @@ menu = st.sidebar.radio(
     "终端功能导航",
     [
         "A股选股大盘总览",
+        "⚡ 当日实时分时行情看板",
         "全市场概念板块与龙头识别",
         "资金容量与组合建仓配置",
         "AI优质精选榜单",
@@ -519,11 +520,37 @@ st.sidebar.success("""
 """)
 
 # 加载数据
-try:
-    engine_data = load_and_process_quant_engine(style=style_choice)
-except Exception as e:
-    st.error(f"量化引擎加载失败: {e}")
-    st.stop()
+with st.spinner("⚡ 正在极速加载数据中..."):
+    try:
+        engine_data = load_and_process_quant_engine(style=style_choice)
+    except Exception as e:
+        st.error(f"量化引擎加载失败: {e}")
+        st.stop()
+
+# 2. 全局大盘指数常驻顶栏 (Global Index Header - 适用于所有页面)
+from src.data.realtime_engine import fetch_global_indices_snapshot
+idx_list = fetch_global_indices_snapshot()
+idx_cols = st.columns(4)
+for i, item in enumerate(idx_list):
+    with idx_cols[i]:
+        val_str = f"{item['price']:,.2f}"
+        chg_val = item['change']
+        pct_val = item['change_pct']
+        color = "#FF3333" if chg_val >= 0 else "#00E676"
+        sign = "+" if chg_val >= 0 else ""
+        
+        st.markdown(
+            f"""
+            <div style="background-color: #1E222D; padding: 10px 14px; border-radius: 8px; border-top: 3px solid {color}; margin-bottom: 12px;">
+                <div style="font-size: 13px; color: #AAAAAA;">{item['name']} ({item['code']})</div>
+                <div style="font-size: 20px; font-weight: bold; color: #FFFFFF; margin-top: 2px;">{val_str}</div>
+                <div style="font-size: 13px; font-weight: bold; color: {color}; margin-top: 2px;">
+                    {sign}{chg_val:.2f} ({sign}{pct_val:.2f}%)
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
 
 # =============================================================================
@@ -626,7 +653,64 @@ if menu == "A股选股大盘总览":
 
 
 # =============================================================================
-# 页面 2：全市场概念板块与龙头识别
+# 页面 2：⚡ 当日实时分时行情看板
+# =============================================================================
+elif menu == "⚡ 当日实时分时行情看板":
+    st.header("⚡ 当日实时分时行情看板")
+    st.caption("同花顺级分时黄白线终端 (白线为分时价格，黄线为 VWAP 均价)，支持五档 Level 2 盘口、换手量比与实时秒刷。")
+    
+    from src.data.realtime_engine import get_intraday_min_data, get_stock_level2_snapshot, build_realtime_intraday_chart
+    
+    col_rt1, col_rt2, col_rt3 = st.columns([2.5, 1.5, 1.2])
+    with col_rt1:
+        stock_query = st.text_input("输入股票代码或中文名称 (如：002792 双杰电气 / 300308 中际旭创):", "002792 双杰电气", key="realtime_stock_input")
+    with col_rt2:
+        auto_refresh = st.toggle("⏱️ 开启秒级实时刷盘", value=False, key="toggle_auto_refresh")
+    with col_rt3:
+        st.write("")
+        st.write("")
+        if st.button("刷新分时行情", key="btn_refresh_intraday"):
+            st.rerun()
+
+    sym_clean = stock_query.split(" ")[0].strip().zfill(6)
+    name_clean = stock_query.split(" ")[-1].strip() if " " in stock_query else sym_clean
+    
+    with st.spinner(f"⚡ 正在极速连接 240 分钟分时通道 [{sym_clean} {name_clean}]..."):
+        df_min = get_intraday_min_data(sym_clean)
+        snap = get_stock_level2_snapshot(sym_clean, name_clean)
+    
+    col_main, col_level2 = st.columns([3, 1.2])
+    
+    with col_main:
+        fig_realtime = build_realtime_intraday_chart(df_min, stock_name=f"{sym_clean} {name_clean}")
+        st.plotly_chart(fig_realtime, use_container_width=True)
+        
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("最高价", f"¥{snap['highest']:.2f}")
+        m2.metric("最低价", f"¥{snap['lowest']:.2f}")
+        m3.metric("换手率", snap['turnover_rate'])
+        m4.metric("量比", snap['volume_ratio'])
+        
+    with col_level2:
+        st.markdown(f"#### 📊 五档盘口 ({sym_clean})")
+        
+        # 卖 5 ~ 卖 1
+        for p, v in snap['asks']:
+            st.markdown(f"<div style='display:flex; justify-content:space-between; color:#00E676; font-size:13px;'><span>卖盘</span><span>¥{p:.2f}</span><span>{v} 手</span></div>", unsafe_allow_html=True)
+        
+        st.divider()
+        
+        # 买 1 ~ 买 5
+        for p, v in snap['bids']:
+            st.markdown(f"<div style='display:flex; justify-content:space-between; color:#FF3333; font-size:13px;'><span>买盘</span><span>¥{p:.2f}</span><span>{v} 手</span></div>", unsafe_allow_html=True)
+            
+        st.divider()
+        st.caption(f"外盘: {snap['outer_vol']} | 内盘: {snap['inner_vol']}")
+        st.caption(f"振幅: {snap['amplitude']}")
+
+
+# =============================================================================
+# 页面 3：全市场概念板块与龙头识别
 # =============================================================================
 elif menu == "全市场概念板块与龙头识别":
     st.header("全市场概念板块与产业链龙头识别专区")
