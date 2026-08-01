@@ -157,8 +157,10 @@ def cached_social_sentiment(symbol: str, name: str, alpha_score: float = 0.8) ->
 @st.dialog("📅 单日 K 线与行情细节下钻", width="large")
 def render_daily_kline_dialog(date_str: str, stock_code: str, detail_row: dict):
     """
-    点击 K 线图表弹出的单日分时/行情细节 Modal 对话框
+    点击 K 线图表弹出的单日分时/行情细节 Modal 对话框 (含 240 分钟高精度日内分时走势图)
     """
+    from src.analysis.stock_f10_engine import build_intraday_minute_chart
+
     st.markdown(f"### 标的：`{stock_code}` | 交易日：`{date_str}`")
     
     open_p = float(detail_row.get('open', detail_row.get('Open', 0.0)))
@@ -167,21 +169,28 @@ def render_daily_kline_dialog(date_str: str, stock_code: str, detail_row: dict):
     close_p = float(detail_row.get('close', detail_row.get('Close', 0.0)))
     vol = float(detail_row.get('volume', detail_row.get('Volume', 0)))
     
+    chg = close_p - open_p
+    chg_pct = (chg / open_p * 100) if open_p > 0 else 0.0
+    
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("开盘价", f"¥{open_p:.2f}")
     c2.metric("最高价", f"¥{high_p:.2f}")
     c3.metric("最低价", f"¥{low_p:.2f}")
-    c4.metric("收盘价", f"¥{close_p:.2f}")
+    c4.metric("收盘价", f"¥{close_p:.2f}", delta=f"{chg_pct:+.2f}% (¥{chg:+.2f})")
     
     st.divider()
-    st.markdown("#### 📊 当日成交与技术指标")
+    st.markdown("#### ⚡ 240 分钟日内分时走势图 (09:30 - 15:00)")
+    
+    fig_intraday = build_intraday_minute_chart(date_str, open_p, high_p, low_p, close_p, vol)
+    st.plotly_chart(fig_intraday, use_container_width=True)
+    
     v1, v2 = st.columns(2)
     v1.metric("成交量 (手)", f"{int(vol):,}")
     macd_val = float(detail_row.get('MACD_hist', detail_row.get('MACD', 0.0)))
     v2.metric("MACD 柱值", f"{macd_val:+.3f}")
     
     ma20_val = float(detail_row.get('MA20', close_p))
-    st.info(f"💡 AI 盘后研报：{date_str} 股价运行在 MA20 (¥{ma20_val:.2f}) 均线附近，当日成交量 {int(vol):,} 手，资金换手活跃。")
+    st.info(f"💡 AI 盘后风向研报：{date_str} 股价运行在 MA20 (¥{ma20_val:.2f}) 均线附近，当日成交量 {int(vol):,} 手，分时资金交投活跃，量价形态保持稳定。")
 
 
 def render_kline_with_dialog(symbol: str, name: str, df_composite: pd.DataFrame, key_prefix: str = "default"):

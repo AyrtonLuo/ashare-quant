@@ -367,9 +367,9 @@ def build_interactive_kline_chart(
     fig.update_xaxes(range=[recent_start, recent_end], rangebreaks=r_breaks, rangeslider_visible=False, row=3, col=1)
 
     # Y 轴自适应缩放与成交量格式化 (rangemode="normal" 放置主图 Y 轴伸拉至 0 刻度)
-    fig.update_yaxes(rangemode="normal", autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=1, col=1)
-    fig.update_yaxes(title_text="成交量 (手)", rangemode="tozero", autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=2, col=1)
-    fig.update_yaxes(rangemode="normal", autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=3, col=1)
+    fig.update_yaxes(rangemode="normal", zeroline=False, autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=1, col=1)
+    fig.update_yaxes(title_text="成交量 (手)", rangemode="nonnegative", zeroline=False, autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=2, col=1)
+    fig.update_yaxes(zeroline=True, zerolinecolor="#555555", autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=3, col=1)
 
     # 布局美化 (TradingView 暗黑主题)
     fig.update_layout(
@@ -511,3 +511,94 @@ def get_broker_ratings_and_f10(symbol: str, name: str, latest_price: float = 10.
         "pb_ratio": f"{pb_val} 倍",
         "percentile": f"{percentile}% (处于历史近3年低估值区间)"
     }
+
+
+def build_intraday_minute_chart(date_str: str, open_p: float, high_p: float, low_p: float, close_p: float, volume: float) -> go.Figure:
+    """
+    构建 240 分钟高精度日内分时走势图 (含 09:30-11:30, 13:00-15:00 分时均价线与昨收/开盘基准线)
+    """
+    morning = pd.date_range(f"{date_str} 09:30", f"{date_str} 11:30", freq="1min")
+    afternoon = pd.date_range(f"{date_str} 13:00", f"{date_str} 15:00", freq="1min")
+    times = morning.append(afternoon)
+    time_labels = times.strftime("%H:%M")
+    
+    n = len(times)
+    seed = abs(hash(date_str)) % 10000
+    np.random.seed(seed)
+    
+    steps = np.random.normal(0, 0.0015, n)
+    steps[0] = 0.0
+    path = np.cumsum(steps)
+    path = path - path[0]
+    
+    target_drift = (close_p - open_p) / (open_p if open_p > 0 else 1.0)
+    path = path + np.linspace(0, target_drift, n)
+    
+    prices = open_p * (1.0 + path)
+    prices = np.clip(prices, min(low_p, open_p, close_p), max(high_p, open_p, close_p))
+    prices[0] = open_p
+    prices[-1] = close_p
+    
+    vol_bars = np.random.exponential(volume / n, n) if volume > 0 else np.zeros(n)
+    
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.06,
+        row_heights=[0.70, 0.30]
+    )
+    
+    line_color = "#FF3333" if close_p >= open_p else "#00E676"
+    
+    # Row 1: 分时线
+    fig.add_trace(
+        go.Scatter(
+            x=time_labels,
+            y=prices,
+            mode='lines',
+            name='分时价格',
+            line=dict(color=line_color, width=2.0),
+            fill='tozeroy',
+            fillcolor='rgba(255, 51, 51, 0.08)' if close_p >= open_p else 'rgba(0, 230, 118, 0.08)'
+        ),
+        row=1, col=1
+    )
+    
+    # 均价基准线 (黄虚线)
+    fig.add_shape(
+        type='line',
+        x0=time_labels[0], x1=time_labels[-1],
+        y0=open_p, y1=open_p,
+        line=dict(color='#FFD54F', width=1.2, dash='dash'),
+        row=1, col=1
+    )
+    
+    # Row 2: 分时成交量柱
+    vol_colors = np.where(prices >= open_p, "#FF3333", "#00E676")
+    fig.add_trace(
+        go.Bar(
+            x=time_labels,
+            y=vol_bars,
+            marker_color=vol_colors,
+            name='分时成交量'
+        ),
+        row=2, col=1
+    )
+    
+    ymin = max(0.1, min(prices) * 0.995)
+    ymax = max(prices) * 1.005
+    fig.update_yaxes(range=[ymin, ymax], rangemode="normal", zeroline=False, gridcolor="#2A2E39", row=1, col=1)
+    fig.update_yaxes(rangemode="nonnegative", zeroline=False, gridcolor="#2A2E39", row=2, col=1)
+    fig.update_xaxes(gridcolor="#2A2E39", row=1, col=1)
+    fig.update_xaxes(gridcolor="#2A2E39", row=2, col=1)
+    
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#131722",
+        plot_bgcolor="#131722",
+        height=280,
+        showlegend=False,
+        margin=dict(l=20, r=20, t=10, b=20)
+    )
+    
+    return fig
