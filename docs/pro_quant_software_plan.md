@@ -7,11 +7,12 @@ Ashare Quant Pro 目标是从当前的 A 股量化研究 MVP，升级为一套�
 ## 当前基础
 
 - 数据层：Data Layer 2.0 (MarketData 模型、MarketDataProvider 抽象、AkShareProvider、FutuProvider、LocalCache Parquet 缓存、HistoricalUniverseProvider).
-- 因子层：Factor Engine (Factor 抽象、Momentum, Value, Quality, Volatility, Liquidity, MAD 去极值、Z-Score 标准化、行业/市值中性化).
-- 研究层：MultiFactorStrategy、Composite Alpha 权重合成、实验注册表 ExperimentRegistry (Git Commit 关联、配置落盘).
-- 回测层：BacktestEngine2 统一架构、SlicedMarketDataProvider 防未来函数数据切片、VectorBT/Pandas 100% 撮合一致性.
+- 因子与 ML 特征层：Factor Engine (Factor 抽象、Momentum, Value, Quality, Volatility, Liquidity, MAD 去极值、Z-Score 标准化、行业/市值中性化)、ML FeatureExtractor (构建多因子 Feature Matrix X).
+- 机器学习 Alpha 层：ML Model 抽象 (Linear Ridge, RandomForest, HistGradientBoosting)、MLDatasetBuilder ( Forward Return Label 对齐)、TimeSeriesSplitter (严格按时间切分 Train/Val/Test)、WalkForwardSplitter ( Walk-Forward Validation 交叉验证)、MLEvaluator (RMSE, MAE, R², IC, Rank IC, ICIR)、MLAlphaStrategy.
+- 回测与实验层：BacktestEngine2 统一架构、SlicedMarketDataProvider 防未来函数数据切片、ExperimentRegistry (ML 模型参数、数据切片版本与 Git Commit 关联).
 - 组合与执行层：Portfolio Engine 2.0 (Position, Order, OrderSide/OrderStatus, ExecutionEngine, TransactionCostModel, PortfolioAccounting, PaperAccount Facade).
-- 控制台与报告：Streamlit 🧪 Strategy Lab、DecisionAuditLog Markdown 决策审计日志 (reports/YYYY-MM-DD_rebalance.md).
+- 控制台与报告：Streamlit 🧪 Strategy Lab & 🤖 ML Research Lab、DecisionAuditLog Markdown 决策审计日志.
+
 
 
 

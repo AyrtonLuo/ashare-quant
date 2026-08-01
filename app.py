@@ -664,7 +664,7 @@ def main() -> None:
     summary = account.get_summary(price_map)
     render_header()
 
-    overview_tab, rebalance_tab, positions_tab, intel_tab, lab_tab = st.tabs(["总览", "调仓", "持仓", "情报", "🧪 Strategy Lab"])
+    overview_tab, rebalance_tab, positions_tab, intel_tab, lab_tab, ml_lab_tab = st.tabs(["总览", "调仓", "持仓", "情报", "🧪 Strategy Lab", "🤖 ML Research Lab"])
 
     with overview_tab:
         render_overview(summary, market_regime, source_map)
@@ -688,7 +688,7 @@ def main() -> None:
         st.caption("基于 Phase 3 统一架构运行策略历史回测，包含防未来函数数据切片、A 股交易费用与动态大盘避险风控。")
         col1, col2, col3 = st.columns(3)
         with col1:
-            strat_choice = st.selectbox("选择策略", ["双均线择时 (MA5/10)"])
+            strat_choice = st.selectbox("选择策略", ["双均线择时 (MA5/10)", "多因子 Composite Alpha"])
         with col2:
             freq_choice = st.selectbox("调仓频率", ["Daily (每日)", "Weekly (每周)", "Monthly (每季)"])
         with col3:
@@ -696,10 +696,16 @@ def main() -> None:
 
         if st.button("🚀 运行策略回测", use_container_width=True):
             from src.strategy.ma_cross_strategy import MACrossStrategy
+            from src.strategy.multi_factor_strategy import MultiFactorStrategy
             from src.backtest_engine_v2 import BacktestEngine2
             freq_map = {"Daily (每日)": "daily", "Weekly (每周)": "weekly", "Monthly (每季)": "monthly"}
             provider = get_market_provider()
-            strat = MACrossStrategy(symbols=["600519", "000001", "600690", "300308", "600398"])
+
+            if strat_choice == "双均线择时 (MA5/10)":
+                strat = MACrossStrategy(symbols=["600519", "000001", "600690", "300308", "600398"])
+            else:
+                strat = MultiFactorStrategy(symbols=["600519", "000001", "600690", "300308", "600398"])
+
             engine = BacktestEngine2(
                 strategy=strat,
                 data_provider=provider,
@@ -707,7 +713,7 @@ def main() -> None:
                 rebalance_frequency=freq_map[freq_choice],
                 risk_allocator=DynamicCapitalAllocator(index_price=sh_price, index_ma20=sh_price*0.98, market_volume_yi=9200.0)
             )
-            with st.spinner("正在运行 Phase 3 统一架构回测..."):
+            with st.spinner("正在运行 Phase 4 统一架构回测..."):
                 hist_df, perf, _ = engine.run(
                     symbols=["600519", "000001", "600690", "300308", "600398"],
                     start_date="2023-01-01",
@@ -722,9 +728,70 @@ def main() -> None:
             m4.metric("基准收益率", perf["BenchmarkReturnPct"])
             st.line_chart(hist_df.set_index("timestamp")[["equity", "cash", "market_value"]])
 
+    with ml_lab_tab:
+        st.markdown("### 🤖 ML Research Lab (机器学习 Alpha 实验室)")
+        st.caption("基于 Phase 5 ML Alpha 管道：时间序列严格切片、无未来数据泄漏、模型预测 ──► 策略 ──► 组合 ──► 样本外回测。")
+        mc1, mc2, mc3 = st.columns(3)
+        with mc1:
+            ml_model_choice = st.selectbox("选择 ML 模型", ["RandomForest (随机森林)", "Linear Ridge (岭回归)", "HistGradientBoosting (梯度提升)"])
+        with mc2:
+            target_choice = st.selectbox("预测目标 Target", ["20D Forward Return (未来20日收益)"])
+        with mc3:
+            top_k_choice = st.slider("Top-K 选股数", min_value=1, max_value=5, value=2)
+
+        if st.button("🧠 训练 ML 模型并运行样本外回测", use_container_width=True):
+            from src.ml.models.linear import LinearModel
+            from src.ml.models.tree import RandomForestModel, GradientBoostingModel
+            from src.strategy.ml_alpha_strategy import MLAlphaStrategy
+            from src.backtest_engine_v2 import BacktestEngine2
+            from src.ml.features import FeatureExtractor
+
+            provider = get_market_provider()
+            symbols = ["600519", "000001", "600690", "300308", "600398"]
+            extractor = FeatureExtractor(provider)
+
+            with st.spinner("正在提取多因子 Feature Matrix X 并构建训练集..."):
+                train_dates = [f"2023-0{m:02d}-15" for m in range(1, 10)]
+                train_x_df = extractor.extract_features_on_date(symbols, cutoff_date="2023-06-01")
+                # 构造简单训练目标 Series
+                train_y = train_x_df["Momentum_20D"] * 0.5 + train_x_df["Value_EP"] * 0.5
+
+                if "Linear" in ml_model_choice:
+                    model = LinearModel()
+                elif "RandomForest" in ml_model_choice:
+                    model = RandomForestModel(n_estimators=30)
+                else:
+                    model = GradientBoostingModel(max_iter=30)
+
+                model.fit(train_x_df, train_y)
+
+            st.success("ML 模型训练完成！即刻投喂至 MLAlphaStrategy 运行样本外回测...")
+            ml_strat = MLAlphaStrategy(symbols=symbols, model=model, top_k=top_k_choice)
+            engine = BacktestEngine2(
+                strategy=ml_strat,
+                data_provider=provider,
+                initial_capital=1000000.0,
+                rebalance_frequency="monthly"
+            )
+            with st.spinner("正在运行样本外 (Out-of-Sample) 组合回测..."):
+                hist_df, perf, _ = engine.run(
+                    symbols=symbols,
+                    start_date="2024-01-01",
+                    end_date=pd.Timestamp.now().strftime("%Y-%m-%d"),
+                    benchmark_symbol="000300"
+                )
+
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("ML Alpha 收益率", perf["TotalReturnPct"])
+            m2.metric("夏普比率", str(perf["Sharpe"]))
+            m3.metric("最大回撤", perf["MaxDrawdownPct"])
+            m4.metric("沪深300 基准", perf["BenchmarkReturnPct"])
+            st.line_chart(hist_df.set_index("timestamp")[["equity", "cash", "market_value"]])
+
     if "target_plan" in locals():
         st.session_state["target_plan_cache"] = target_plan
 
 
 if __name__ == "__main__":
     main()
+
