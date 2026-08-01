@@ -236,10 +236,12 @@ def build_interactive_kline_chart(
     sub_indicator: str = "MACD (平滑异同)"
 ) -> go.Figure:
     """
-    同花顺 / TradingView 级极客暗黑专业 Plotly 交互图表：
-    - 主图: Candlestick (A股红涨绿跌) + 可选 MA / BOLL 叠加
-    - 副图: 可选 MACD / KDJ / RSI / 成交量均线
-    - 交互体验: 顶部 Legend 不挤压，支持 RangeSlider 全量上市历史查看
+    同花顺 / TradingView 级极客暗黑 3 屏专业 Plotly 交互图表：
+    - Row 1: Candlestick K 线 (A股红涨绿跌) + 可选 MA / BOLL 叠加
+    - Row 2: 成交量 Volume 柱状图 + VOL_MA5 / VOL_MA10
+    - Row 3: 专业副图技术指标 (MACD / KDJ / RSI)
+    - 视口切片: 默认拉开【最近 120 交易日】宽大视野，全量支持平滑拖拽 & RangeSlider 查阅全历史
+    - Y 轴自适应: autorange=True, fixedrange=False
     """
     if kline_df is None or kline_df.empty:
         return go.Figure()
@@ -252,17 +254,20 @@ def build_interactive_kline_chart(
     color_down = "#34C759"  # 亮绿色 (跌)
 
     fig = make_subplots(
-        rows=2, cols=1,
+        rows=3, cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.05,
-        row_heights=[0.70, 0.30],
+        vertical_spacing=0.04,
+        row_heights=[0.55, 0.20, 0.25],
         subplot_titles=[
             f"<b>📈 [{stock_name}] K 线主图 ({main_indicator})</b>",
+            "<b>📊 成交量 Volume</b>",
             f"<b>⚡ 副图指标 ({sub_indicator})</b>"
         ]
     )
 
-    # 1. 主图: Candlestick K 线
+    # -------------------------------------------------------------------------
+    # Row 1: 主图 (Candlestick K 线 + MA / BOLL)
+    # -------------------------------------------------------------------------
     fig.add_trace(
         go.Candlestick(
             x=date_str,
@@ -279,7 +284,6 @@ def build_interactive_kline_chart(
         row=1, col=1
     )
 
-    # 主图指标叠加: 均线系统 (MA)
     if "均线" in main_indicator or "MA" in main_indicator:
         fig.add_trace(go.Scatter(x=date_str, y=df['MA5'], mode='lines', name='MA5', line=dict(color='#F1C40F', width=1.2)), row=1, col=1)
         fig.add_trace(go.Scatter(x=date_str, y=df['MA10'], mode='lines', name='MA10', line=dict(color='#3498DB', width=1.2)), row=1, col=1)
@@ -290,48 +294,63 @@ def build_interactive_kline_chart(
         if len(df) >= 250:
             fig.add_trace(go.Scatter(x=date_str, y=df['MA250'], mode='lines', name='MA250 (年线)', line=dict(color='#E74C3C', width=1.5)), row=1, col=1)
 
-    # 主图指标叠加: 布林通道 (BOLL)
     elif "布林" in main_indicator or "BOLL" in main_indicator:
         fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_MID'], mode='lines', name='BOLL中轨', line=dict(color='#F1C40F', width=1.5)), row=1, col=1)
         fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_UPPER'], mode='lines', name='BOLL上轨', line=dict(color='#E74C3C', width=1.2, dash='dash')), row=1, col=1)
         fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_LOWER'], mode='lines', name='BOLL下轨', line=dict(color='#2ECC71', width=1.2, dash='dash')), row=1, col=1)
 
-    # 2. 副图指标切换
-    if "MACD" in sub_indicator:
-        macd_colors = np.where(df['MACD_hist'] >= 0, color_up, color_down)
-        fig.add_trace(go.Scatter(x=date_str, y=df['DIF'], mode='lines', name='DIF (快线)', line=dict(color='#3498DB', width=1.5)), row=2, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['DEA'], mode='lines', name='DEA (慢线)', line=dict(color='#F39C12', width=1.5)), row=2, col=1)
-        fig.add_trace(go.Bar(x=date_str, y=df['MACD_hist'], marker_color=macd_colors, name='MACD柱'), row=2, col=1)
+    # -------------------------------------------------------------------------
+    # Row 2: 副图 1 - 成交量 Volume (固定在 Row 2)
+    # -------------------------------------------------------------------------
+    vol_colors = np.where(df['close'] >= df['open'], color_up, color_down)
+    fig.add_trace(go.Bar(x=date_str, y=df['volume'], marker_color=vol_colors, name="成交量"), row=2, col=1)
+    fig.add_trace(go.Scatter(x=date_str, y=df['VOL_MA5'], mode='lines', name='VOL_MA5', line=dict(color='#F1C40F', width=1.2)), row=2, col=1)
+    fig.add_trace(go.Scatter(x=date_str, y=df['VOL_MA10'], mode='lines', name='VOL_MA10', line=dict(color='#3498DB', width=1.2)), row=2, col=1)
 
-    elif "KDJ" in sub_indicator:
-        fig.add_trace(go.Scatter(x=date_str, y=df['K'], mode='lines', name='K线', line=dict(color='#F1C40F', width=1.5)), row=2, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['D'], mode='lines', name='D线', line=dict(color='#3498DB', width=1.5)), row=2, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['J'], mode='lines', name='J线', line=dict(color='#E74C3C', width=1.5)), row=2, col=1)
-        # 超买超卖参考线
-        fig.add_shape(type="line", x0=date_str.iloc[0], x1=date_str.iloc[-1], y0=80, y1=80, line=dict(color="#E74C3C", width=1, dash="dot"), row=2, col=1)
-        fig.add_shape(type="line", x0=date_str.iloc[0], x1=date_str.iloc[-1], y0=20, y1=20, line=dict(color="#2ECC71", width=1, dash="dot"), row=2, col=1)
+    # -------------------------------------------------------------------------
+    # Row 3: 副图 2 - 独立技术指标 (固定在 Row 3)
+    # -------------------------------------------------------------------------
+    if "KDJ" in sub_indicator:
+        fig.add_trace(go.Scatter(x=date_str, y=df['K'], mode='lines', name='K线', line=dict(color='#F1C40F', width=1.5)), row=3, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['D'], mode='lines', name='D线', line=dict(color='#3498DB', width=1.5)), row=3, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['J'], mode='lines', name='J线', line=dict(color='#E74C3C', width=1.5)), row=3, col=1)
+        fig.add_shape(type="line", x0=date_str.iloc[0], x1=date_str.iloc[-1], y0=80, y1=80, line=dict(color="#E74C3C", width=1, dash="dot"), row=3, col=1)
+        fig.add_shape(type="line", x0=date_str.iloc[0], x1=date_str.iloc[-1], y0=20, y1=20, line=dict(color="#2ECC71", width=1, dash="dot"), row=3, col=1)
 
     elif "RSI" in sub_indicator:
-        fig.add_trace(go.Scatter(x=date_str, y=df['RSI6'], mode='lines', name='RSI6', line=dict(color='#F1C40F', width=1.5)), row=2, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['RSI12'], mode='lines', name='RSI12', line=dict(color='#3498DB', width=1.5)), row=2, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['RSI24'], mode='lines', name='RSI24', line=dict(color='#9B59B6', width=1.5)), row=2, col=1)
-        fig.add_shape(type="line", x0=date_str.iloc[0], x1=date_str.iloc[-1], y0=80, y1=80, line=dict(color="#E74C3C", width=1, dash="dot"), row=2, col=1)
-        fig.add_shape(type="line", x0=date_str.iloc[0], x1=date_str.iloc[-1], y0=20, y1=20, line=dict(color="#2ECC71", width=1, dash="dot"), row=2, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['RSI6'], mode='lines', name='RSI6', line=dict(color='#F1C40F', width=1.5)), row=3, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['RSI12'], mode='lines', name='RSI12', line=dict(color='#3498DB', width=1.5)), row=3, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['RSI24'], mode='lines', name='RSI24', line=dict(color='#9B59B6', width=1.5)), row=3, col=1)
+        fig.add_shape(type="line", x0=date_str.iloc[0], x1=date_str.iloc[-1], y0=80, y1=80, line=dict(color="#E74C3C", width=1, dash="dot"), row=3, col=1)
+        fig.add_shape(type="line", x0=date_str.iloc[0], x1=date_str.iloc[-1], y0=20, y1=20, line=dict(color="#2ECC71", width=1, dash="dot"), row=3, col=1)
 
-    else: # 成交量均线
-        vol_colors = np.where(df['close'] >= df['open'], color_up, color_down)
-        fig.add_trace(go.Bar(x=date_str, y=df['volume'], marker_color=vol_colors, name="成交量"), row=2, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['VOL_MA5'], mode='lines', name='VOL_MA5', line=dict(color='#F1C40F', width=1.2)), row=2, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['VOL_MA10'], mode='lines', name='VOL_MA10', line=dict(color='#3498DB', width=1.2)), row=2, col=1)
+    else: # 默认 MACD (平滑异同)
+        macd_colors = np.where(df['MACD_hist'] >= 0, color_up, color_down)
+        fig.add_trace(go.Scatter(x=date_str, y=df['DIF'], mode='lines', name='DIF (快线)', line=dict(color='#3498DB', width=1.5)), row=3, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['DEA'], mode='lines', name='DEA (慢线)', line=dict(color='#F39C12', width=1.5)), row=3, col=1)
+        fig.add_trace(go.Bar(x=date_str, y=df['MACD_hist'], marker_color=macd_colors, name='MACD柱'), row=3, col=1)
 
-    # 暗黑全景 UI 美化 (TradingView 暗黑主题)
+    # 默认视口限制：拉开【最近 120 个交易日】的舒适宽阔视口
+    recent_start = date_str.iloc[-120] if len(date_str) > 120 else date_str.iloc[0]
+    recent_end = date_str.iloc[-1]
+
+    fig.update_xaxes(range=[recent_start, recent_end], row=1, col=1)
+    fig.update_xaxes(range=[recent_start, recent_end], row=2, col=1)
+    fig.update_xaxes(range=[recent_start, recent_end], row=3, col=1, rangeslider=dict(visible=True, thickness=0.08))
+
+    # Y 轴自适应缩放 (autorange=True, fixedrange=False)
+    fig.update_yaxes(autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=1, col=1)
+    fig.update_yaxes(autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=2, col=1)
+    fig.update_yaxes(autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=3, col=1)
+
+    # 布局美化 (TradingView 暗黑主题)
     fig.update_layout(
         template="plotly_dark",
         paper_bgcolor="#131722",
         plot_bgcolor="#131722",
         dragmode="pan",
         hovermode="x unified",
-        height=620,
+        height=660,
         showlegend=True,
         legend=dict(
             orientation="h",
@@ -341,10 +360,6 @@ def build_interactive_kline_chart(
             font=dict(size=12, color="#CCCCCC"),
             bgcolor="rgba(0,0,0,0)"
         ),
-        xaxis=dict(gridcolor="#2A2E39", showgrid=True),
-        yaxis=dict(gridcolor="#2A2E39", showgrid=True),
-        xaxis2=dict(gridcolor="#2A2E39", showgrid=True, rangeslider=dict(visible=True, thickness=0.08)),
-        yaxis2=dict(gridcolor="#2A2E39", showgrid=True),
         margin=dict(l=30, r=30, t=50, b=30)
     )
 
