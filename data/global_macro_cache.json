@@ -3,6 +3,8 @@
   "SPX_ret": 0.35,
   "HSTECH_ret": 0.4,
   "USDCNH_chg": -0.05,
-  "fetch_time": "2026-07-31 17:53:24",
-  "is_cached": false
+  "fetch_time": "2026-07-31 18:12:43",
+  "is_cached": false,
+  "macro_score": 0.14,
+  "regime": "🟡 中性温和 (Neutral)"
 }

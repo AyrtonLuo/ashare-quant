@@ -11,6 +11,8 @@ __pycache__/
 
 # Quant Data & Output
 *.png
+*.pkl
+data/df_composite.parquet
 
 # IDE / OS
 .DS_Store

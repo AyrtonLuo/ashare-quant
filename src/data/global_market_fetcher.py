@@ -39,6 +39,19 @@ def fetch_global_intermarket_indicators(timeout_sec: int = 5) -> Dict[str, Any]:
         "is_cached": False
     }
 
+    # 0. 本地 6 小时内缓存优先快速响应
+    if os.path.exists(MACRO_CACHE_FILE):
+        try:
+            mtime = os.path.getmtime(MACRO_CACHE_FILE)
+            if (datetime.now().timestamp() - mtime) < 21600:
+                with open(MACRO_CACHE_FILE, "r", encoding="utf-8") as f:
+                    cached_data = json.load(f)
+                    if "macro_score" in cached_data:
+                        cached_data["is_cached"] = True
+                        return cached_data
+        except Exception:
+            pass
+
     try:
         # 1. 抓取全球主要股指
         global_df = ak.index_global_spot_em()
@@ -54,14 +67,7 @@ def fetch_global_intermarket_indicators(timeout_sec: int = 5) -> Dict[str, Any]:
                 elif "A50" in name or "中国A50" in name:
                     indicators["A50_ret"] = round(chg, 2)
     except Exception as e:
-        logger.warning(f"全球股指接口获取超时或异常 ({e})，使用默认预备数据...")
-
-    # 保存缓存
-    try:
-        with open(MACRO_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(indicators, f, ensure_ascii=False, indent=2)
-    except Exception as ex_c:
-        logger.warning(f"写入宏观缓存文件失败: {ex_c}")
+        logger.warning(f"全球股指接口获取超时或异常 ({e})，使用预备数据...")
 
     # 计算 Global_Macro_Sentiment 宏观情绪分 (-1.0 ~ +1.0)
     a50 = indicators["A50_ret"]
@@ -81,5 +87,12 @@ def fetch_global_intermarket_indicators(timeout_sec: int = 5) -> Dict[str, Any]:
 
     indicators["macro_score"] = round(macro_score, 2)
     indicators["regime"] = regime
+
+    # 保存缓存
+    try:
+        with open(MACRO_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(indicators, f, ensure_ascii=False, indent=2)
+    except Exception as ex_c:
+        logger.warning(f"写入宏观缓存文件失败: {ex_c}")
 
     return indicators
