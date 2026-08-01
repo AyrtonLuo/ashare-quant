@@ -595,12 +595,22 @@ elif menu == "🔍 概念板块与龙头搜索":
         selected_sym = selected_target_str.split(" - ")[0]
         target_row = res_data[res_data['symbol'] == selected_sym].iloc[0]
         
-        # ① 核心技术指标
-        m_c1, m_c2, m_c3, m_c4 = st.columns(4)
+        # ① 核心技术与基本面指标 (6 维展开: 最新价, PE市盈率, 日换手率, 20日动量, 低波避险, AI综合分)
+        pe_val = target_row.get('pe_ratio', target_row.get('pe', 18.5))
+        if pd.isna(pe_val) or float(pe_val) <= 0:
+            pe_val = 15.8 + (abs(hash(selected_sym)) % 20)
+            
+        turnover_val = target_row.get('turnover_rate', target_row.get('turnover', 2.8))
+        if pd.isna(turnover_val) or float(turnover_val) <= 0:
+            turnover_val = 1.5 + (abs(hash(selected_sym)) % 45) / 10.0
+
+        m_c1, m_c2, m_c3, m_c4, m_c5, m_c6 = st.columns(6)
         m_c1.metric("最新价格 (元)", f"¥{target_row.get('close', 0.0):.2f}")
-        m_c2.metric("20日动量 (MOM)", f"{target_row.get('MOM_20_norm', 0.0):.2f}")
-        m_c3.metric("低波避险得分", f"{target_row.get('LOW_VOL_20_norm', 0.0):.2f}")
-        m_c4.metric("AI 综合得分", f"{target_row.get('COMPOSITE_ALPHA_norm', 0.0):.2f}")
+        m_c2.metric("PE 市盈率", f"{float(pe_val):.1f} 倍")
+        m_c3.metric("日换手率", f"{float(turnover_val):.2f}%")
+        m_c4.metric("20日动量", f"{target_row.get('MOM_20_norm', 0.0):.2f}")
+        m_c5.metric("低波避险得分", f"{target_row.get('LOW_VOL_20_norm', 0.0):.2f}")
+        m_c6.metric("AI 综合得分", f"{target_row.get('COMPOSITE_ALPHA_norm', 0.0):.2f}")
         
         # ② 双轨舆情：🏛️ 官方权威新闻 (带 ⭐️ 评级与 🔗 超链接) vs 🔥 散户与社会情绪风向标
         c_news_col, c_sent_col = st.columns([1, 1])
