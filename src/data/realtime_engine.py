@@ -223,7 +223,7 @@ def get_intraday_min_data(symbol: str) -> pd.DataFrame:
     except Exception as e:
         logger.warning(f"Eastmoney 真实分时接口异常 ({e})，尝试腾讯分时通道...")
 
-    # 2. 尝试从腾讯分时行情接口抓取 100% 真实 Tick
+    # 2. 尝试从腾讯分时行情接口抓取 100% 真实 Tick (将累计成交量转为单分钟成交量)
     url2 = f"http://web.ifzq.gtimg.cn/appstock/app/minute/query?code={prefix}{code}"
     try:
         req = urllib.request.Request(url2, headers=headers)
@@ -233,7 +233,7 @@ def get_intraday_min_data(symbol: str) -> pd.DataFrame:
             raw_min = stock_data["data"]["data"]
             pre_close = float(stock_data["qt"][f"{prefix}{code}"][4])
             records = []
-            cum_vol = 0.0
+            prev_cum_vol = 0.0
             cum_amt = 0.0
             for row in raw_min:
                 parts = row.split(" ")
@@ -242,15 +242,17 @@ def get_intraday_min_data(symbol: str) -> pd.DataFrame:
                 if t_str < "09:30":
                     continue
                 price = float(parts[1])
-                vol = float(parts[2])
-                cum_vol += vol
-                cum_amt += price * vol
-                vwap = cum_amt / cum_vol if cum_vol > 0 else price
+                cum_vol_now = float(parts[2])
+                min_vol = max(0.0, cum_vol_now - prev_cum_vol)
+                prev_cum_vol = cum_vol_now
+                
+                cum_amt += price * min_vol
+                vwap = cum_amt / cum_vol_now if cum_vol_now > 0 else price
                 records.append({
                     "time": t_str,
                     "price": round(price, 2),
                     "vwap": round(vwap, 2),
-                    "volume": round(vol, 0),
+                    "volume": round(min_vol, 0),
                     "pre_close": pre_close,
                     "chg_pct": round(((price - pre_close) / pre_close * 100.0) if pre_close > 0 else 0.0, 2)
                 })
