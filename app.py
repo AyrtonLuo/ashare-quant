@@ -117,11 +117,19 @@ def render_dashboard(portfolio_svc: PortfolioService, services: Dict[str, Any], 
         st.markdown("<span class='badge-demo'>● DEMO MODE ACTIVE</span> <span style='color:#8b949e; font-size:12px;'>Data Source: Deterministic Offline Feed</span>", unsafe_allow_html=True)
 
     st.write("")
-    summary = portfolio_svc.get_portfolio_summary({"600519": 100.0})
+    from src.portfolio.contract import normalize_portfolio_summary, validate_portfolio_summary_contract, PortfolioContractError
+    try:
+        raw_summary = portfolio_svc.get_portfolio_summary({"600519": 100.0})
+        summary = validate_portfolio_summary_contract(normalize_portfolio_summary(raw_summary), context_label="render_dashboard")
+    except Exception as e:
+        st.error(f"⚠️ Portfolio Summary 契约检测诊断信息: {e}")
+        summary = normalize_portfolio_summary(None)
+
     total_eq = summary["total_equity"]
     cash = summary["cash"]
     mv = summary["market_value"]
     tot_ret = summary["total_return_pct"]
+
 
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("账户总资产 (Equity)", f"¥{total_eq:,.2f}", f"{tot_ret:+.2f}%")

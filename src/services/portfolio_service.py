@@ -7,52 +7,25 @@ portfolio_service.py
 import pandas as pd
 from typing import Dict, Any, List, Optional
 from src.execution.paper_trader import PaperAccount
+from src.portfolio.contract import normalize_portfolio_summary, validate_portfolio_summary_contract
 
 
 class PortfolioService:
-    def __init__(self, account: PaperAccount):
+    def __init__(self, account: Optional[PaperAccount] = None):
         self.account = account
 
     def get_portfolio_summary(self, current_prices: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
         """
-        返回强契约 Portfolio Summary 字典，绝对包含全套维度与兜底默认值
+        返回强契约 Portfolio Summary 字典，绝对包含全套 9 大维度与兜底默认值
         """
         current_prices = current_prices or {}
-        default_pos_df = pd.DataFrame(columns=[
-            "股票代码", "股票名称", "总持股数", "可卖股份 (T+1)", "今日买入冻结", "持仓成本价", "最新价", "持仓市值", "浮动盈亏 %"
-        ])
-
         try:
-            summary = self.account.get_summary(current_prices) if self.account else {}
+            raw_summary = self.account.get_summary(current_prices) if self.account else {}
         except Exception:
-            summary = {}
+            raw_summary = {}
 
-        initial_cap = float(summary.get("initial_capital", getattr(self.account, "initial_capital", 1000000.0)))
-        cash = float(summary.get("cash", getattr(self.account, "cash", initial_cap)))
-        mv = float(summary.get("market_value", 0.0))
-        tot_eq = float(summary.get("total_equity", summary.get("equity", cash + mv)))
-        tot_ret = float(summary.get("total_return_pct", summary.get("pnl_pct", (tot_eq - initial_cap) / initial_cap * 100.0 if initial_cap > 0 else 0.0)))
-        pnl_pct = float(summary.get("pnl_pct", tot_ret))
-
-        pos_df = summary.get("positions_df")
-        if pos_df is None or not isinstance(pos_df, pd.DataFrame):
-            pos_df = default_pos_df
-
-        trade_logs_df = summary.get("trade_logs_df")
-        if trade_logs_df is None or not isinstance(trade_logs_df, pd.DataFrame):
-            trade_logs_df = pd.DataFrame()
-
-        return {
-            "initial_capital": round(initial_cap, 2),
-            "cash": round(cash, 2),
-            "market_value": round(mv, 2),
-            "total_equity": round(tot_eq, 2),
-            "equity": round(tot_eq, 2),
-            "total_return_pct": round(tot_ret, 2),
-            "pnl_pct": round(pnl_pct, 2),
-            "positions_df": pos_df,
-            "trade_logs_df": trade_logs_df
-        }
+        normalized = normalize_portfolio_summary(raw_summary)
+        return validate_portfolio_summary_contract(normalized, context_label="PortfolioService.get_portfolio_summary")
 
     def execute_rebalance(
         self,
@@ -65,4 +38,4 @@ class PortfolioService:
 
     def reset_account(self, initial_capital: float = 1000000.0):
         if self.account:
-            self.account.reset_account(initial_capital=initial_capital)
+            self.account.reset_account(capital=initial_capital)

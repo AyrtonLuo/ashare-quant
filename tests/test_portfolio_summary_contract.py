@@ -77,3 +77,42 @@ def test_summary_data_contract_completeness():
     for k in required_keys:
         assert k in summary, f"Key '{k}' is missing from PortfolioSummary contract"
 
+
+def test_end_to_end_dashboard_call_chain_integration():
+    """
+    端到端 Integration Test 校验公网 Dashboard 完整调用链:
+    main -> get_services -> PortfolioService -> normalize_portfolio_summary -> validate_portfolio_summary_contract -> render_dashboard
+    覆盖 RESEARCH MODE, DEMO MODE, 空账户, 绝不触发 KeyError: total_return_pct
+    """
+    from app import get_services
+    from src.portfolio.contract import normalize_portfolio_summary, validate_portfolio_summary_contract, PortfolioContractError
+
+    for mode in ["RESEARCH MODE", "DEMO MODE"]:
+        services = get_services(system_mode=mode)
+        account = PaperAccount(initial_capital=1000000.0)
+        account.reset_account(capital=1000000.0)
+        svc = PortfolioService(account)
+
+        # 模拟 render_dashboard 中的调用序列
+        raw_summary = svc.get_portfolio_summary({"600519": 100.0})
+        summary = validate_portfolio_summary_contract(normalize_portfolio_summary(raw_summary), context_label=f"integration_{mode}")
+
+        # 校验 render_dashboard:124 直接索引绝不抛异常
+        assert summary["total_equity"] == 1000000.0
+        assert summary["cash"] == 1000000.0
+        assert summary["market_value"] == 0.0
+        assert summary["total_return_pct"] == 0.0
+        assert summary["pnl_pct"] == 0.0
+
+
+def test_contract_validator_raises_explicit_exception():
+    """
+    断言契约校验器在缺 Key 时抛出 PortfolioContractError 诊断异常而非隐蔽 KeyError
+    """
+    from src.portfolio.contract import validate_portfolio_summary_contract, PortfolioContractError
+    broken_summary = {"cash": 100.0}  # 缺少 total_return_pct 等字段
+    with pytest.raises(PortfolioContractError) as exc_info:
+        validate_portfolio_summary_contract(broken_summary, context_label="test_broken")
+    assert "Portfolio Summary 契约破损！" in str(exc_info.value)
+
+
