@@ -184,22 +184,17 @@ def render_daily_kline_dialog(date_str: str, stock_code: str, detail_row: dict):
     st.info(f"💡 AI 盘后研报：{date_str} 股价运行在 MA20 (¥{ma20_val:.2f}) 均线附近，当日成交量 {int(vol):,} 手，资金换手活跃。")
 
 
-def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.DataFrame):
+def render_kline_with_dialog(symbol: str, name: str, df_composite: pd.DataFrame, key_prefix: str = "default"):
     """
-    单股全景 K 线行情终端与 F10 诊断面板
+    通用高亮交互 K 线组件 (含 均线降权 + 剔除休市断层 + session_state 状态锁死机制)
     """
     from src.analysis.stock_f10_engine import (
         get_stock_kline_data,
         convert_kline_period,
-        build_interactive_kline_chart,
-        get_broker_ratings_and_f10
+        build_interactive_kline_chart
     )
-    from src.analysis.news_analyzer import get_stock_timeline_news
     
     sym = str(symbol).zfill(6)
-    
-    st.markdown("---")
-    st.subheader(f"[{sym} {name}] 专业 K 线终端 & F10 全景智脑")
     
     # 顶部多维度交互控制栏
     ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([2.2, 1.2, 1.2, 1.4])
@@ -210,7 +205,7 @@ def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.Da
             ["日K", "周K", "月K", "季K", "年K"],
             index=0,
             horizontal=True,
-            key=f"kline_period_radio_{sym}"
+            key=f"kline_period_radio_{key_prefix}_{sym}"
         )
         
     with ctrl_col2:
@@ -218,7 +213,7 @@ def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.Da
             "主图技术叠加:",
             ["均线系统 (MA)", "布林通道 (BOLL)", "无"],
             index=0,
-            key=f"main_ind_select_{sym}"
+            key=f"main_ind_select_{key_prefix}_{sym}"
         )
         
     with ctrl_col3:
@@ -226,7 +221,7 @@ def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.Da
             "副图技术指标:",
             ["MACD (平滑异同)", "KDJ (随机指标)", "RSI (相对强弱)", "成交量均线"],
             index=0,
-            key=f"sub_ind_select_{sym}"
+            key=f"sub_ind_select_{key_prefix}_{sym}"
         )
         
     with ctrl_col4:
@@ -234,14 +229,14 @@ def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.Da
             "显示时间范围:",
             options=["近半年", "近1年", "近3年", "上市至今"],
             value="上市至今",
-            key=f"time_range_slider_{sym}"
+            key=f"time_range_slider_{key_prefix}_{sym}"
         )
 
     # 1. 获取全量上市至今 K 线并按周期重采样
     raw_kline = get_stock_kline_data(sym, name, df_composite, time_range=range_choice)
     kline_df = convert_kline_period(raw_kline, period=period_choice)
     
-    # 2. 绘制 Plotly K 线图表与平滑拖拽配置
+    # 2. 绘制 Plotly K 线图表
     fig_kline = build_interactive_kline_chart(
         kline_df,
         stock_name=f"{sym} {name} ({period_choice})",
@@ -249,17 +244,21 @@ def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.Da
         sub_indicator=sub_ind_choice
     )
     
+    chart_key = f"kline_interactive_chart_{key_prefix}_{sym}_{period_choice}"
+    
     # 捕获点击 K 线事件 (on_select="rerun")
     chart_event = st.plotly_chart(
         fig_kline,
         use_container_width=True,
         on_select="rerun",
         selection_mode="points",
-        key=f"kline_interactive_chart_{sym}_{period_choice}",
+        key=chart_key,
         config={"scrollZoom": True, "displayModeBar": True}
     )
     
-    # 解析用户点击的具体日期并触发 Modal 弹窗
+    # 3. 锁死点选状态至 session_state 避免一闪而过
+    session_date_key = f"selected_kline_date_{key_prefix}_{sym}"
+    
     if chart_event and isinstance(chart_event, dict) and "selection" in chart_event:
         selection = chart_event.get("selection", {})
         points = selection.get("points", [])
@@ -267,10 +266,32 @@ def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.Da
             point_data = points[0]
             clicked_date = point_data.get("x")
             if clicked_date:
-                match_row = kline_df[kline_df['date'].astype(str).str.contains(str(clicked_date))]
-                if not match_row.empty:
-                    render_daily_kline_dialog(str(clicked_date), f"{sym} {name}", match_row.iloc[0].to_dict())
+                st.session_state[session_date_key] = str(clicked_date)
+                
+    saved_date = st.session_state.get(session_date_key)
+    if saved_date:
+        match_row = kline_df[kline_df['date'].astype(str).str.contains(str(saved_date))]
+        if not match_row.empty:
+            render_daily_kline_dialog(str(saved_date), f"{sym} {name}", match_row.iloc[0].to_dict())
 
+    return kline_df
+
+
+def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.DataFrame, key_prefix: str = "default"):
+    """
+    单股全景 K 线行情终端与 F10 诊断面板
+    """
+    from src.analysis.stock_f10_engine import get_broker_ratings_and_f10
+    from src.analysis.news_analyzer import get_stock_timeline_news
+    
+    sym = str(symbol).zfill(6)
+    
+    st.markdown("---")
+    st.subheader(f"[{sym} {name}] 专业 K 线终端 & F10 全景智脑")
+    
+    # 渲染通用交互 K 线组件
+    kline_df = render_kline_with_dialog(sym, name, df_composite, key_prefix=key_prefix)
+    
     st.markdown("---")
     
     # 3. 机构评级共识与业绩基本面 F10 模块
@@ -632,7 +653,7 @@ elif menu == "全市场概念板块与龙头识别":
         sub_rows = res_data[res_data['symbol'] == selected_sym]
         target_row = sub_rows.iloc[0] if not sub_rows.empty else res_data.iloc[0]
 
-        render_f10_stock_diagnosis_panel(target_row['symbol'], target_row['name'], engine_data['df_composite'])
+        render_f10_stock_diagnosis_panel(target_row['symbol'], target_row['name'], engine_data['df_composite'], key_prefix="concept")
     else:
         st.warning("未检索到相关概念股票，请尝试其他关键词。")
 
@@ -802,7 +823,7 @@ elif menu == "AI优质精选榜单":
     if selected_option:
         sel_sym = selected_option.split(" - ")[0]
         sel_row = top_df[top_df['symbol'] == sel_sym].iloc[0].to_dict()
-        render_f10_stock_diagnosis_panel(sel_row['symbol'], sel_row['name'], engine_data['df_composite'])
+        render_f10_stock_diagnosis_panel(sel_row['symbol'], sel_row['name'], engine_data['df_composite'], key_prefix="top5")
 
 
 # =============================================================================
