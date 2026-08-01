@@ -329,6 +329,8 @@ def build_interactive_kline_chart(
         template="plotly_dark",
         paper_bgcolor="#131722",
         plot_bgcolor="#131722",
+        dragmode="pan",
+        hovermode="x unified",
         height=620,
         showlegend=True,
         legend=dict(
@@ -347,6 +349,90 @@ def build_interactive_kline_chart(
     )
 
     return fig
+
+
+def get_single_day_review_card(kline_df: pd.DataFrame, target_date_str: str = "") -> Dict[str, Any]:
+    """
+    点击 K 线捕获具体日期，生成【📅 点击日深度行情下钻卡片与 AI 盘后形态研判】
+    """
+    if kline_df is None or kline_df.empty:
+        return {}
+
+    df = calculate_technical_indicators(kline_df)
+    df['date_str'] = df['date'].dt.strftime('%Y-%m-%d')
+
+    if target_date_str:
+        sub = df[df['date_str'] == target_date_str]
+        if not sub.empty:
+            row = sub.iloc[0]
+        else:
+            row = df.iloc[-1]
+    else:
+        row = df.iloc[-1]
+
+    open_p = float(row['open'])
+    close_p = float(row['close'])
+    high_p = float(row['high'])
+    low_p = float(row['low'])
+    vol_hands = float(row['volume'])
+
+    matching_indices = np.where(df['date_str'] == row['date_str'])[0]
+    if len(matching_indices) > 0 and matching_indices[0] > 0:
+        prev_close = float(df['close'].iloc[matching_indices[0] - 1])
+    else:
+        prev_close = open_p
+
+    chg_amount = close_p - prev_close
+    chg_pct = (chg_amount / prev_close) * 100.0 if prev_close > 0 else 0.0
+    amount_w = (close_p * vol_hands * 100.0) / 10000.0
+
+    ma5 = float(row.get('MA5', close_p))
+    ma10 = float(row.get('MA10', close_p))
+    ma20 = float(row.get('MA20', close_p))
+    ma60 = float(row.get('MA60', close_p))
+
+    dif = float(row.get('DIF', 0.0))
+    dea = float(row.get('DEA', 0.0))
+    macd_h = float(row.get('MACD_hist', 0.0))
+
+    body = abs(close_p - open_p)
+    upper_shadow = high_p - max(open_p, close_p)
+    lower_shadow = min(open_p, close_p) - low_p
+
+    if chg_pct >= 5.0:
+        pattern = "🚀 【放量大阳线】买盘极为强劲，多头主力强力拉升突破！"
+    elif chg_pct <= -5.0:
+        pattern = "📉 【恐慌大阴线】空头抛压释放，短线注意回踩支撑位与止损风控！"
+    elif lower_shadow > 2.0 * max(body, 0.01) and lower_shadow > upper_shadow:
+        pattern = "📌 【金针探底长下影】下方买盘支撑极强，探底回升信号显著！"
+    elif upper_shadow > 2.0 * max(body, 0.01) and upper_shadow > lower_shadow:
+        pattern = "⚠️ 【长上影线冲高回落】上方抛压偏重，短线多头套牢盘需消化。"
+    elif abs(chg_pct) < 0.5:
+        pattern = "🟢 【十字星/窄幅震荡】多空双方博弈均势，方向临近选择变盘点。"
+    elif chg_pct > 0:
+        pattern = "🟢 【温和红阳线】震荡偏多上行，技术指标维持多头排列。"
+    else:
+        pattern = "🔴 【微跌小阴线】正常技术性回调分化，关注 MA20 支撑效力。"
+
+    return {
+        "date_str": str(row['date_str']),
+        "open": open_p,
+        "high": high_p,
+        "low": low_p,
+        "close": close_p,
+        "chg_amount": chg_amount,
+        "chg_pct": chg_pct,
+        "volume_hands": vol_hands,
+        "amount_w": amount_w,
+        "ma5": ma5,
+        "ma10": ma10,
+        "ma20": ma20,
+        "ma60": ma60,
+        "dif": dif,
+        "dea": dea,
+        "macd_h": macd_h,
+        "pattern": pattern
+    }
 
 
 def get_broker_ratings_and_f10(symbol: str, name: str, latest_price: float = 10.0) -> Dict[str, Any]:

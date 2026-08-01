@@ -241,14 +241,65 @@ def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.Da
     raw_kline = get_stock_kline_data(sym, name, df_composite, time_range=range_choice)
     kline_df = convert_kline_period(raw_kline, period=period_choice)
     
-    # 2. 绘制 Plotly 极客暗黑 K 线图表
+    # 2. 绘制 Plotly 极客暗黑 K 线图表与平滑拖拽配置
     fig_kline = build_interactive_kline_chart(
         kline_df,
         stock_name=f"{sym} {name} ({period_choice})",
         main_indicator=main_ind_choice,
         sub_indicator=sub_ind_choice
     )
-    st.plotly_chart(fig_kline, use_container_width=True)
+    
+    # 捕获点击 K 线事件 (on_select="rerun")
+    event_data = st.plotly_chart(
+        fig_kline,
+        use_container_width=True,
+        on_select="rerun",
+        selection_mode="points",
+        key=f"kline_chart_{sym}_{period_choice}",
+        config={"scrollZoom": True, "displayModeBar": True}
+    )
+    
+    # 解析点击的具体日期
+    clicked_date = ""
+    if event_data and isinstance(event_data, dict):
+        selection = event_data.get("selection", {})
+        points = selection.get("points", [])
+        if points:
+            clicked_date = str(points[0].get("x", ""))
+            
+    # 渲染【📅 点击日深度行情下钻卡片】
+    from src.analysis.stock_f10_engine import get_single_day_review_card
+    card_data = get_single_day_review_card(kline_df, target_date_str=clicked_date)
+    
+    if card_data:
+        c_date = card_data['date_str']
+        st.markdown(f"##### 📅 `[{c_date}]` 单日深度行情下钻与 AI 盘后形态研判 (在上方 K 线上点击任意一天可即时查看)")
+        
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            chg_flag = "🟢" if card_data['chg_pct'] >= 0 else "🔴"
+            st.metric(
+                "收盘价 (元)",
+                f"¥{card_data['close']:.2f}",
+                delta=f"{chg_flag} {card_data['chg_pct']:+.2f}% (¥{card_data['chg_amount']:+.2f})"
+            )
+            st.caption(f"开盘: ¥{card_data['open']:.2f} | 最高: ¥{card_data['high']:.2f} | 最低: ¥{card_data['low']:.2f}")
+            
+        with c2:
+            st.metric("成交量 (手)", f"{card_data['volume_hands']:,.0f}")
+            st.caption(f"估算成交额: ¥{card_data['amount_w']:,.2f} 万元")
+            
+        with c3:
+            st.metric("均线 MA5 / MA20", f"¥{card_data['ma5']:.2f} / ¥{card_data['ma20']:.2f}")
+            st.caption(f"MA10: ¥{card_data['ma10']:.2f} | MA60: ¥{card_data['ma60']:.2f}")
+            
+        with c4:
+            st.metric("MACD 柱状强弱", f"{card_data['macd_h']:+.4f}")
+            st.caption(f"DIF: {card_data['dif']:.3f} | DEA: {card_data['dea']:.3f}")
+
+        st.info(f"💡 **AI 盘后形态研判**: `{card_data['pattern']}`")
+
+    st.markdown("---")
     
     # 3. 🏛️ 机构评级共识与业绩基本面 F10 模块
     latest_price = float(kline_df['close'].iloc[-1]) if not kline_df.empty else 10.0
