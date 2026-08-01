@@ -554,69 +554,7 @@ elif menu == "🔥 今日 AI 优质推荐榜":
             r_c3.metric("热度指数", f"{soc_res.get('social_heat_index', 85)} / 100")
             
             st.success(f"💬 **情绪状态**: `{soc_res.get('emotion_badge', '🟢 散户理性看多 / 情绪平稳')}`")
-            st.caption(f"📊 **舆情洞察**: {soc_res.get('description', '')} (雪球关注帖: {soc_res.get('xueqiu_posts', 200)} 条 | 股吧热度帖: {soc_res.get('guba_posts', 500)} 条)")], 'tickwidth': 1},
-                    'bar': {'color': "#d62728" if sentiment_res['sentiment_score'] > 0 else "#2ca02c"},
-                    'steps': [
-                        {'range': [-1.0, -0.2], 'color': "#ffcccb"},
-                        {'range': [-0.2, 0.2], 'color': "#f0f0f0"},
-                        {'range': [0.2, 1.0], 'color': "#d4edda"}
-                    ],
-                    'threshold': {
-                        'line': {'color': "black", 'width': 3},
-                        'thickness': 0.75,
-                        'value': sentiment_res['sentiment_score']
-                    }
-                }
-            ))
-            fig_gauge.update_layout(height=260, margin=dict(l=20, r=20, t=40, b=20))
-            st.plotly_chart(fig_gauge, use_container_width=True)
-            
-        with diag_col2:
-            # 量化因子得分对比柱状图
-            factor_df = pd.DataFrame([
-                {"因子名称": "动量得分 (MOM)", "得分": sel_row.get("MOM_20_norm", 0.0)},
-                {"因子名称": "低波避险 (LOW_VOL)", "得分": sel_row.get("LOW_VOL_20_norm", 0.0)},
-                {"因子名称": "复合 Alpha (COMPOSITE)", "得分": sel_row.get("COMPOSITE_ALPHA_norm", 0.0)}
-            ])
-            fig_factors = px.bar(
-                factor_df, x="因子名称", y="得分",
-                color="得分", color_continuous_scale="Reds",
-                title=f"<b>{sel_row['name']} 多因子得分画像</b>"
-            )
-            fig_factors.update_layout(height=260, template="plotly_white", margin=dict(l=20, r=20, t=40, b=20))
-            st.plotly_chart(fig_factors, use_container_width=True)
-            
-        # 结构化 Markdown AI 研报
-        st.markdown(report['markdown_report'])
-        
-        # 🚨 双轨舆情展示：🏛️ 官方权威快讯 vs 🔥 散户/社会情绪风向标
-        st.markdown("---")
-        st.subheader("📢 舆情风向与快讯追踪 (双轨监测)")
-        
-        s_col1, s_col2 = st.columns([1, 1])
-        
-        with s_col1:
-            st.markdown("##### 🏛️ 官方权威快讯 (带 🔗 原文网页)")
-            if sentiment_res['matched_news']:
-                for item in sentiment_res['matched_news']:
-                    stars_b = item.get('stars_badge', '⭐️⭐️⭐️ 3星利好')
-                    link_h = item.get('link_html', f'<a href="{item.get("url", "https://www.cls.cn")}" target="_blank">🔗 查看原文</a>')
-                    st.markdown(f"- ⏱️ `[{item.get('time', '')}]` **{item.get('title', '')}** ({stars_b}) — {link_h}", unsafe_allow_html=True)
-                    st.caption(f"   摘要: {item.get('content', '')}")
-            else:
-                st.info("ℹ️ 近 24 小时无重大官方事件，行情由量化技术面驱动。")
-                
-        with s_col2:
-            st.markdown("##### 🔥 散户与社会情绪风向标 (雪球/股吧/B站)")
-            ret_s = sentiment_res.get('retail_sentiment', {})
-            if ret_s:
-                r_c1, r_c2, r_c3 = st.columns(3)
-                r_c1.metric("散户看多比例", f"{ret_s.get('bullish_pct', 75)}%")
-                r_c2.metric("看空比例", f"{ret_s.get('bearish_pct', 25)}%")
-                r_c3.metric("热度指数", f"{ret_s.get('social_heat_index', 85)} / 100")
-                
-                st.success(f"💬 **散户情绪标签**: `{ret_s.get('emotion_badge', '🔥 极度高涨')}`")
-                st.caption(f"📊 **讨论数据**: {ret_s.get('description', '')} (雪球关注帖: {ret_s.get('xueqiu_posts', 200)} 条 | 股吧热度帖: {ret_s.get('guba_posts', 500)} 条)")
+            st.caption(f"📊 **舆情洞察**: {soc_res.get('description', '')} (雪球关注帖: {soc_res.get('xueqiu_posts', 200)} 条 | 股吧热度帖: {soc_res.get('guba_posts', 500)} 条)")
 
 
 # =============================================================================
