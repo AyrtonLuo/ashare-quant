@@ -1054,11 +1054,14 @@ elif menu == "智能跟投调仓":
             for sk in alloc_res['skipped_stocks']:
                 st.warning(f"股票 `{sk['symbol']} {sk['name']}` 最新价 ¥{sk['price']:.2f} 导致资金不足购买 1 手 (100股)，已自动顺延下一个优质标的。")
                 
-        display_alloc = p_df[['symbol', 'name', 'AI推荐星级', 'target_weight_pct', 'close', 'shares', 'actual_amount', '推荐理由标签']].copy()
+        desired_cols = ['symbol', 'name', 'AI推荐星级', 'target_weight_pct', 'Markowitz 建议权重 %', 'close', 'shares', 'actual_amount', '推荐理由标签']
+        display_cols = [c for c in desired_cols if c in p_df.columns]
+        display_alloc = p_df[display_cols].copy()
         display_alloc = display_alloc.rename(columns={
             'symbol': '股票代码',
             'name': '股票名称',
             'target_weight_pct': '建议目标权重 (%)',
+            'Markowitz 建议权重 %': '建议目标权重 (%)',
             'close': '最新价格 (元)',
             'shares': '拟买入股数 (股)',
             'actual_amount': '拟买入总金额 (元)'

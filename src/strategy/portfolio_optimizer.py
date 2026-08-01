@@ -264,6 +264,7 @@ def filter_and_allocate_portfolio(
             "AI推荐星级": row.get("AI推荐星级", "⭐⭐⭐⭐⭐"),
             "推荐理由标签": row.get("推荐理由标签", "🔥 优质选股"),
             "Markowitz 建议权重 %": round(weight * 100, 2),
+            "target_weight_pct": round(weight * 100, 2),
             "拟分配金额 (元)": round(actual_amount, 2),
             "拟买入股数 (整手)": f"{hands} 手 ({shares} 股)",
             "个体年化波动率 %": round(vols_vector[i] * 100, 2),
@@ -277,6 +278,7 @@ def filter_and_allocate_portfolio(
     if not result_df.empty:
         total_used = float(result_df['actual_amount'].sum())
         result_df['Markowitz 建议权重 %'] = (result_df['actual_amount'] / total_used * 100).round(2)
+        result_df['target_weight_pct'] = result_df['Markowitz 建议权重 %']
         cash_left = total_capital - total_used
     else:
         total_used = 0.0
