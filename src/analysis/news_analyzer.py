@@ -14,6 +14,7 @@ import logging
 import pandas as pd
 import numpy as np
 import akshare as ak
+import streamlit as st
 from typing import Dict, Any, List
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -309,6 +310,7 @@ def integrate_sentiment_alpha(df: pd.DataFrame, news_df: pd.DataFrame = None) ->
     return res_df
 
 
+@st.cache_data(ttl=600, show_spinner=False)
 def get_stock_timeline_news(
     symbol: str,
     name: str,
@@ -405,6 +407,7 @@ def get_stock_timeline_news(
     return timeline_items
 
 
+@st.cache_data(ttl=600, show_spinner=False)
 def social_sentiment_analyzer(symbol: str, name: str = "", sentiment_score: float = 0.8, alpha_score: float = 0.8) -> Dict[str, Any]:
     """
     分析并返回标的的散户与机构舆情风向与情绪得分 (Social & News Sentiment)

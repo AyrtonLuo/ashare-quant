@@ -17,6 +17,7 @@ import pandas as pd
 import akshare as ak
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import streamlit as st
 from typing import Dict, Any, Tuple, List
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -31,6 +32,7 @@ def clean_stock_name(raw_name: str) -> str:
     return name.strip()
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_stock_kline_data(
     symbol: str,
     name: str = "",
@@ -106,10 +108,11 @@ def get_stock_kline_data(
     return sub_df
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def convert_kline_period(df: pd.DataFrame, period: str = "日K") -> pd.DataFrame:
     """
     多周期 K 线重采样引擎 (Resampling Engine):
-    - 日K: 原始日线
+    - 日K: 原始日线数据
     - 周K: 按周 (W) 重采样
     - 月K: 按月 (M) 重采样
     - 季K: 按季度 (Q) 重采样
@@ -479,7 +482,8 @@ def get_single_day_review_card(kline_df: pd.DataFrame, target_date_str: str = ""
     }
 
 
-def get_broker_ratings_and_f10(symbol: str, name: str, latest_price: float = 10.0) -> Dict[str, Any]:
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_broker_ratings_and_f10(symbol: str, name: str = "", latest_price: float = 10.0) -> Dict[str, Any]:
     """机构评级共识与 F10 财务速览"""
     sym = str(symbol).zfill(6)
     seed = abs(hash(sym))
