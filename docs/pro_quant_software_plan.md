@@ -9,9 +9,11 @@ Ashare Quant Pro 目标是从当前的 A 股量化研究 MVP，升级为一套�
 - 数据层：Data Layer 2.0 (MarketData 模型、MarketDataProvider 抽象、AkShareProvider、FutuProvider、LocalCache Parquet 缓存、HistoricalUniverseProvider).
 - 因子与 ML 特征层：Factor Engine (Factor 抽象、Momentum, Value, Quality, Volatility, Liquidity, MAD 去极值、Z-Score 标准化、行业/市值中性化)、ML FeatureExtractor (构建多因子 Feature Matrix X).
 - 机器学习 Alpha 层：ML Model 抽象 (Linear Ridge, RandomForest, HistGradientBoosting)、MLDatasetBuilder ( Forward Return Label 对齐)、TimeSeriesSplitter (严格按时间切分 Train/Val/Test)、WalkForwardSplitter ( Walk-Forward Validation 交叉验证)、MLEvaluator (RMSE, MAE, R², IC, Rank IC, ICIR)、MLAlphaStrategy.
-- 回测与实验层：BacktestEngine2 统一架构、SlicedMarketDataProvider 防未来函数数据切片、ExperimentRegistry (ML 模型参数、数据切片版本与 Git Commit 关联).
+- AI 智能研报与诊断层：DiagnosticsEngine (确定性 Performance 异常诊断、Factor Decay 衰减判定、Overfitting 强过拟合预警、Market Regime 表现分析)、AutomatedReportGenerator (落盘 `reports/experiment_xxx_ai.md` 与 `.json`)、LLMProvider 抽象 (MockLLMProvider / Local / OpenAI 解耦)。
+- 回测与实验层：BacktestEngine2 统一架构、SlicedMarketDataProvider 防未来函数数据切片、ExperimentRegistry (关联 Git Commit Hash 与 AI 研报版本).
 - 组合与执行层：Portfolio Engine 2.0 (Position, Order, OrderSide/OrderStatus, ExecutionEngine, TransactionCostModel, PortfolioAccounting, PaperAccount Facade).
-- 控制台与报告：Streamlit 🧪 Strategy Lab & 🤖 ML Research Lab、DecisionAuditLog Markdown 决策审计日志.
+- 控制台与报告：Streamlit 🧪 Strategy Lab & 🤖 ML Research Lab & 🧠 AI Quant Analyst.
+
 
 
 
