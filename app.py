@@ -7,6 +7,7 @@ AI Quant Pro - Product-Grade Quantitative Research & Portfolio Platform
 import os
 import sys
 import pandas as pd
+import numpy as np
 import streamlit as st
 from typing import Dict, Any, List
 
@@ -176,7 +177,7 @@ def render_market(services: Dict[str, Any]):
 
 def render_research(services: Dict[str, Any]):
     st.markdown("# 🔬 Quant Research Workspace")
-    sub_tab1, sub_tab2 = st.tabs(["因子矩阵 (Factor Lab)", "策略构建 (Strategy Builder)"])
+    sub_tab1, sub_tab2, sub_tab3 = st.tabs(["因子矩阵 (Factor Lab)", "策略构建 (Strategy Builder)", "因子衰减 (Factor Decay)"])
 
     with sub_tab1:
         st.markdown("### 多因子横截面矩阵与相关性分析")
@@ -197,10 +198,18 @@ def render_research(services: Dict[str, Any]):
         if st.button("生成多因子 Alpha 策略", use_container_width=True):
             st.success("成功构建 MultiFactorStrategy 并输出统一 StrategySignal！")
 
+    with sub_tab3:
+        st.markdown("### Alpha 因子预测衰减曲线 (Factor Decay Curve & IC Analysis)")
+        if st.button("分析 Momentum 因子衰减半衰期", use_container_width=True):
+            from src.factors.analytics import FactorAnalytics
+            rep = FactorAnalytics.analyze_factor_decay("Momentum_20D", pd.Series([0.1, 0.2]))
+            st.json(rep.to_dict())
+            st.line_chart(pd.DataFrame(list(rep.decay_curve.items()), columns=["Horizon", "IC"]).set_index("Horizon"))
+
 
 def render_backtest(services: Dict[str, Any]):
-    st.markdown("# 🧪 Backtest Engine 2.0 & Robustness Checker")
-    st.caption("无未来函数数据切片、A 股真实交易成本与策略鲁棒性敏感度测试")
+    st.markdown("# 🧪 Backtest Engine 2.0 & Validation Suite")
+    st.caption("无未来函数数据切片、A 股真实交易成本、Walk-Forward 交叉验证与统计显著性检验")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -219,20 +228,29 @@ def render_backtest(services: Dict[str, Any]):
             st.line_chart(hist_df.set_index("timestamp")[["equity", "cash", "market_value"]])
 
     with col2:
-        if st.button("🛡️ 运行策略鲁棒性检测 (Robustness Check)", use_container_width=True):
+        if st.button("🛡️ 运行策略鲁棒性与 Walk-Forward 验证", use_container_width=True):
             from src.strategy.ma_cross_strategy import MACrossStrategy
-            from src.strategy.robustness import StrategyRobustnessChecker
-            rep = StrategyRobustnessChecker.run_robustness_check(MACrossStrategy, ["600519"], services["provider"])
-            st.success(f"鲁棒性检测完成！得分: `{rep.robustness_score}/100`")
-            st.json(rep.to_dict())
+            from src.strategy.walk_forward import WalkForwardRunner
+            wf_rep = WalkForwardRunner.run_walk_forward_validation(MACrossStrategy, ["600519"], services["provider"])
+            st.success(f"Walk-Forward 滚动验证完成！均值 OOS 夏普: `{wf_rep.mean_oos_sharpe}` | 时间维度稳定性: `{wf_rep.is_time_stable}`")
+            st.json(wf_rep.to_dict())
+
+    st.divider()
+    st.markdown("### 📊 统计显著性面板 (Statistical Significance Panel)")
+    if st.button("运行 Bootstrap 95% 置信区间与 Naive Baseline 检验", use_container_width=True):
+        from src.stats.significance import StatisticalSignificanceTester
+        rets = pd.Series(np.random.normal(0.001, 0.015, 252))
+        sig_rep = StatisticalSignificanceTester.test_sharpe_significance(rets)
+        st.json(sig_rep.to_dict())
 
 
 def render_risk():
-    st.markdown("# 🛡️ Barra Risk Attribution & Portfolio Decomposition")
-    st.caption("申万行业暴露度、6 大 Style 风格因子与系统性 vs 特质性风险拆解")
+    st.markdown("# 🛡️ Barra Risk Attribution & Portfolio Stress Testing")
+    st.caption("申万行业暴露度、6 大 Style 风格因子与极端行情压力测试 (Stress Testing)")
 
     from src.risk_model.exposure import ExposureCalculator
     from src.risk_model.decomposition import RiskDecomposer
+    from src.risk_model.stress_test import PortfolioStressTester
 
     w = {"600519": 0.40, "000001": 0.30, "600690": 0.30}
     mock_fm = pd.DataFrame({
@@ -260,6 +278,12 @@ def render_risk():
     with col2:
         st.markdown("### 🎯 Style 风格因子暴露度 (Style Exposure)")
         st.dataframe(pd.DataFrame(list(exp_data["style_exposure"].items()), columns=["Style 因子", "加权 Exposure"]), use_container_width=True)
+
+    st.divider()
+    st.markdown("### 🌪️ 组合压力测试 (Portfolio Stress Testing)")
+    if st.button("模拟大盘暴跌 -30% / 波动率 x1.5 / 流动性减半冲击", use_container_width=True):
+        st_rep = PortfolioStressTester.run_stress_test(portfolio_equity=1000000.0)
+        st.dataframe(pd.DataFrame(st_rep.scenarios_results), use_container_width=True)
 
 
 def render_portfolio(portfolio_svc: PortfolioService):
@@ -296,10 +320,18 @@ def render_ai_analyst(services: Dict[str, Any]):
             st.markdown(f.read())
 
 
-def render_operations():
+def render_operations(services: Dict[str, Any]):
     st.markdown("# ⚙️ Operations & Credibility System")
-    st.caption("生产级独立 Task Scheduler、Data Quality 校验报告、Run Manager 与研究合规可信度校验")
+    st.caption("生产级独立 Task Scheduler、Data Quality 校验报告、Run Manager 与外部数据交叉验证")
 
+    st.markdown("### 🔍 外部数据交叉验证报告 (External Data Cross-Validation Report)")
+    if st.button("运行外部数据交叉比对 (Audit vs Official Market Benchmark)", use_container_width=True):
+        from src.data.validation.cross_validator import ExternalDataValidator
+        val_rep = ExternalDataValidator.validate_data(services["provider"])
+        st.success(f"交叉数据校验审计完成！通过率: `{val_rep.passed_count}/{len(val_rep.audit_records)}`")
+        st.dataframe(pd.DataFrame(val_rep.audit_records), use_container_width=True)
+
+    st.divider()
     st.markdown("### 🛡️ Research Credibility & Integrity System")
     integrity_items = ResearchIntegrityChecker.get_integrity_status()
     st.dataframe(pd.DataFrame(integrity_items), use_container_width=True, hide_index=True)
@@ -362,7 +394,7 @@ def main():
     elif "AI Analyst" in nav:
         render_ai_analyst(services)
     elif "Operations" in nav:
-        render_operations()
+        render_operations(services)
     elif "Settings" in nav:
         render_settings()
 
