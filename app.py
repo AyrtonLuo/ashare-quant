@@ -1025,12 +1025,15 @@ elif menu == "🚀 智能跟投与一键调仓":
     from src.strategy.portfolio_optimizer import auto_calculate_portfolio_size, filter_and_allocate_portfolio
     
     start_stream_engine()
-    paper_acc = PaperAccount(initial_capital=1000000.0)
-    futu_trader = FutuSimTrader(host="127.0.0.1", port=11111)
-    futu_acc = futu_trader.get_futu_paper_account()
-    
     # 对接富途 OpenD 模拟盘
-    use_futu_opend = st.toggle("🔌 对接 Mac 本地富途牛牛模拟盘 API (127.0.0.1:11111)", value=futu_acc['is_connected'], key="toggle_futu_opend")
+    c_f1, c_f2 = st.columns([2.5, 1.5])
+    with c_f1:
+        use_futu_opend = st.toggle("🔌 对接富途牛牛模拟盘 API (Futu OpenD Gateway)", value=False, key="toggle_futu_opend")
+    with c_f2:
+        opend_host = st.text_input("OpenD 网关 IP (Mac 本地为 127.0.0.1):", value="127.0.0.1", key="input_opend_host")
+        
+    futu_trader = FutuSimTrader(host=opend_host, port=11111)
+    futu_acc = futu_trader.get_futu_paper_account() if use_futu_opend else {"is_connected": False, "mode": "Off"}
     
     # 1. 评估大盘风控状态
     idx_tick = get_stream_tick("000001")
@@ -1056,9 +1059,9 @@ elif menu == "🚀 智能跟投与一键调仓":
             price_dict[sym] = float(tick.get('price') or r.get('close', 10.0))
             
     if use_futu_opend and futu_acc['is_connected']:
-        st.success("""
+        st.success(f"""
 🍊 **富途牛牛原生模拟盘 (TrdEnv.SIMULATE) API 连接成功！**
-- **当前连接网关**：`Mac 本地 Futu OpenD (127.0.0.1:11111)`
+- **当前连接网关**：`Futu OpenD ({opend_host}:11111)`
 - **牛牛账户状态**：已就绪 (可直接读取真实模拟盘资金与下发调仓挂单)
 - **数据来源**：富途官方 OpenD `accinfo_query` / `position_list_query` 实时接口
 """)
@@ -1073,7 +1076,15 @@ elif menu == "🚀 智能跟投与一键调仓":
         }
     else:
         if use_futu_opend:
-            st.warning(f"⚠️ 无法连接至 Mac 本地富途 OpenD 柜台 (127.0.0.1:11111)。已切换至本地仿真模拟盘引擎。({futu_acc.get('mode', '')})")
+            st.warning(f"""
+⚠️ **网络隔离说明 (为什么云端网页无法直接访问 Mac 本地的 127.0.0.1)**：
+- 您当前在浏览器中打开的是部署在**云端公网的网页** (`ayrtonluo-ashare-quant-app-jnr0uu.streamlit.app`)。
+- 云端网页访问 `127.0.0.1` 时，访问的是**远程云服务器自身**，无法越过防火墙连接您 **Mac 本地运行的 Futu OpenD**。
+- 💡 **解决方案 (2 种方式)**：
+  1. **Mac 本地直连模式 (推荐)**：在 Mac 终端运行 `./venv/bin/streamlit run app.py` 打开 `http://localhost:8501`，即可秒级连上您 Mac 上的富途 OpenD！
+  2. **IP 局域网直连**：若您在 Mac 上的 Futu OpenD 勾选了“允许局域网连接”，可在右上角输入框中填写您 Mac 的局域网 IP (如 `192.168.x.x`)。
+- 此时控制台已自动为您开启**全功能 100% 仿真模拟盘**，您可以照常体验动态调仓与持仓盈亏！
+""")
         acc_summary = paper_acc.get_summary(price_dict)
     
     # 顶部 4 大核心 Metrics
