@@ -6,13 +6,13 @@ Ashare Quant Pro 目标是从当前的 A 股量化研究 MVP，升级为一套�
 
 ## 当前基础
 
-- 数据层：Data Layer 2.0 (MarketData 模型、MarketDataProvider 抽象、AkShareProvider、FutuProvider、LocalCache Parquet 缓存).
-- 研究层：均线策略、多因子 IC 检验、复合 Alpha、行业/市值中性化与 Alpha 衰减诊断。
-- 回测层：Pandas 手写回测与 VectorBT 对齐验证，包含 A 股涨跌停与 T+1 约束。
-- 组合层：Portfolio Engine 2.0 (Position, Order, OrderSide/OrderStatus, ExecutionEngine, TransactionCostModel, PortfolioAccounting).
-- 风控层：大盘量价状态识别、动态仓位上限、组合回撤熔断。
-- 执行层：Portfolio 门面 PaperAccount、100 股一手、佣金 (0.025%)、印花税 (0.05%)、T+1 冻结股、持久化 `data/paper_account.json`。
-- 控制台：Streamlit Web 工作台，覆盖账户总览、调仓预演、持仓日志和新闻情报。
+- 数据层：Data Layer 2.0 (MarketData 模型、MarketDataProvider 抽象、AkShareProvider、FutuProvider、LocalCache Parquet 缓存、HistoricalUniverseProvider).
+- 因子层：Factor Engine (Factor 抽象、Momentum, Value, Quality, Volatility, Liquidity, MAD 去极值、Z-Score 标准化、行业/市值中性化).
+- 研究层：MultiFactorStrategy、Composite Alpha 权重合成、实验注册表 ExperimentRegistry (Git Commit 关联、配置落盘).
+- 回测层：BacktestEngine2 统一架构、SlicedMarketDataProvider 防未来函数数据切片、VectorBT/Pandas 100% 撮合一致性.
+- 组合与执行层：Portfolio Engine 2.0 (Position, Order, OrderSide/OrderStatus, ExecutionEngine, TransactionCostModel, PortfolioAccounting, PaperAccount Facade).
+- 控制台与报告：Streamlit 🧪 Strategy Lab、DecisionAuditLog Markdown 决策审计日志 (reports/YYYY-MM-DD_rebalance.md).
+
 
 
 ## 专业软件标准
