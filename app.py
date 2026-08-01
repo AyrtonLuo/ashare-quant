@@ -78,6 +78,7 @@ def render_sidebar():
             "💼 Portfolio (账户持仓)",
             "📄 Experiments (实验中心)",
             "🧠 AI Analyst (智能研报)",
+            "⚙️ Operations (运维监控)",
             "⚙️ Settings (平台设置)"
         ]
     )
@@ -213,6 +214,38 @@ def render_ai_analyst(services: Dict[str, Any]):
             st.markdown(f.read())
 
 
+def render_operations():
+    st.markdown("# ⚙️ Operations & System Health")
+    st.caption("生产级独立 Task Scheduler、Data Quality 校验报告、Run Manager 与系统健康度监控")
+
+    from src.system.health import SystemHealthMonitor
+    from src.runs.run_manager import RunManager, get_git_hash
+
+    h_data = SystemHealthMonitor.check_system_health()
+
+    st.markdown("### 🟢 System Subsystem Health Status")
+    cols = st.columns(3)
+    idx = 0
+    for comp, info in h_data.items():
+        with cols[idx % 3]:
+            st.metric(comp, info["status"], info["details"])
+        idx += 1
+
+    st.divider()
+    st.markdown("### 📊 Recent Runs History")
+    rm = RunManager()
+    runs = rm.list_runs()
+    if not runs:
+        st.info("暂无后台运行任务历史。可通过命令行脚本 `python -m src.jobs.update_market_data` 触发增量更新。")
+    else:
+        st.dataframe(pd.DataFrame(runs), use_container_width=True, hide_index=True)
+
+    st.divider()
+    st.markdown("### 🏷️ Code & Data Versioning")
+    st.caption(f"- **Git Commit Hash**: `{get_git_hash()}`")
+    st.caption("- **Data Pipeline Storage**: `Parquet (v2.0 PIT Storage)`")
+
+
 def render_settings():
     st.markdown("# ⚙️ Settings")
     st.caption("系统设置与缓存清理")
@@ -243,9 +276,12 @@ def main():
         render_experiments(services)
     elif "AI Analyst" in nav:
         render_ai_analyst(services)
+    elif "Operations" in nav:
+        render_operations()
     elif "Settings" in nav:
         render_settings()
 
 
 if __name__ == "__main__":
     main()
+

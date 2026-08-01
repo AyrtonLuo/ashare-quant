@@ -6,12 +6,14 @@ Ashare Quant Pro 目标是从当前的 A 股量化研究 MVP，升级为一套�
 
 ## 当前基础
 
-- 数据层：Data Layer 2.0 (MarketData 模型、MarketDataProvider 抽象、AkShareProvider、FutuProvider、LocalCache Parquet 缓存、HistoricalUniverseProvider).
+- 数据层：Data Pipeline 2.0 (MarketData 模型、MarketDataProvider 抽象、AkShareProvider、FutuProvider、LocalCache Parquet 缓存、HistoricalUniverseProvider PIT 支持、DataQualityChecker 质量校验与异动预警).
 - 因子与 ML 特征层：Factor Engine (Factor 抽象、Momentum, Value, Quality, Volatility, Liquidity, MAD 去极值、Z-Score 标准化、行业/市值中性化)、ML FeatureExtractor (构建多因子 Feature Matrix X).
 - 机器学习 Alpha 层：ML Model 抽象 (Linear Ridge, RandomForest, HistGradientBoosting)、MLDatasetBuilder ( Forward Return Label 对齐)、TimeSeriesSplitter (严格按时间切分 Train/Val/Test)、WalkForwardSplitter ( Walk-Forward Validation 交叉验证)、MLEvaluator (RMSE, MAE, R², IC, Rank IC, ICIR)、MLAlphaStrategy.
 - AI 智能研报与诊断层：DiagnosticsEngine (确定性 Performance 异常诊断、Factor Decay 衰减判定、Overfitting 强过拟合预警、Market Regime 表现分析)、AutomatedReportGenerator (落盘 `reports/experiment_xxx_ai.md` 与 `.json`)、LLMProvider 抽象 (MockLLMProvider / Local / OpenAI 解耦)。
+- 独立自动化任务与运维层 (Automation & Jobs)：`src/jobs/` (update_market_data, generate_daily_report, health_check)、`RunManager` 任务生命周期与耗时追踪、`SystemHealthMonitor` 系统巡检。
 - 服务与解耦层 (Service Layer)：ResearchService, BacktestService, PortfolioService, MLService, AIService，隔离 UI 与底层逻辑。
-- 控制台与产品架构：Streamlit 产品级 8 大导航 (🏠 Dashboard, 📊 Market, 🔬 Research, 🧪 Backtest, 💼 Portfolio, 📄 Experiments, 🧠 AI Analyst, ⚙️ Settings)，金融终端暗色风格与防卡顿本地缓存降级。
+- 控制台与产品架构：Streamlit 产品级 9 大导航 (Dashboard, Market, Research, Backtest, Portfolio, Experiments, AI Analyst, Operations 运维监控, Settings)，金融终端暗色风格与防卡顿本地缓存降级。
+
 
 
 
