@@ -168,6 +168,13 @@ def cached_stock_news(symbol: str, name: str, concept: str = ""):
     return filter_news_for_stock(symbol, name, concept_name=concept)
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def cached_social_sentiment(symbol: str, name: str, alpha_score: float = 0.1):
+    """散户与社会情绪智脑动态解析 (60秒本地缓存)"""
+    from src.analysis.dual_sentiment_engine import social_sentiment_analyzer
+    return social_sentiment_analyzer(symbol, name, sentiment_score=alpha_score)
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_and_process_quant_engine(style: str = "⚖️ 攻守兼备型 (自适应)"):
     """读取本地 Parquet 数据，并运行 AI 多因子计算、IC 诊断与风控回测"""
@@ -685,16 +692,16 @@ elif menu == "🔍 概念板块与龙头识别 (含资金配置)":
                 st.info("ℹ️ 近 72 小时内无个股及概念重大事件，行情由量化技术面驱动。")
                 
         with c_sent_col:
-            st.markdown("##### 🔥 散户与社会情绪风向标 (雪球/股吧/B站)")
-            soc_res = social_sentiment_analyzer(target_row['symbol'], target_row['name'], sentiment_score=float(target_row.get('COMPOSITE_ALPHA_norm', 0.1)))
+            soc_res = cached_social_sentiment(target_row['symbol'], target_row['name'], alpha_score=float(target_row.get('COMPOSITE_ALPHA_norm', 0.1)))
+            st.markdown(f"##### 🔥 散户与社会情绪仪表盘 (`⏱️ 上次更新时间: {soc_res.get('update_time', '')}`)")
             
             s_m1, s_m2, s_m3 = st.columns(3)
             s_m1.metric("散户看多比例", f"{soc_res.get('bullish_pct', 75)}%")
             s_m2.metric("看空比例", f"{soc_res.get('bearish_pct', 25)}%")
             s_m3.metric("热度指数", f"{soc_res.get('social_heat_index', 85)} / 100")
             
-            st.success(f"💬 **散户状态标签**: `{soc_res.get('emotion_badge', '🟢 散户理性看多 / 情绪平稳')}`")
-            st.caption(f"📊 **舆情智脑数据**: {soc_res.get('description', '')} (雪球关注帖: {soc_res.get('xueqiu_posts', 200)} 条 | 股吧热度帖: {soc_res.get('guba_posts', 500)} 条)")
+            st.success(f"💬 **情绪状态**: `{soc_res.get('emotion_badge', '🟢 散户理性看多 / 情绪平稳')}`")
+            st.caption(f"📊 **舆情洞察**: {soc_res.get('description', '')} (雪球关注帖: {soc_res.get('xueqiu_posts', 200)} 条 | 股吧热度帖: {soc_res.get('guba_posts', 500)} 条)")
     else:
         st.warning("未检索到相关概念股票，请尝试其他关键词。")
 
