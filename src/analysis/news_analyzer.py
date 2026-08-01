@@ -92,26 +92,30 @@ def fetch_latest_news(max_items: int = 100) -> pd.DataFrame:
 def fetch_stock_specific_news(symbol: str, name: str) -> pd.DataFrame:
     """
     直连 ak.stock_news_em(symbol=symbol) 获取个股专属新闻
-    带有 3 秒超时限制与自动 fallback 处理
+    带有 3 次重试与鲁棒防异常处理
     """
     sym = str(symbol).zfill(6)
     c_name = clean_stock_name(name)
-    try:
-        df = ak.stock_news_em(symbol=sym)
-        if not df.empty:
-            df = df.rename(columns={
-                '新闻标题': 'title',
-                '新闻内容': 'content',
-                '发布时间': 'time',
-                '文章来源': 'source',
-                '新闻网址': 'url',
-                '新闻链接': 'url'
-            })
-            df['date'] = df['time'].astype(str).str[:10]
-            df['full_text'] = df['title'].fillna('') + ' ' + df['content'].fillna('')
-            return df
-    except Exception as e:
-        logger.warning(f"获取 {sym} ({c_name}) 个股专属新闻接口异常 ({e})...")
+    
+    for attempt in range(3):
+        try:
+            df = ak.stock_news_em(symbol=sym)
+            if df is not None and not df.empty:
+                df = df.rename(columns={
+                    '新闻标题': 'title',
+                    '新闻内容': 'content',
+                    '发布时间': 'time',
+                    '文章来源': 'source',
+                    '新闻网址': 'url',
+                    '新闻链接': 'url'
+                })
+                df['date'] = df['time'].astype(str).str[:10]
+                df['full_text'] = df['title'].fillna('') + ' ' + df['content'].fillna('')
+                return df
+        except Exception as e:
+            logger.warning(f"获取 {sym} ({c_name}) 个股专属新闻第 {attempt+1} 次尝试异常 ({e})...")
+            import time
+            time.sleep(0.3)
 
     return pd.DataFrame()
 
