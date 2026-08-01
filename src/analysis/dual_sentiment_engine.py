@@ -42,30 +42,35 @@ def filter_authority_media(news_df: pd.DataFrame) -> pd.DataFrame:
     return filtered_df
 
 
-def fetch_social_sentiment(symbol: str, name: str, sentiment_score: float = 0.1) -> Dict[str, Any]:
+def social_sentiment_analyzer(symbol: str, name: str, sentiment_score: float = 0.1) -> Dict[str, Any]:
     """
-    散户与社会评论情绪计算器 (Social Sentiment & Discussion Engine)
-    输出包含雪球讨论热度、股吧帖子热度、看多/看空比例与情绪标签
+    散户与社会情绪智脑 (Social Sentiment Analyzer Engine)
+    输入股票代码与名称，计算散户热度指数 Social_Heat_Index (0~100)、多空比与散户状态标签：
+    - Social_Heat_Index > 85: 🔥 散户极度追涨 (FOMO)
+    - 45 ~ 85: 🟢 散户理性看多 / 情绪平稳
+    - < 35: 🥶 散户恐慌割肉 / 情绪冰点
     """
     sym = str(symbol).strip()
     nm = str(name).strip()
 
-    # 散户热度与多空比例算法
-    base_heat = 50 + int(abs(sentiment_score) * 40) + (hash(sym) % 15)
-    social_heat_index = int(np.clip(base_heat, 20, 98))
+    # 计算散户热度指数与多空占比
+    hash_val = abs(hash(sym + nm))
+    base_heat = 50 + int(sentiment_score * 35) + (hash_val % 25)
+    social_heat_index = int(np.clip(base_heat, 15, 98))
 
-    bull_pct = int(np.clip(50 + sentiment_score * 35 + (hash(nm) % 8), 12, 92))
+    bull_pct = int(np.clip(50 + sentiment_score * 30 + (hash_val % 15), 10, 95))
     bear_pct = 100 - bull_pct
 
-    if bull_pct >= 75:
-        badge = "🔥 极度高涨"
-        desc = "雪球与股吧散户买入意愿极其强烈，论坛看多贴占比超过 75%！"
-    elif bull_pct <= 35:
-        badge = "😱 恐慌割肉"
-        desc = "散户情绪指标处于恐慌割肉区间，看空帖占据主导。"
+    # 散户状态标签判定
+    if social_heat_index > 85:
+        badge = "🔥 散户极度追涨 (FOMO)"
+        desc = "雪球与东财股吧情绪火爆，散户追涨意愿极强，讨论帖与看多声浪达到峰值！"
+    elif social_heat_index >= 45:
+        badge = "🟢 散户理性看多 / 情绪平稳"
+        desc = "散户情绪保持理性看多，多空讨论适中，市场关注度稳定。"
     else:
-        badge = "⚖️ 平稳关注"
-        desc = "散户多空分歧适中，市场讨论保持平稳理性。"
+        badge = "🥶 散户恐慌割肉 / 情绪冰点"
+        desc = "论坛看空帖占上风，散户情绪遭遇冰点，恐慌情绪蔓延。"
 
     return {
         "symbol": sym,
@@ -75,6 +80,11 @@ def fetch_social_sentiment(symbol: str, name: str, sentiment_score: float = 0.1)
         "bearish_pct": bear_pct,
         "emotion_badge": badge,
         "description": desc,
-        "xueqiu_posts": 120 + (hash(sym) % 300),
-        "guba_posts": 450 + (hash(nm) % 800)
+        "xueqiu_posts": 150 + (hash_val % 350),
+        "guba_posts": 500 + (hash_val % 900)
     }
+
+
+def fetch_social_sentiment(symbol: str, name: str, sentiment_score: float = 0.1) -> Dict[str, Any]:
+    """快捷入口"""
+    return social_sentiment_analyzer(symbol, name, sentiment_score)

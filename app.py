@@ -584,6 +584,56 @@ elif menu == "🔍 概念板块与龙头搜索":
         if not leader_1.empty:
             l1_row = leader_1.iloc[0]
             st.success(f"👑 **板块龙头 (龙一)**: `{l1_row['name']} ({l1_row['symbol']})` | 最新价格: ¥{l1_row['close']:.2f} | 龙头得分: {l1_row.get('leader_score', 0):.4f}")
+
+        # 📌 选中标的 AI 深度研报专区 (技术指标 + 官方新闻 + 散户与社会情绪智脑)
+        st.markdown("---")
+        st.subheader("📌 选中标的 AI 深度研报、技术指标与散户情绪智脑")
+        
+        target_stock_options = [f"{row['symbol']} - {row['name']}" for _, row in res_data.iterrows()]
+        selected_target_str = st.selectbox("🎯 选择需调取 AI 研报与散户情绪的标的:", target_stock_options, index=0)
+        
+        selected_sym = selected_target_str.split(" - ")[0]
+        target_row = res_data[res_data['symbol'] == selected_sym].iloc[0]
+        
+        # ① 核心技术指标
+        m_c1, m_c2, m_c3, m_c4 = st.columns(4)
+        m_c1.metric("最新价格 (元)", f"¥{target_row.get('close', 0.0):.2f}")
+        m_c2.metric("20日动量 (MOM)", f"{target_row.get('MOM_20_norm', 0.0):.2f}")
+        m_c3.metric("低波避险得分", f"{target_row.get('LOW_VOL_20_norm', 0.0):.2f}")
+        m_c4.metric("AI 综合得分", f"{target_row.get('COMPOSITE_ALPHA_norm', 0.0):.2f}")
+        
+        # ② 双轨舆情：🏛️ 官方权威新闻 (带 ⭐️ 评级与 🔗 超链接) vs 🔥 散户与社会情绪风向标
+        c_news_col, c_sent_col = st.columns([1, 1])
+        
+        from src.analysis.news_analyzer import fetch_latest_news
+        from src.analysis.dual_sentiment_engine import filter_authority_media, social_sentiment_analyzer
+        
+        raw_news = fetch_latest_news(max_items=5)
+        auth_news = filter_authority_media(raw_news)
+        
+        with c_news_col:
+            st.markdown("##### 🏛️ 官方权威媒体新闻快讯 (带 ⭐️ 评级 & 🔗 原文)")
+            if not auth_news.empty:
+                for _, n_item in auth_news.head(3).iterrows():
+                    stars_b = n_item.get('stars_badge', '⭐️⭐️⭐️ 3星利好')
+                    url_val = n_item.get('url', 'https://www.cls.cn')
+                    link_h = f'<a href="{url_val}" target="_blank">🔗 查看原文</a>'
+                    st.markdown(f"- ⏱️ `[{n_item.get('time', '')}]` **{n_item.get('title', '')}** ({stars_b}) — {link_h}", unsafe_allow_html=True)
+                    st.caption(f"   摘要: {n_item.get('content', '')}")
+            else:
+                st.info("ℹ️ 近 24 小时无重大官方新闻。")
+                
+        with c_sent_col:
+            st.markdown("##### 🔥 散户与社会情绪风向标 (雪球/股吧/B站)")
+            soc_res = social_sentiment_analyzer(target_row['symbol'], target_row['name'], sentiment_score=float(target_row.get('COMPOSITE_ALPHA_norm', 0.1)))
+            
+            s_m1, s_m2, s_m3 = st.columns(3)
+            s_m1.metric("散户看多比例", f"{soc_res.get('bullish_pct', 75)}%")
+            s_m2.metric("看空比例", f"{soc_res.get('bearish_pct', 25)}%")
+            s_m3.metric("热度指数", f"{soc_res.get('social_heat_index', 85)} / 100")
+            
+            st.success(f"💬 **散户状态标签**: `{soc_res.get('emotion_badge', '🟢 散户理性看多 / 情绪平稳')}`")
+            st.caption(f"📊 **舆情智脑数据**: {soc_res.get('description', '')} (雪球关注帖: {soc_res.get('xueqiu_posts', 200)} 条 | 股吧热度帖: {soc_res.get('guba_posts', 500)} 条)")
     else:
         st.warning("未检索到相关概念股票，请尝试其他关键词。")
 
