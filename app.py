@@ -206,11 +206,11 @@ def render_research(services: Dict[str, Any]):
         st.markdown("### 多因子横截面矩阵与相关性分析")
         if st.button("计算五大因子横截面与相关性矩阵", use_container_width=True):
             res_svc: ResearchService = services["research"]
-            df = res_svc.run_factor_analysis(["600519", "000001", "600690", "300308", "600398"])
+            df = res_svc.run_factor_analysis(["600519.SH", "000001.SZ", "600690.SH", "300308.SZ", "600398.SH"])
             st.dataframe(df, use_container_width=True)
 
             st.markdown("#### 因子相关性矩阵 (Factor Correlation Matrix)")
-            corr = res_svc.compute_factor_correlation_matrix(["600519", "000001", "600690", "300308", "600398"])
+            corr = res_svc.compute_factor_correlation_matrix(["600519.SH", "000001.SZ", "600690.SH", "300308.SZ", "600398.SH"])
             st.dataframe(corr, use_container_width=True)
 
     with sub_tab2:
@@ -239,8 +239,8 @@ def render_backtest(services: Dict[str, Any]):
         if st.button("🚀 运行全历史回测", use_container_width=True):
             from src.strategy.ma_cross_strategy import MACrossStrategy
             bt_svc: BacktestService = services["backtest"]
-            strat = MACrossStrategy(["600519", "000001"])
-            hist_df, perf = bt_svc.run_backtest(strat, ["600519", "000001"], "2023-01-01", "2026-07-20")
+            strat = MACrossStrategy(["600519.SH", "000001.SZ"])
+            hist_df, perf = bt_svc.run_backtest(strat, ["600519.SH", "000001.SZ"], "2023-01-01", "2026-07-20")
 
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("总收益率", perf["TotalReturnPct"])
@@ -254,7 +254,7 @@ def render_backtest(services: Dict[str, Any]):
         if st.button("🛡️ 运行策略鲁棒性与 Walk-Forward 验证", use_container_width=True):
             from src.strategy.ma_cross_strategy import MACrossStrategy
             from src.strategy.walk_forward import WalkForwardRunner
-            wf_rep = WalkForwardRunner.run_walk_forward_validation(MACrossStrategy, ["600519"], services["provider"])
+            wf_rep = WalkForwardRunner.run_walk_forward_validation(MACrossStrategy, ["600519.SH"], services["provider"])
             st.success(f"Walk-Forward 滚动验证完成！均值 OOS 夏普: `{wf_rep.mean_oos_sharpe}` | 时间维度稳定性: `{wf_rep.is_time_stable}`")
             st.json(wf_rep.to_dict())
 
@@ -262,7 +262,7 @@ def render_backtest(services: Dict[str, Any]):
     st.markdown("### 📊 7 大策略基准全矩阵比对 (Full Benchmark Comparison Suite)")
     if st.button("运行 7 大策略基准全矩阵对比 (Buy&Hold / CSI300 / CSI1000 / EqualWeight / Momentum / MultiFactor / ML)", use_container_width=True):
         from src.benchmarks.suite import BenchmarkComparisonSuite
-        bench_df = BenchmarkComparisonSuite.run_full_benchmark_comparison(["600519", "000001"], services["provider"])
+        bench_df = BenchmarkComparisonSuite.run_full_benchmark_comparison(["600519.SH", "000001.SZ"], services["provider"])
         st.dataframe(bench_df, use_container_width=True, hide_index=True)
 
 
@@ -284,14 +284,14 @@ def render_risk():
     from src.risk_model.decomposition import RiskDecomposer
     from src.risk_model.stress_test import PortfolioStressTester
 
-    w = {"600519": 0.40, "000001": 0.30, "600690": 0.30}
+    w = {"600519.SH": 0.40, "000001.SZ": 0.30, "600690.SH": 0.30}
     mock_fm = pd.DataFrame({
         "Value_EP": [0.05, 0.08, 0.06],
         "Momentum_20D": [0.12, -0.05, 0.08],
         "Volatility_20D": [0.15, 0.22, 0.18],
         "Liquidity_20D": [0.50, 0.80, 0.60],
         "Quality_ROE": [0.30, 0.12, 0.18]
-    }, index=["600519", "000001", "600690"])
+    }, index=["600519.SH", "000001.SZ", "600690.SH"])
 
     exp_data = ExposureCalculator.calculate_portfolio_exposures(w, mock_fm)
     decomp = RiskDecomposer.decompose_portfolio_risk(w, pd.DataFrame())
@@ -320,7 +320,7 @@ def render_risk():
 
 def render_portfolio(portfolio_svc: PortfolioService):
     st.markdown("# 💼 Portfolio Management")
-    summary = portfolio_svc.get_portfolio_summary({"600519": 100.0})
+    summary = portfolio_svc.get_portfolio_summary({"600519.SH": 100.0})
     st.dataframe(summary["positions_df"], use_container_width=True, hide_index=True)
 
 
@@ -341,7 +341,7 @@ def render_experiments(services: Dict[str, Any]):
     exp_choice = st.selectbox("选择审计实验类型", ["ExpA_MultiFactor", "ExpB_MLAlpha", "ExpC_Momentum"])
     if st.button("🚀 执行 Run #1 vs Run #2 双重重跑审计", use_container_width=True):
         from src.experiments.reproducibility import ResearchReproducibilityRunner
-        cert = ResearchReproducibilityRunner.verify_reproducibility(exp_choice, ["600519", "000001"], services["provider"])
+        cert = ResearchReproducibilityRunner.verify_reproducibility(exp_choice, ["600519.SH", "000001.SZ"], services["provider"])
         st.success(f"实验 {exp_choice} 重跑完成！一致性验证: `{cert.is_exact_match}` | Data Hash: `{cert.data_hash}`")
         st.json(cert.to_dict())
 
@@ -355,10 +355,11 @@ def render_ai_analyst(services: Dict[str, Any]):
         path = ai_svc.generate_research_report(
             experiment_id="exp_ui_demo",
             strategy_id="MultiFactor_ML_v2",
-            universe=["600519", "000001"],
+            universe=["600519.SH", "000001.SZ"],
             date_range="2023-2026",
             performance_metrics={"TotalReturnPct": "18.4%", "Sharpe": 1.52, "MaxDrawdownPct": "12.8%"}
         )
+
         st.success(f"已生成报告: `{path}`")
         with open(path, "r", encoding="utf-8") as f:
             st.markdown(f.read())
