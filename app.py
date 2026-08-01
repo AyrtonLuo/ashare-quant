@@ -101,8 +101,8 @@ def generate_stock_tag(row) -> tuple[str, str]:
     return stars, tag
 
 
-@st.cache_data(show_spinner="正在计算中大盘优质标的池 AI 选股引擎...")
-def load_and_process_quant_engine():
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_and_process_quant_engine(style: str = "⚖️ 攻守兼备型 (自适应)"):
     """读取本地 Parquet 数据，并运行 AI 多因子计算、IC 诊断与风控回测"""
     if not os.path.exists(DAILY_PARQUET):
         update_quality_universe_data(max_workers=8)
@@ -133,9 +133,9 @@ def load_and_process_quant_engine():
     from src.data.global_market_fetcher import fetch_global_intermarket_indicators
     macro_info = fetch_global_intermarket_indicators(timeout_sec=5)
     
-    # 自适应动态因子加权 (Adaptive Factor Model)
+    # 支持 4 大 AI 动态交易风格配置模型 (Adaptive Style Engine)
     from src.strategy.factor_engine import build_adaptive_alpha_factor
-    df_composite = build_adaptive_alpha_factor(df_composite, macro_sentiment=macro_info['macro_score'])
+    df_composite = build_adaptive_alpha_factor(df_composite, macro_sentiment=macro_info['macro_score'], style=style)
     
     # IC 总结
     all_factor_cols = ["MOM_20", "LOW_VOL_20", "MA_DEV_20", "COMPOSITE_ALPHA", "COMPOSITE_ALPHA_neu"]
@@ -199,6 +199,20 @@ menu = st.sidebar.radio(
 )
 
 st.sidebar.markdown("---")
+st.sidebar.subheader("⚙️ AI 动态交易风格配置")
+style_choice = st.sidebar.selectbox(
+    "选择交易风格模式:",
+    [
+        "⚖️ 攻守兼备型 (自适应)",
+        "🛡️ 极客防守型 (低波70%)",
+        "⚡ 激进进攻型 (动量70%)",
+        "📰 新闻催化型 (舆情40%)"
+    ],
+    index=0
+)
+st.sidebar.caption(f"当前生效风格: `{style_choice}`")
+
+st.sidebar.markdown("---")
 st.sidebar.success("""
 **AI 选股核心硬标准：**
 - 🛡️ 安全池：总市值 ≥ 90 亿元
@@ -209,7 +223,7 @@ st.sidebar.success("""
 
 # 加载数据
 try:
-    engine_data = load_and_process_quant_engine()
+    engine_data = load_and_process_quant_engine(style=style_choice)
 except Exception as e:
     st.error(f"量化引擎加载失败: {e}")
     st.stop()
@@ -478,14 +492,22 @@ elif menu == "🔍 概念板块与龙头搜索":
     else:
         st.success(f"🏷️ 检索结果: {search_res['concept_name']}")
     
-    res_data = search_res['data']
+    res_data = search_res['data'].copy()
     if not res_data.empty:
-        c_display_cols = ['symbol', 'name', 'close', '龙头角色', 'leader_score', 'COMPOSITE_ALPHA_norm']
+        # 动态计算 AI推荐星级 与 所属概念板块
+        stars_list = []
+        for _, row in res_data.iterrows():
+            st_val, _ = generate_stock_tag(row)
+            stars_list.append(st_val)
+        res_data['AI推荐星级'] = stars_list
+        res_data['所属概念板块'] = search_res.get('concept_name', '通用A股板块')
+        
+        c_display_cols = ['symbol', 'name', 'close', 'AI推荐星级', '龙头角色', '所属概念板块', 'leader_score']
         c_exist_cols = [c for c in c_display_cols if c in res_data.columns]
         
         c_df = res_data[c_exist_cols].rename(columns={
             'symbol': '股票代码', 'name': '股票名称', 'close': '最新价格 (元)',
-            'leader_score': '龙头综合得分', 'COMPOSITE_ALPHA_norm': 'AI 得分'
+            'leader_score': '龙头综合得分', '龙头角色': '👑 龙头定位 (Leader/Follower)'
         })
         
         st.dataframe(
