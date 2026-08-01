@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger("realtime_engine")
 
 
-@st.cache_data(ttl=10, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def fetch_global_indices_snapshot() -> List[Dict[str, Any]]:
     """
     获取全局四大核心大盘指数 100% 实时真实行情快照 (上证指数, 深证成指, 创业板指, 科创50)
@@ -74,7 +74,7 @@ def fetch_global_indices_snapshot() -> List[Dict[str, Any]]:
     return results
 
 
-@st.cache_data(ttl=5, show_spinner=False)
+@st.cache_data(ttl=30, show_spinner=False)
 def fetch_realtime_stock_data(symbol: str) -> Dict[str, Any]:
     """
     获取单股 100% 当日实时真实行情、换手率、真实量比及五档 Level 2 买卖盘
@@ -181,7 +181,7 @@ def fetch_realtime_stock_data(symbol: str) -> Dict[str, Any]:
     }
 
 
-@st.cache_data(ttl=5, show_spinner=False)
+@st.cache_data(ttl=30, show_spinner=False)
 def get_intraday_min_data(symbol: str) -> pd.DataFrame:
     """
     获取个股 100% 真实当日/最近交易日 240 分钟 1 分钟分时数据 (包含 真实价格, VWAP 均价, 成交量, 昨收基准, 涨跌幅)
@@ -308,7 +308,7 @@ def get_intraday_min_data(symbol: str) -> pd.DataFrame:
     })
 
 
-@st.cache_data(ttl=5, show_spinner=False)
+@st.cache_data(ttl=30, show_spinner=False)
 def get_stock_level2_snapshot(symbol: str, name: str = "") -> Dict[str, Any]:
     """
     获取五档买卖盘 (Level 2) 快照与核心盘口指标
