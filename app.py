@@ -1025,6 +1025,8 @@ elif menu == "🚀 智能跟投与一键调仓":
     from src.strategy.portfolio_optimizer import auto_calculate_portfolio_size, filter_and_allocate_portfolio
     
     start_stream_engine()
+    paper_acc = PaperAccount(initial_capital=1000000.0)
+    
     # 对接富途 OpenD 模拟盘
     c_f1, c_f2 = st.columns([2.5, 1.5])
     with c_f1:
