@@ -466,23 +466,95 @@ elif menu == "🔥 今日 AI 优质推荐榜":
         sel_sym = selected_option.split(" - ")[0]
         sel_row = top_df[top_df['symbol'] == sel_sym].iloc[0].to_dict()
         
-        # 实时分析舆情
-        from src.analysis.news_analyzer import fetch_latest_news, analyze_stock_sentiment, generate_stock_report
-        news_df = fetch_latest_news(max_items=50)
-        sentiment_res = analyze_stock_sentiment(sel_row['symbol'], sel_row['name'], news_df)
+        # 实时分析舆情与个股新闻
+        from src.analysis.news_analyzer import generate_stock_report
+        stock_news_res = cached_stock_news(sel_row['symbol'], sel_row['name'])
+        soc_res = cached_social_sentiment(sel_row['symbol'], sel_row['name'], alpha_score=float(sel_row.get('COMPOSITE_ALPHA_norm', 0.1)))
+        
+        sentiment_res = {
+            "symbol": sel_row['symbol'],
+            "name": sel_row['name'],
+            "matched_news": stock_news_res.get('matched_news', []),
+            "retail_sentiment": soc_res
+        }
         report = generate_stock_report(sel_row, sentiment_res)
+        
+        st.markdown(f"#### 📌 `[{sel_row['symbol']} {sel_row['name']}]` AI 选股深度画像与情绪仪表盘")
         
         diag_col1, diag_col2 = st.columns([1, 1])
         
         with diag_col1:
-            # 舆情情绪 Plotly Gauge 仪表盘
+            # 散户热度 Plotly Gauge 仪表盘 (0~100)
+            heat_val = soc_res.get('social_heat_index', 75)
             fig_gauge = go.Figure(go.Indicator(
                 mode="gauge+number",
-                value=sentiment_res['sentiment_score'],
+                value=heat_val,
                 domain={'x': [0, 1], 'y': [0, 1]},
-                title={'text': f"<b>{sel_row['name']} 舆情情绪指数</b>", 'font': {'size': 16}},
+                title={'text': f"<b>{sel_row['name']} 散户热度指数 (0~100)</b>", 'font': {'size': 16}},
                 gauge={
-                    'axis': {'range': [-1.0, 1.0], 'tickwidth': 1},
+                    'axis': {'range': [0, 100], 'tickwidth': 1},
+                    'bar': {'color': "#d62728" if heat_val > 85 else ("#1f77b4" if heat_val < 45 else "#2ca02c")},
+                    'steps': [
+                        {'range': [0, 45], 'color': "#e6f2ff"},
+                        {'range': [45, 85], 'color': "#e6ffe6"},
+                        {'range': [85, 100], 'color': "#ffe6e6"}
+                    ],
+                    'threshold': {
+                        'line': {'color': "black", 'width': 3},
+                        'thickness': 0.75,
+                        'value': heat_val
+                    }
+                }
+            ))
+            fig_gauge.update_layout(height=260, margin=dict(l=20, r=20, t=40, b=20))
+            st.plotly_chart(fig_gauge, use_container_width=True)
+            
+        with diag_col2:
+            # 量化因子得分对比柱状图
+            factor_df = pd.DataFrame([
+                {"因子名称": "动量得分 (MOM)", "得分": sel_row.get("MOM_20_norm", 0.0)},
+                {"因子名称": "低波避险 (LOW_VOL)", "得分": sel_row.get("LOW_VOL_20_norm", 0.0)},
+                {"因子名称": "复合 Alpha (COMPOSITE)", "得分": sel_row.get("COMPOSITE_ALPHA_norm", 0.0)}
+            ])
+            fig_factors = px.bar(
+                factor_df, x="因子名称", y="得分",
+                color="得分", color_continuous_scale="Reds",
+                title=f"<b>{sel_row['name']} 多因子得分画像</b>"
+            )
+            fig_factors.update_layout(height=260, template="plotly_white", margin=dict(l=20, r=20, t=40, b=20))
+            st.plotly_chart(fig_factors, use_container_width=True)
+            
+        # 结构化 Markdown AI 研报
+        st.markdown(report['markdown_report'])
+        
+        # 🚨 双轨舆情展示：🏛️ 官方权威快讯 vs 🔥 散户/社会情绪风向标
+        st.markdown("---")
+        st.subheader(f"📢 [{sel_row['symbol']} {sel_row['name']}] 舆情风向与专属快讯追踪")
+        
+        s_col1, s_col2 = st.columns([1, 1])
+        
+        with s_col1:
+            st.markdown("##### 🏛️ 个股专属权威快讯 (带 🔗 原文)")
+            matched_news = stock_news_res.get('matched_news', [])
+            if matched_news:
+                for item in matched_news:
+                    badge = item.get('match_badge', '📌 [个股重磅利好]')
+                    stars_b = item.get('stars_badge', '⭐️⭐️⭐️ 3星利好')
+                    link_h = item.get('link_html', f'<a href="{item.get("url", "https://www.cls.cn")}" target="_blank">🔗 查看原文</a>')
+                    st.markdown(f"- ⏱️ `[{item.get('time', '')}]` `{badge}` **{item.get('title', '')}** ({stars_b}) — {link_h}", unsafe_allow_html=True)
+                    st.caption(f"   影响评估: {item.get('impact_summary', '')}")
+            else:
+                st.info(f"ℹ️ {stock_news_res.get('prompt', '近 72 小时内无个股重大事件，行情由量化技术面驱动。')}")
+                
+        with s_col2:
+            st.markdown(f"##### 🔥 散户与社会情绪仪表盘 (`⏱️ 上次更新: {soc_res.get('update_time', '')}`)")
+            r_c1, r_c2, r_c3 = st.columns(3)
+            r_c1.metric("散户看多比例", f"{soc_res.get('bullish_pct', 75)}%")
+            r_c2.metric("看空比例", f"{soc_res.get('bearish_pct', 25)}%")
+            r_c3.metric("热度指数", f"{soc_res.get('social_heat_index', 85)} / 100")
+            
+            st.success(f"💬 **情绪状态**: `{soc_res.get('emotion_badge', '🟢 散户理性看多 / 情绪平稳')}`")
+            st.caption(f"📊 **舆情洞察**: {soc_res.get('description', '')} (雪球关注帖: {soc_res.get('xueqiu_posts', 200)} 条 | 股吧热度帖: {soc_res.get('guba_posts', 500)} 条)")], 'tickwidth': 1},
                     'bar': {'color': "#d62728" if sentiment_res['sentiment_score'] > 0 else "#2ca02c"},
                     'steps': [
                         {'range': [-1.0, -0.2], 'color': "#ffcccb"},
