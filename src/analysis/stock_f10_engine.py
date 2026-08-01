@@ -281,26 +281,32 @@ def build_interactive_kline_chart(
             decreasing_line_color=color_down,
             decreasing_fillcolor=color_down,
             decreasing_line_width=2.0,
+            selectedpoints=[],
             name="K线"
         ),
         row=1, col=1
     )
 
+    sel_style = dict(
+        selected=dict(marker=dict(opacity=1.0)),
+        unselected=dict(marker=dict(opacity=1.0))
+    )
+
     # 降权均线系统：调整为 1.0 细线 + 40%~50% 半透明度，凸显 K 线主体
     if "均线" in main_indicator or "MA" in main_indicator:
-        fig.add_trace(go.Scatter(x=date_str, y=df['MA5'], mode='lines', name='MA5', line=dict(color='rgba(241, 196, 15, 0.45)', width=1.0)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['MA10'], mode='lines', name='MA10', line=dict(color='rgba(52, 152, 219, 0.45)', width=1.0)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['MA20'], mode='lines', name='MA20', line=dict(color='rgba(155, 89, 182, 0.45)', width=1.0)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['MA60'], mode='lines', name='MA60', line=dict(color='rgba(46, 204, 113, 0.45)', width=1.0)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['MA5'], mode='lines', name='MA5', line=dict(color='rgba(241, 196, 15, 0.45)', width=1.0), **sel_style), row=1, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['MA10'], mode='lines', name='MA10', line=dict(color='rgba(52, 152, 219, 0.45)', width=1.0), **sel_style), row=1, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['MA20'], mode='lines', name='MA20', line=dict(color='rgba(155, 89, 182, 0.45)', width=1.0), **sel_style), row=1, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['MA60'], mode='lines', name='MA60', line=dict(color='rgba(46, 204, 113, 0.45)', width=1.0), **sel_style), row=1, col=1)
         if len(df) >= 120:
-            fig.add_trace(go.Scatter(x=date_str, y=df['MA120'], mode='lines', name='MA120 (半年线)', line=dict(color='rgba(230, 126, 34, 0.50)', width=1.0)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=date_str, y=df['MA120'], mode='lines', name='MA120 (半年线)', line=dict(color='rgba(230, 126, 34, 0.50)', width=1.0), **sel_style), row=1, col=1)
         if len(df) >= 250:
-            fig.add_trace(go.Scatter(x=date_str, y=df['MA250'], mode='lines', name='MA250 (年线)', line=dict(color='rgba(231, 76, 60, 0.50)', width=1.0)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=date_str, y=df['MA250'], mode='lines', name='MA250 (年线)', line=dict(color='rgba(231, 76, 60, 0.50)', width=1.0), **sel_style), row=1, col=1)
 
     elif "布林" in main_indicator or "BOLL" in main_indicator:
-        fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_MID'], mode='lines', name='BOLL中轨', line=dict(color='rgba(241, 196, 15, 0.50)', width=1.0)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_UPPER'], mode='lines', name='BOLL上轨', line=dict(color='rgba(231, 76, 60, 0.45)', width=1.0, dash='dash')), row=1, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_LOWER'], mode='lines', name='BOLL下轨', line=dict(color='rgba(46, 204, 113, 0.45)', width=1.0, dash='dash')), row=1, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_MID'], mode='lines', name='BOLL中轨', line=dict(color='rgba(241, 196, 15, 0.50)', width=1.0), **sel_style), row=1, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_UPPER'], mode='lines', name='BOLL上轨', line=dict(color='rgba(231, 76, 60, 0.45)', width=1.0, dash='dash'), **sel_style), row=1, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['BOLL_LOWER'], mode='lines', name='BOLL下轨', line=dict(color='rgba(46, 204, 113, 0.45)', width=1.0, dash='dash'), **sel_style), row=1, col=1)
 
     # -------------------------------------------------------------------------
     # Row 2: 副图 1 - 高亮成交量 Volume + 5/10日均量线 (固定在 Row 2)
@@ -311,35 +317,36 @@ def build_interactive_kline_chart(
             x=date_str,
             y=df['volume'],
             marker=dict(color=vol_colors, line=dict(width=0)),
-            name="成交量"
+            name="成交量",
+            **sel_style
         ),
         row=2, col=1
     )
-    fig.add_trace(go.Scatter(x=date_str, y=df['VOL_MA5'], mode='lines', name='VOL_MA5', line=dict(color='#FF9800', width=1.0)), row=2, col=1)
-    fig.add_trace(go.Scatter(x=date_str, y=df['VOL_MA10'], mode='lines', name='VOL_MA10', line=dict(color='#2196F3', width=1.0)), row=2, col=1)
+    fig.add_trace(go.Scatter(x=date_str, y=df['VOL_MA5'], mode='lines', name='VOL_MA5', line=dict(color='#FF9800', width=1.0), **sel_style), row=2, col=1)
+    fig.add_trace(go.Scatter(x=date_str, y=df['VOL_MA10'], mode='lines', name='VOL_MA10', line=dict(color='#2196F3', width=1.0), **sel_style), row=2, col=1)
 
     # -------------------------------------------------------------------------
     # Row 3: 副图 2 - 独立技术指标 (固定在 Row 3)
     # -------------------------------------------------------------------------
     if "KDJ" in sub_indicator:
-        fig.add_trace(go.Scatter(x=date_str, y=df['K'], mode='lines', name='K线', line=dict(color='#F1C40F', width=1.5)), row=3, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['D'], mode='lines', name='D线', line=dict(color='#3498DB', width=1.5)), row=3, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['J'], mode='lines', name='J线', line=dict(color='#E74C3C', width=1.5)), row=3, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['K'], mode='lines', name='K线', line=dict(color='#F1C40F', width=1.5), **sel_style), row=3, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['D'], mode='lines', name='D线', line=dict(color='#3498DB', width=1.5), **sel_style), row=3, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['J'], mode='lines', name='J线', line=dict(color='#E74C3C', width=1.5), **sel_style), row=3, col=1)
         fig.add_shape(type="line", x0=date_str.iloc[0], x1=date_str.iloc[-1], y0=80, y1=80, line=dict(color="#E74C3C", width=1, dash="dot"), row=3, col=1)
         fig.add_shape(type="line", x0=date_str.iloc[0], x1=date_str.iloc[-1], y0=20, y1=20, line=dict(color="#2ECC71", width=1, dash="dot"), row=3, col=1)
 
     elif "RSI" in sub_indicator:
-        fig.add_trace(go.Scatter(x=date_str, y=df['RSI6'], mode='lines', name='RSI6', line=dict(color='#F1C40F', width=1.5)), row=3, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['RSI12'], mode='lines', name='RSI12', line=dict(color='#3498DB', width=1.5)), row=3, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['RSI24'], mode='lines', name='RSI24', line=dict(color='#9B59B6', width=1.5)), row=3, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['RSI6'], mode='lines', name='RSI6', line=dict(color='#F1C40F', width=1.5), **sel_style), row=3, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['RSI12'], mode='lines', name='RSI12', line=dict(color='#3498DB', width=1.5), **sel_style), row=3, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['RSI24'], mode='lines', name='RSI24', line=dict(color='#9B59B6', width=1.5), **sel_style), row=3, col=1)
         fig.add_shape(type="line", x0=date_str.iloc[0], x1=date_str.iloc[-1], y0=80, y1=80, line=dict(color="#E74C3C", width=1, dash="dot"), row=3, col=1)
         fig.add_shape(type="line", x0=date_str.iloc[0], x1=date_str.iloc[-1], y0=20, y1=20, line=dict(color="#2ECC71", width=1, dash="dot"), row=3, col=1)
 
     else: # 默认 MACD (平滑异同)
         macd_colors = np.where(df['MACD_hist'] >= 0, color_up, color_down)
-        fig.add_trace(go.Scatter(x=date_str, y=df['DIF'], mode='lines', name='DIF (快线)', line=dict(color='#3498DB', width=1.5)), row=3, col=1)
-        fig.add_trace(go.Scatter(x=date_str, y=df['DEA'], mode='lines', name='DEA (慢线)', line=dict(color='#F39C12', width=1.5)), row=3, col=1)
-        fig.add_trace(go.Bar(x=date_str, y=df['MACD_hist'], marker_color=macd_colors, name='MACD柱'), row=3, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['DIF'], mode='lines', name='DIF (快线)', line=dict(color='#3498DB', width=1.5), **sel_style), row=3, col=1)
+        fig.add_trace(go.Scatter(x=date_str, y=df['DEA'], mode='lines', name='DEA (慢线)', line=dict(color='#F39C12', width=1.5), **sel_style), row=3, col=1)
+        fig.add_trace(go.Bar(x=date_str, y=df['MACD_hist'], marker_color=macd_colors, name='MACD柱', **sel_style), row=3, col=1)
 
     # 默认视口限制：拉开【最近 120 个交易日】的舒适宽阔视口
     recent_start = date_str.iloc[-120] if len(date_str) > 120 else date_str.iloc[0]

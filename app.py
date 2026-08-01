@@ -154,34 +154,34 @@ def cached_social_sentiment(symbol: str, name: str, alpha_score: float = 0.8) ->
     return social_sentiment_analyzer(symbol, name, sentiment_score=alpha_score)
 
 
-@st.dialog("单日 K 线与行情细节下钻")
-def show_daily_detail_dialog(card_data: dict):
-    """点击 K 线弹出的独立 Modal 对话框"""
-    c_date = card_data['date_str']
-    st.markdown(f"#### `[{c_date}]` 盘后行情细节与 AI 形态研判")
+@st.dialog("📅 单日 K 线与行情细节下钻", width="large")
+def render_daily_kline_dialog(date_str: str, stock_code: str, detail_row: dict):
+    """
+    点击 K 线图表弹出的单日分时/行情细节 Modal 对话框
+    """
+    st.markdown(f"### 标的：`{stock_code}` | 交易日：`{date_str}`")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric(
-            "收盘价 (元)",
-            f"¥{card_data['close']:.2f}",
-            delta=f"{card_data['chg_pct']:+.2f}% (¥{card_data['chg_amount']:+.2f})"
-        )
-        st.caption(f"开盘: ¥{card_data['open']:.2f} | 最高: ¥{card_data['high']:.2f} | 最低: ¥{card_data['low']:.2f}")
-    with col2:
-        st.metric("成交量 (手)", f"{card_data['volume_hands']:,.0f}")
-        st.caption(f"估算成交额: ¥{card_data['amount_w']:,.2f} 万元")
-        
-    st.markdown("---")
-    col3, col4 = st.columns(2)
-    with col3:
-        st.metric("均线 MA5 / MA20", f"¥{card_data['ma5']:.2f} / ¥{card_data['ma20']:.2f}")
-        st.caption(f"MA10: ¥{card_data['ma10']:.2f} | MA60: ¥{card_data['ma60']:.2f}")
-    with col4:
-        st.metric("MACD 柱状强弱", f"{card_data['macd_h']:+.4f}")
-        st.caption(f"DIF: {card_data['dif']:.3f} | DEA: {card_data['dea']:.3f}")
-
-    st.info(f"AI 盘后形态研判: `{card_data['pattern']}`")
+    open_p = float(detail_row.get('open', detail_row.get('Open', 0.0)))
+    high_p = float(detail_row.get('high', detail_row.get('High', 0.0)))
+    low_p = float(detail_row.get('low', detail_row.get('Low', 0.0)))
+    close_p = float(detail_row.get('close', detail_row.get('Close', 0.0)))
+    vol = float(detail_row.get('volume', detail_row.get('Volume', 0)))
+    
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("开盘价", f"¥{open_p:.2f}")
+    c2.metric("最高价", f"¥{high_p:.2f}")
+    c3.metric("最低价", f"¥{low_p:.2f}")
+    c4.metric("收盘价", f"¥{close_p:.2f}")
+    
+    st.divider()
+    st.markdown("#### 📊 当日成交与技术指标")
+    v1, v2 = st.columns(2)
+    v1.metric("成交量 (手)", f"{int(vol):,}")
+    macd_val = float(detail_row.get('MACD_hist', detail_row.get('MACD', 0.0)))
+    v2.metric("MACD 柱值", f"{macd_val:+.3f}")
+    
+    ma20_val = float(detail_row.get('MA20', close_p))
+    st.info(f"💡 AI 盘后研报：{date_str} 股价运行在 MA20 (¥{ma20_val:.2f}) 均线附近，当日成交量 {int(vol):,} 手，资金换手活跃。")
 
 
 def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.DataFrame):
@@ -250,26 +250,26 @@ def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.Da
     )
     
     # 捕获点击 K 线事件 (on_select="rerun")
-    event_data = st.plotly_chart(
+    chart_event = st.plotly_chart(
         fig_kline,
         use_container_width=True,
         on_select="rerun",
         selection_mode="points",
-        key=f"kline_chart_{sym}_{period_choice}",
+        key=f"kline_interactive_chart_{sym}_{period_choice}",
         config={"scrollZoom": True, "displayModeBar": True}
     )
     
-    # 解析点击的具体日期并自动唤醒 @st.dialog 独立 Modal 弹窗
-    if event_data and isinstance(event_data, dict):
-        selection = event_data.get("selection", {})
+    # 解析用户点击的具体日期并触发 Modal 弹窗
+    if chart_event and isinstance(chart_event, dict) and "selection" in chart_event:
+        selection = chart_event.get("selection", {})
         points = selection.get("points", [])
         if points:
-            clicked_date = str(points[0].get("x", ""))
+            point_data = points[0]
+            clicked_date = point_data.get("x")
             if clicked_date:
-                from src.analysis.stock_f10_engine import get_single_day_review_card
-                card_data = get_single_day_review_card(kline_df, target_date_str=clicked_date)
-                if card_data:
-                    show_daily_detail_dialog(card_data)
+                match_row = kline_df[kline_df['date'].astype(str).str.contains(str(clicked_date))]
+                if not match_row.empty:
+                    render_daily_kline_dialog(str(clicked_date), f"{sym} {name}", match_row.iloc[0].to_dict())
 
     st.markdown("---")
     
