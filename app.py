@@ -101,6 +101,66 @@ def generate_stock_tag(row) -> tuple[str, str]:
     return stars, tag
 
 
+def get_styled_recommendations(df_composite: pd.DataFrame, style_mode: str, top_pct: float = 0.05) -> pd.DataFrame:
+    """
+    根据用户选择的交易风格 (style_mode) 动态重新计算最新调仓日的选股 Composite Alpha 得分并打标排序：
+    - 🛡️ 极客防守型：按 LOW_VOL (低波) 70% + 均线偏离 30% 重新打分排序
+    - ⚡ 激进进攻型：按 MOM (动量) 70% + 舆情/偏离 30% 重新打分排序
+    - 📰 新闻催化型：按 ⭐️4~5星重磅权威新闻 60% + MOM 40% 重新打分排序
+    - ⚖️ 攻守兼备型：自适应因子得分
+    """
+    if df_composite is None or df_composite.empty:
+        return pd.DataFrame()
+
+    latest_date = df_composite['date'].max()
+    latest_day = df_composite[df_composite['date'] == latest_date].copy()
+
+    mom_col = latest_day['MOM_20_norm'].fillna(0.0) if 'MOM_20_norm' in latest_day.columns else latest_day.get('MOM_20', 0.0)
+    vol_col = latest_day['LOW_VOL_20_norm'].fillna(0.0) if 'LOW_VOL_20_norm' in latest_day.columns else latest_day.get('LOW_VOL_20', 0.0)
+    dev_col = latest_day['MA_DEV_20_norm'].fillna(0.0) if 'MA_DEV_20_norm' in latest_day.columns else latest_day.get('MA_DEV_20', 0.0)
+    sent_col = latest_day.get('SENTIMENT_ALPHA', 0.0)
+
+    if "极客防守型" in style_mode:
+        styled_score = 0.70 * vol_col + 0.30 * dev_col
+        default_tag = "🛡️ 极致低波高股息"
+    elif "激进进攻型" in style_mode:
+        styled_score = 0.70 * mom_col + 0.15 * dev_col + 0.15 * sent_col
+        default_tag = "⚡ 动量突破板块龙头"
+    elif "新闻催化型" in style_mode:
+        styled_score = 0.60 * sent_col + 0.40 * mom_col
+        default_tag = "📰 重磅新闻实锤催化"
+    else:
+        styled_score = latest_day.get('COMPOSITE_ALPHA_norm', 0.50 * mom_col + 0.50 * vol_col)
+        default_tag = "⚖️ 攻守兼备自适应选股"
+
+    latest_day['styled_score'] = styled_score
+    top_k = max(1, int(len(latest_day) * top_pct))
+    sorted_df = latest_day.sort_values('styled_score', ascending=False).head(top_k).copy()
+
+    stars_list = []
+    tags_list = []
+    for _, row in sorted_df.iterrows():
+        score_val = float(row.get('styled_score', 1.0))
+        if score_val >= 0.8 or "极客防守" in style_mode or "新闻催化" in style_mode:
+            stars = "⭐⭐⭐⭐⭐"
+        elif score_val >= 0.4:
+            stars = "⭐⭐⭐⭐"
+        elif score_val >= 0.0:
+            stars = "⭐⭐⭐"
+        else:
+            stars = "⭐⭐"
+
+        _, auto_tag = generate_stock_tag(row)
+        final_tag = default_tag if "自适应" not in default_tag else auto_tag
+        stars_list.append(stars)
+        tags_list.append(final_tag)
+
+    sorted_df['AI推荐星级'] = stars_list
+    sorted_df['推荐理由标签'] = tags_list
+    sorted_df['COMPOSITE_ALPHA_norm'] = sorted_df['styled_score']
+    return sorted_df
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_and_process_quant_engine(style: str = "⚖️ 攻守兼备型 (自适应)"):
     """读取本地 Parquet 数据，并运行 AI 多因子计算、IC 诊断与风控回测"""
@@ -336,11 +396,14 @@ if menu == "🏠 AI 选股大盘总览":
 elif menu == "🔥 今日 AI 优质推荐榜":
     st.header("🔥 今日 AI 优质精选股票榜单 (Top 5%)")
     latest_date_str = engine_data['latest_date'].strftime('%Y-%m-%d')
-    top_df = engine_data['top_portfolio'].copy()
+    
+    # 全动态响应侧边栏选择的交易风格
+    styled_top_df = get_styled_recommendations(engine_data['df_composite'], style_choice)
+    top_df = styled_top_df.copy() if not styled_top_df.empty else engine_data['top_portfolio'].copy()
     
     st.caption(f"更新时间: {latest_date_str} | 智能算法在 {engine_data['num_stocks']} 只标的中甄选出得分前 5% 优质股票 (共 {len(top_df)} 只)")
+    st.info(f"⚙️ **当前生效 AI 交易风格**: `{style_choice}` | 已按该风格实时打分排榜，推荐理由与股票排名已同步更新。")
     
-    # 搜索框
     # 搜索框平滑响应
     search_term = st.text_input("🔍 搜索股票代码或股票名称 (如：600941 或 中国移动)...", "")
     if search_term:
@@ -352,7 +415,7 @@ elif menu == "🔥 今日 AI 优质推荐榜":
             top_df = filtered
         else:
             st.warning(f"🔍 推荐榜单中未找到与 [{search_term}] 匹配的股票，已为您保留全量 AI 精选推荐榜单。")
-            top_df = engine_data['top_portfolio'].copy()
+            top_df = styled_top_df.copy()
         
     display_cols = ['symbol', 'name', 'close', 'AI推荐星级', '推荐理由标签', '催化剂标签', '最新重磅新闻', 'COMPOSITE_ALPHA_norm']
     existing_cols = [c for c in display_cols if c in top_df.columns]
