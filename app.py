@@ -40,6 +40,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# 确保清除旧脏缓存，使全新标准化 A 股代码与行情/新闻规则即刻生效
+st.cache_data.clear()
+
 # 自定义金融风格 CSS 样式
 st.markdown("""
 <style>
