@@ -6,14 +6,15 @@ Ashare Quant Pro 目标是从当前的 A 股量化研究 MVP，升级为一套�
 
 ## 当前基础
 
-- 数据与基本面层 (Fundamental Data Layer 2.0)：`src/data/fundamental/` (`FundamentalData`, `PITFundamentalProvider`) 具备 Point-in-Time 披露延迟校验，严防 Look-Ahead Bias。
-- 指数与数据可信度审计：规范化大盘指数与股票代码映射 (`000001.SH / sh000001` 上证指数 vs `000001.SZ` 平安银行)，强契约数据流 (Unified Market Data Contract).
-- 因子与 ML 特征层：Factor Engine (Factor 抽象、Momentum, Value, Quality, Volatility, Liquidity, MAD 去极值、Z-Score 标准化、行业/市值中性化、因子相关性矩阵 `compute_factor_correlation_matrix`)、ML FeatureExtractor.
-- 机器学习 Alpha 与模型比对：ML Model 抽象 (Linear Ridge, RandomForest, HistGradientBoosting)、`compare_ml_models` 样本内/样本外交叉比对、WalkForwardSplitter ( Walk-Forward Validation)、MLEvaluator (RMSE, MAE, R², IC, Rank IC, ICIR)、MLAlphaStrategy.
+- 数据与基本面层 (Fundamental Data Layer 2.0)：`src/data/fundamental/` (`FundamentalData`, `PITFundamentalProvider`) 具备 CSI 300, CSI 500, CSI 1000 覆盖与 Point-in-Time 披露延迟校验，严防 Look-Ahead Bias 与幸存者偏差。
+- Barra 风格风险模型 (Barra Risk Model)：`src/risk_model/` (`ExposureCalculator`, `RiskDecomposer`) 支持申万一级行业暴露度与 6 大 Style 因子 (Size, Value, Momentum, Volatility, Liquidity, Quality) 的系统性 vs 特质性风险拆解与 Tracking Error 计算。
+- 组合多重约束优化器 (Portfolio Optimizer 2.0)：`src/portfolio/optimizer_v2.py` 支持 Aggressive, Balanced, Market Neutral 三类风控模式与最大单股/行业上限、中性化和换手率约束。
+- 真实交易摩擦与冲击力模型 (Realistic Cost Model)：`src/execution/costs.py`（佣金 0.025% + 印花税 0.05% + 买卖滑点 + $\text{Impact} \propto \sqrt{\text{OrderSize}/\text{ADV}}$ 市场冲击力）。
 - AI 智能研报与诊断层：DiagnosticsEngine (确定性 Performance 异常诊断、Factor Decay 衰减判定、Overfitting 强过拟合预警、Market Regime 表现分析)、AutomatedReportGenerator (落盘 `reports/experiment_xxx_ai.md` 与 `.json`)、LLMProvider 抽象 (MockLLMProvider / Local / OpenAI 解耦).
 - 独立自动化任务与运维层 (Automation & Jobs)：`src/jobs/` (update_market_data, generate_daily_report, health_check)、`RunManager` 任务生命周期与耗时追踪、`SystemHealthMonitor` 系统巡检、`ResearchIntegrityChecker` 合规防护面板.
 - 服务与解耦层 (Service Layer)：ResearchService, BacktestService, PortfolioService, MLService, AIService，隔离 UI 与底层逻辑。
-- 控制台与产品架构：Streamlit 产品级 9 大导航 (Dashboard, Market, Research, Backtest, Portfolio, Experiments, AI Analyst, Operations 运维监控, Settings)、金融终端暗色风格与 Product Demo Mode 确定性演练开关.
+- 控制台与产品架构：Streamlit 产品级 10 大导航 (Dashboard, Market, Research, Backtest, Risk & Barra 风险归因, Portfolio, Experiments, AI Analyst, Operations 运维监控, Settings)、金融终端暗色风格与 Product Demo Mode 确定性演练开关.
+
 
 
 

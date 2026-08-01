@@ -86,6 +86,7 @@ def render_sidebar():
             "📊 Market (大盘行情)",
             "🔬 Research (因子与策略)",
             "🧪 Backtest (历史回测)",
+            "🛡️ Risk & Barra (风险归因)",
             "💼 Portfolio (账户持仓)",
             "📄 Experiments (实验中心)",
             "🧠 AI Analyst (智能研报)",
@@ -268,6 +269,41 @@ def render_operations():
     st.caption("- **Data Pipeline Storage**: `Parquet (v2.0 PIT Storage)`")
 
 
+def render_risk():
+    st.markdown("# 🛡️ Barra Risk Attribution & Portfolio Decomposition")
+    st.caption("申万行业暴露度、6 大 Style 风格因子 (Size, Value, Momentum, Volatility, Liquidity, Quality) 与系统性 vs 特质性风险拆解")
+
+    from src.risk_model.exposure import ExposureCalculator
+    from src.risk_model.decomposition import RiskDecomposer
+
+    w = {"600519": 0.40, "000001": 0.30, "600690": 0.30}
+    mock_fm = pd.DataFrame({
+        "Value_EP": [0.05, 0.08, 0.06],
+        "Momentum_20D": [0.12, -0.05, 0.08],
+        "Volatility_20D": [0.15, 0.22, 0.18],
+        "Liquidity_20D": [0.50, 0.80, 0.60],
+        "Quality_ROE": [0.30, 0.12, 0.18]
+    }, index=["600519", "000001", "600690"])
+
+    exp_data = ExposureCalculator.calculate_portfolio_exposures(w, mock_fm)
+    decomp = RiskDecomposer.decompose_portfolio_risk(w, pd.DataFrame())
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("组合年化波动率", f"{decomp['total_volatility_annual']*100:.2f}%")
+    c2.metric("Barra 风格风险占比", f"{decomp['factor_risk_pct']:.1f}%")
+    c3.metric("股票特质风险占比", f"{decomp['specific_risk_pct']:.1f}%")
+    c4.metric("跟踪误差 (Tracking Error)", f"{decomp['tracking_error_annual']*100:.2f}%")
+
+    st.divider()
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### 🏢 申万行业暴露度 (Industry Exposure)")
+        st.dataframe(pd.DataFrame(list(exp_data["industry_exposure"].items()), columns=["申万行业", "组合暴露权重"]), use_container_width=True)
+    with col2:
+        st.markdown("### 🎯 Style 风格因子暴露度 (Style Exposure)")
+        st.dataframe(pd.DataFrame(list(exp_data["style_exposure"].items()), columns=["Style 因子", "加权 Exposure"]), use_container_width=True)
+
+
 def render_settings():
     st.markdown("# ⚙️ Settings")
     st.caption("系统设置与缓存清理")
@@ -291,6 +327,8 @@ def main():
         render_research(services)
     elif "Backtest" in nav:
         render_backtest(services)
+    elif "Risk & Barra" in nav:
+        render_risk()
     elif "Portfolio" in nav:
         render_portfolio(portfolio_svc)
     elif "Experiments" in nav:
@@ -305,3 +343,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
