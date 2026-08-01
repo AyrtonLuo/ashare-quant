@@ -18,8 +18,8 @@ logger = logging.getLogger("futu_trader")
 
 # 尝试导入 futu SDK
 try:
+    import futu
     from futu import (
-        OpenTrdContext,
         TrdEnv,
         TrdMarket,
         TrdSide,
@@ -27,10 +27,17 @@ try:
         RET_OK,
         SecurityFirm
     )
-    HAS_FUTU_SDK = True
-except ImportError:
+    if hasattr(futu, 'OpenSecTradeContext'):
+        OpenTrdContext = futu.OpenSecTradeContext
+    elif hasattr(futu, 'OpenTrdContext'):
+        OpenTrdContext = futu.OpenTrdContext
+    else:
+        OpenTrdContext = None
+    HAS_FUTU_SDK = OpenTrdContext is not None
+except Exception as e:
     HAS_FUTU_SDK = False
-    logger.warning("未检测到 futu-api 包，将默认开启 Mock 试跑模式。")
+    OpenTrdContext = None
+    logger.warning(f"未成功导入 futu-api ({e})，将默认开启 Mock 试跑模式。")
 
 # A 股 -> 港股通 / AH 股港股代码映射表
 AH_STOCK_MAP = {
@@ -121,6 +128,7 @@ class FutuSimTrader:
             try:
                 # 初始化富途交易上下文 (连接 Mac 本地 OpenD 网关)
                 trd_ctx = OpenTrdContext(
+                    filter_trdmarket=TrdMarket.HK,
                     host=self.host,
                     port=self.port,
                     is_encrypt=False,
@@ -139,7 +147,7 @@ class FutuSimTrader:
 
             if is_connected and trd_ctx is not None:
                 # 1. 查询富途港股模拟盘账户资金状况 (TrdMarket.HK)
-                ret_acc, acc_df = trd_ctx.accinfo_query(trd_env=TrdEnv.SIMULATE, acc_id=0, trd_market=TrdMarket.HK)
+                ret_acc, acc_df = trd_ctx.accinfo_query(trd_env=TrdEnv.SIMULATE, acc_id=0)
                 if ret_acc == RET_OK and not acc_df.empty:
                     acc_row = acc_df.iloc[0]
                     total_assets = float(acc_row.get('total_assets', initial_mock_cash))
@@ -147,7 +155,7 @@ class FutuSimTrader:
                     market_value = float(acc_row.get('market_val', 0.0))
 
                 # 2. 查询富途港股模拟盘当前持仓 (TrdMarket.HK)
-                ret_pos, pos_df = trd_ctx.position_list_query(trd_env=TrdEnv.SIMULATE, acc_id=0, trd_market=TrdMarket.HK)
+                ret_pos, pos_df = trd_ctx.position_list_query(trd_env=TrdEnv.SIMULATE, acc_id=0)
                 if ret_pos == RET_OK and not pos_df.empty:
                     for _, pos_row in pos_df.iterrows():
                         code = str(pos_row['code'])
@@ -179,7 +187,7 @@ class FutuSimTrader:
                             trd_side=TrdSide.SELL,
                             order_type=OrderType.NORMAL,
                             trd_env=TrdEnv.SIMULATE,
-                            trd_market=TrdMarket.HK
+                            acc_id=0
                         )
                         status = "OpenD Submitted (HK)" if ret_order == RET_OK else f"Order Failed ({order_df})"
 
@@ -236,7 +244,7 @@ class FutuSimTrader:
                             trd_side=TrdSide.BUY,
                             order_type=OrderType.NORMAL,
                             trd_env=TrdEnv.SIMULATE,
-                            trd_market=TrdMarket.HK
+                            acc_id=0
                         )
                         status = "OpenD Submitted (HK)" if ret_order == RET_OK else f"Order Failed ({order_df})"
 
@@ -274,3 +282,63 @@ class FutuSimTrader:
                 "market_value": round(market_value, 2)
             }
         }
+
+    def get_futu_paper_account(self) -> Dict[str, Any]:
+        """
+        连接富途 OpenD 抓取真实富途模拟盘账号资金与持仓 (TrdEnv.SIMULATE)
+        """
+        if self.is_mock or not HAS_FUTU_SDK:
+            return {"is_connected": False, "mode": "Mock Local Engine"}
+
+        trd_ctx = None
+        try:
+            trd_ctx = OpenTrdContext(
+                filter_trdmarket=TrdMarket.HK,
+                host=self.host,
+                port=self.port,
+                is_encrypt=False,
+                security_firm=SecurityFirm.FUTUSECURITIES
+            )
+            # 1. 资金
+            ret_acc, acc_df = trd_ctx.accinfo_query(trd_env=TrdEnv.SIMULATE, acc_id=0)
+            total_assets, cash, market_val = 1000000.0, 1000000.0, 0.0
+            if ret_acc == RET_OK and not acc_df.empty:
+                r = acc_df.iloc[0]
+                total_assets = float(r.get('total_assets', 1000000.0))
+                cash = float(r.get('cash', 1000000.0))
+                market_val = float(r.get('market_val', 0.0))
+
+            # 2. 持仓
+            ret_pos, pos_df = trd_ctx.position_list_query(trd_env=TrdEnv.SIMULATE, acc_id=0)
+            pos_list = []
+            if ret_pos == RET_OK and not pos_df.empty:
+                for _, row in pos_df.iterrows():
+                    qty = int(row.get('qty', 0))
+                    if qty > 0:
+                        pos_list.append({
+                            "股票代码": str(row.get('code', '')),
+                            "股票名称": str(row.get('stock_name', '')),
+                            "总持股数": qty,
+                            "可卖股份 (T+1)": int(row.get('can_sell_qty', qty)),
+                            "持仓成本价": float(row.get('cost_price', 0.0)),
+                            "最新价": float(row.get('nominal_price', row.get('cost_price', 0.0))),
+                            "持仓市值": float(row.get('market_val', 0.0)),
+                            "浮动盈亏 %": float(row.get('pl_ratio', 0.0))
+                        })
+
+            return {
+                "is_connected": True,
+                "mode": f"Futu OpenD API (127.0.0.1:{self.port})",
+                "total_assets": round(total_assets, 2),
+                "cash": round(cash, 2),
+                "market_value": round(market_val, 2),
+                "positions_df": pd.DataFrame(pos_list) if pos_list else pd.DataFrame()
+            }
+        except Exception as e:
+            return {"is_connected": False, "mode": f"OpenD Connection Status ({e})"}
+        finally:
+            if trd_ctx is not None:
+                try:
+                    trd_ctx.close()
+                except Exception:
+                    pass

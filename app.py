@@ -1012,19 +1012,25 @@ elif menu == "AI优质精选榜单":
 
 
 # =============================================================================
-# 页面 1：🚀 智能跟投与一键调仓 (A-Share T+1 Paper Trading Console)
+# 页面 1：🚀 智能跟投与一键调仓 (Futu Niuniu OpenD API & A-Share T+1 Paper Trader)
 # =============================================================================
 elif menu == "🚀 智能跟投与一键调仓":
     st.header("🚀 智能跟投与一键调仓控制台")
-    st.caption("A股标准 🔴 红涨 🟢 跌配色 | 严格 T+1 可用/冻结股份管控 | 结合大盘量价的动态现金避险引擎。")
+    st.caption("A股标准 🔴 红涨 🟢 跌配色 | 支持 100% 对接富途牛牛模拟盘 API 账号 | 严格 T+1 与动态现金避险引擎。")
     
     from src.execution.paper_trader import PaperAccount
+    from src.execution.futu_trader import FutuSimTrader
     from src.strategy.risk_engine import DynamicCapitalAllocator
     from src.data.ashare_stream import start_stream_engine, get_stream_tick
     from src.strategy.portfolio_optimizer import auto_calculate_portfolio_size, filter_and_allocate_portfolio
     
     start_stream_engine()
     paper_acc = PaperAccount(initial_capital=1000000.0)
+    futu_trader = FutuSimTrader(host="127.0.0.1", port=11111)
+    futu_acc = futu_trader.get_futu_paper_account()
+    
+    # 对接富途 OpenD 模拟盘
+    use_futu_opend = st.toggle("🔌 对接 Mac 本地富途牛牛模拟盘 API (127.0.0.1:11111)", value=futu_acc['is_connected'], key="toggle_futu_opend")
     
     # 1. 评估大盘风控状态
     idx_tick = get_stream_tick("000001")
@@ -1049,7 +1055,21 @@ elif menu == "🚀 智能跟投与一键调仓":
             tick = get_stream_tick(sym)
             price_dict[sym] = float(tick.get('price') or r.get('close', 10.0))
             
-    acc_summary = paper_acc.get_summary(price_dict)
+    if use_futu_opend and futu_acc['is_connected']:
+        st.success(f"🟢 **富途牛牛模拟盘 API 连接成功** (`{futu_acc['mode']}`) | 正在实时读取富途官方模拟盘账户数据！")
+        acc_summary = {
+            "initial_capital": futu_acc['total_assets'],
+            "cash": futu_acc['cash'],
+            "market_value": futu_acc['market_value'],
+            "total_equity": futu_acc['total_assets'],
+            "pnl_pct": 0.0,
+            "positions_df": futu_acc['positions_df'],
+            "trade_logs_df": paper_acc.get_summary(price_dict)['trade_logs_df']
+        }
+    else:
+        if use_futu_opend:
+            st.warning(f"⚠️ 无法连接至 Mac 本地富途 OpenD 柜台 (127.0.0.1:11111)。已切换至本地仿真模拟盘引擎。({futu_acc.get('mode', '')})")
+        acc_summary = paper_acc.get_summary(price_dict)
     
     # 顶部 4 大核心 Metrics
     m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns([1.2, 1.2, 1.2, 1.5, 1])
@@ -1063,7 +1083,7 @@ elif menu == "🚀 智能跟投与一键调仓":
         st.write("")
         if st.button("🔄 重置账户", key="btn_reset_paper_account_t1", use_container_width=True):
             paper_acc.reset_account(1000000.0)
-            st.success("模拟账户资金与 T+1 持仓已重置！")
+            st.success("模拟账户资金与持仓已重置！")
             st.rerun()
 
     st.info(f"💡 **大盘风控智能研判**：{regime['advice']}")
@@ -1095,13 +1115,19 @@ elif menu == "🚀 智能跟投与一键调仓":
         st.caption("系统将自动依据当前大盘量价保留避险现金，并严格按 T+1 与 100 股向下取整执行买卖。")
         
         if st.button("⚡ 一键按动态权重自动调仓", key="btn_rebalance_t1", use_container_width=True, type="primary"):
-            with st.spinner("正在对比 T+1 可用持仓与动态现金门槛，模拟撮合下发订单..."):
-                reb_res = paper_acc.rebalance(target_p_df, market_regime_info=regime)
-                orders = reb_res.get('executed_orders', [])
-                if orders:
-                    st.success(f"🎉 调仓成功！下发 {len(orders)} 笔撮合订单 (已自动扣除 0.05% 印花税与 0.025% 佣金)。")
+            with st.spinner("正在计算最佳 Markowitz 权重，同步调仓至富途牛牛/模拟盘柜台..."):
+                if use_futu_opend and futu_acc['is_connected']:
+                    sync_res = futu_trader.execute_rebalance(target_p_df if not target_p_df.empty else engine_data['top_portfolio'])
+                    s_orders = sync_res['sell_orders']
+                    b_orders = sync_res['buy_orders']
+                    st.success(f"🎉 调仓指令已成功下发至富途牛牛模拟盘账号！(下发卖出单 {len(s_orders)} 笔，买入单 {len(b_orders)} 笔)")
                 else:
-                    st.info("当前持仓已与动态风险权重完全对齐，无需调仓。")
+                    reb_res = paper_acc.rebalance(target_p_df, market_regime_info=regime)
+                    orders = reb_res.get('executed_orders', [])
+                    if orders:
+                        st.success(f"🎉 调仓成功！下发 {len(orders)} 笔撮合订单 (已自动扣除 0.05% 印花税与 0.025% 佣金)。")
+                    else:
+                        st.info("当前持仓已与动态风险权重完全对齐，无需调仓。")
                 st.rerun()
 
         st.markdown("---")
