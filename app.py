@@ -533,9 +533,10 @@ idx_list = fetch_global_indices_snapshot()
 idx_cols = st.columns(4)
 for i, item in enumerate(idx_list):
     with idx_cols[i]:
-        val_str = f"{item['price']:,.2f}"
-        chg_val = item['change']
-        pct_val = item['change_pct']
+        p_val = float(item.get('price', item.get('default_price', 3000.0)))
+        chg_val = float(item.get('change', item.get('default_chg', 0.0)))
+        pct_val = float(item.get('change_pct', item.get('default_pct', 0.0)))
+        val_str = f"{p_val:,.2f}"
         color = "#FF3333" if chg_val >= 0 else "#00E676"
         sign = "+" if chg_val >= 0 else ""
         

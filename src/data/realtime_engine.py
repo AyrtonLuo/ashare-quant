@@ -27,10 +27,10 @@ def fetch_global_indices_snapshot() -> List[Dict[str, Any]]:
     获取全局四大核心大盘指数实时快照 (上证指数, 深证成指, 创业板指, 科创50)
     """
     indices_config = [
-        {"code": "000001", "name": "上证指数", "default_price": 3180.50, "default_chg": 18.60, "default_pct": 0.59},
-        {"code": "399001", "name": "深证成指", "default_price": 10250.80, "default_chg": 85.30, "default_pct": 0.84},
-        {"code": "399006", "name": "创业板指", "default_price": 2060.40, "default_chg": 22.15, "default_pct": 1.09},
-        {"code": "588000", "name": "科创50",   "default_price": 890.20,  "default_chg": -4.30, "default_pct": -0.48}
+        {"code": "000001", "name": "上证指数", "price": 3180.50, "change": 18.60, "change_pct": 0.59},
+        {"code": "399001", "name": "深证成指", "price": 10250.80, "change": 85.30, "change_pct": 0.84},
+        {"code": "399006", "name": "创业板指", "price": 2060.40, "change": 22.15, "change_pct": 1.09},
+        {"code": "588000", "name": "科创50",   "price": 890.20,  "change": -4.30, "change_pct": -0.48}
     ]
     
     results = []
@@ -42,9 +42,9 @@ def fetch_global_indices_snapshot() -> List[Dict[str, Any]]:
                 match = df_idx[df_idx['代码'].astype(str).str.contains(item['code'])]
                 if not match.empty:
                     row = match.iloc[0]
-                    p = float(row.get('最新价', item['default_price']))
-                    chg = float(row.get('涨跌额', item['default_chg']))
-                    pct = float(row.get('涨跌幅', item['default_pct']))
+                    p = float(row.get('最新价', item['price']))
+                    chg = float(row.get('涨跌额', item['change']))
+                    pct = float(row.get('涨跌幅', item['change_pct']))
                     results.append({
                         "code": item['code'],
                         "name": item['name'],
