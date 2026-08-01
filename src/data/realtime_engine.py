@@ -78,24 +78,23 @@ def get_realtime_quote(symbol: str) -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"get_realtime_quote({symbol}) 接口异常: {e}")
 
-    fallback_prices = {
-        "600519": 1450.0, "000001": 11.5, "600690": 23.2, "300308": 900.0, "600398": 7.5
-    }
-    base_p = fallback_prices.get(code6, 20.0)
     return {
         "symbol": code6,
         "name": f"股票_{code6}",
-        "open": float(base_p),
-        "high": float(base_p * 1.02),
-        "low": float(base_p * 0.98),
-        "close": float(base_p),
-        "price": float(base_p),
-        "prev_close": float(base_p),
-        "volume": 50000.0,
-        "amount": float(base_p * 500000.0),
+        "open": None,
+        "high": None,
+        "low": None,
+        "close": None,
+        "price": None,
+        "prev_close": None,
+        "volume": 0.0,
+        "amount": 0.0,
         "change_pct": 0.0,
         "code6": code6,
-        "prefix": prefix
+        "prefix": prefix,
+        "status": "DATA_UNAVAILABLE",
+        "source": None,
+        "is_real": False
     }
 
 
@@ -103,8 +102,9 @@ def get_realtime_quote(symbol: str) -> Dict[str, Any]:
 def fetch_global_indices_snapshot() -> List[Dict[str, Any]]:
     """
     获取全局四大核心大盘指数 100% 实时真实行情快照 (上证指数, 深证成指, 创业板指, 科创50)
+    真实 API 失败时强返回 DATA_UNAVAILABLE 状态对象，绝不伪造硬编码价格。
     """
-    url = "http://qt.gtimg.cn/q=sh000001,sz399001,sz399006,sh588000"
+    url = "http://qt.gtimg.cn/q=sh000001,sz399001,sz399006,sh588000,sh000300,sh000852"
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
     }
@@ -133,20 +133,25 @@ def fetch_global_indices_snapshot() -> List[Dict[str, Any]]:
                     "name": name,
                     "price": price,
                     "change": chg,
-                    "change_pct": pct
+                    "change_pct": pct,
+                    "status": "AVAILABLE",
+                    "source": "Tencent Realtime API",
+                    "is_real": True
                 })
     except Exception as e:
-        logger.warning(f"腾讯实时大盘接口异常 ({e})，使用自动保底配置...")
+        logger.warning(f"腾讯实时大盘接口异常 ({e})，标记 DATA_UNAVAILABLE...")
 
     if not results:
         results = [
-            {"code": "000001", "name": "上证指数", "price": 3832.26, "change": 27.57, "change_pct": 0.72},
-            {"code": "399001", "name": "深证成指", "price": 13578.93, "change": 293.13, "change_pct": 2.21},
-            {"code": "399006", "name": "创业板指", "price": 3343.96, "change": 99.35, "change_pct": 3.06},
-            {"code": "588000", "name": "科创50",   "price": 1.728,   "change": 0.059, "change_pct": 3.54}
+            {"code": "000001.SH", "name": "上证指数", "price": None, "change": 0.0, "change_pct": 0.0, "status": "DATA_UNAVAILABLE", "source": None, "is_real": False},
+            {"code": "399001.SZ", "name": "深证成指", "price": None, "change": 0.0, "change_pct": 0.0, "status": "DATA_UNAVAILABLE", "source": None, "is_real": False},
+            {"code": "399006.SZ", "name": "创业板指", "price": None, "change": 0.0, "change_pct": 0.0, "status": "DATA_UNAVAILABLE", "source": None, "is_real": False},
+            {"code": "000300.SH", "name": "沪深300",  "price": None, "change": 0.0, "change_pct": 0.0, "status": "DATA_UNAVAILABLE", "source": None, "is_real": False},
+            {"code": "000852.SH", "name": "中证1000", "price": None, "change": 0.0, "change_pct": 0.0, "status": "DATA_UNAVAILABLE", "source": None, "is_real": False}
         ]
 
     return results
+
 
 
 @st.cache_data(ttl=30, show_spinner=False)

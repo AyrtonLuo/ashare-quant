@@ -35,10 +35,38 @@ def fetch_realtime_quotes() -> pd.DataFrame:
 
 def get_single_stock_spot(symbol: str) -> Dict[str, Any]:
     """
-    获取单只股票的最新实时报价
+    获取单只股票或指数的最新实时报价
     """
     info = normalize_ashare_code(symbol)
     code6 = info["code6"]
+    suffix = info["suffix"]
+    is_index = info["is_index"]
+
+    if is_index:
+        from src.data.realtime_engine import fetch_global_indices_snapshot
+        snapshots = fetch_global_indices_snapshot()
+        for snap in snapshots:
+            snap_code = snap.get("code", "")
+            if snap_code in [suffix, code6, info["prefix"], f"{code6}.{info['market']}"]:
+                return {
+                    "symbol": suffix,
+                    "name": snap.get("name", info.get("name", suffix)),
+                    "price": snap.get("price"),
+                    "close": snap.get("price"),
+                    "change_pct": snap.get("change_pct", 0.0),
+                    "status": snap.get("status", "AVAILABLE"),
+                    "source": snap.get("source", "Realtime Index API"),
+                    "is_real": snap.get("is_real", True)
+                }
+        return {
+            "symbol": suffix,
+            "name": info.get("name", suffix),
+            "price": None,
+            "close": None,
+            "status": "DATA_UNAVAILABLE",
+            "source": None,
+            "is_real": False
+        }
 
     df = fetch_realtime_quotes()
     if not df.empty and '代码' in df.columns:
@@ -47,7 +75,7 @@ def get_single_stock_spot(symbol: str) -> Dict[str, Any]:
             row = sub.iloc[0]
             price = float(row.get('最新价', 0.0))
             return {
-                "symbol": code6,
+                "symbol": suffix,
                 "name": str(row.get('名称', code6)),
                 "price": price,
                 "close": price,
@@ -55,11 +83,15 @@ def get_single_stock_spot(symbol: str) -> Dict[str, Any]:
                 "volume": float(row.get('成交量', 0.0)),
                 "amount": float(row.get('成交额', 0.0)),
                 "turnover": float(row.get('换手率', 0.0)),
-                "vol_ratio": float(row.get('量比', 1.0))
+                "vol_ratio": float(row.get('量比', 1.0)),
+                "status": "AVAILABLE",
+                "source": "AkShare Realtime Spot API",
+                "is_real": True
             }
 
     from src.data.realtime_engine import get_realtime_quote
-    return get_realtime_quote(code6)
+    return get_realtime_quote(suffix)
+
 
 
 def fetch_historical_kline(symbol: str, period: str = "daily", adjust: str = "qfq") -> pd.DataFrame:

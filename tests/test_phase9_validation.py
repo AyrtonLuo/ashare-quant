@@ -36,21 +36,21 @@ def test_index_symbol_mapping():
 
 def test_market_data_integrity():
     p = DemoMarketDataProvider()
-    m = p.get_latest("000300")
-    assert m.symbol == "000300"
+    m = p.get_latest("000300.SH")
+    assert m.symbol == "000300.SH"
     assert m.close > 0.0
 
 
 def test_market_data_freshness():
     p = DemoMarketDataProvider()
-    m = p.get_latest("600519")
+    m = p.get_latest("600519.SH")
     assert m.timestamp is not None
     assert len(m.timestamp) > 0
 
 
 def test_provider_contract():
     p = DemoMarketDataProvider()
-    h = p.get_history("600519")
+    h = p.get_history("600519.SH")
     assert not h.empty
     assert "close" in h.columns
     assert "date" in h.columns
@@ -58,10 +58,11 @@ def test_provider_contract():
 
 def test_demo_mode():
     p = DemoMarketDataProvider()
-    df = p.get_history("600519")
+    df = p.get_history("600519.SH")
     assert len(df) > 500
-    m = p.get_latest("000001")
+    m = p.get_latest("000001.SH")
     assert m.close == 3280.50
+
 
 
 def test_multi_session_isolation(tmp_path):

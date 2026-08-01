@@ -1,7 +1,8 @@
 """
 demo_provider.py
 Product Demo Mode 确定性演示数据源 (DemoMarketDataProvider)
-解耦外部 API 与网络依赖，保证公网与无网络环境下 100% 功能完好可体验。
+解耦外部 API 与网络依赖，保证演练模式下功能完好体验。
+声明 data_mode="DEMO", is_real=False，严格与 RESEARCH MODE 隔离。
 """
 
 import pandas as pd
@@ -9,6 +10,7 @@ import numpy as np
 from typing import Dict, Any, List, Optional
 from src.data.models import MarketData
 from src.data.provider import MarketDataProvider
+from src.data.symbol_utils import normalize_ashare_code
 
 
 class DemoMarketDataProvider(MarketDataProvider):
@@ -16,17 +18,22 @@ class DemoMarketDataProvider(MarketDataProvider):
         pass
 
     def get_latest(self, symbol: str) -> MarketData:
+        info = normalize_ashare_code(symbol)
+        suffix = info["suffix"]
+        code6 = info["code6"]
+
         prices = {
-            "000001": 3280.50,
-            "399001": 10450.20,
-            "399006": 2180.10,
-            "000300": 3890.40,
-            "000852": 5600.30,
-            "600519": 1450.00
+            "000001.SH": 3280.50,
+            "000001.SZ": 11.63,
+            "399001.SZ": 10450.20,
+            "399006.SZ": 2180.10,
+            "000300.SH": 3890.40,
+            "000852.SH": 5600.30,
+            "600519.SH": 1450.00
         }
-        price = prices.get(symbol, 100.0)
+        price = prices.get(suffix, prices.get(code6, 100.0))
         return MarketData(
-            symbol=symbol,
+            symbol=suffix,
             timestamp=pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
             open=price * 0.995,
             high=price * 1.01,
@@ -35,7 +42,11 @@ class DemoMarketDataProvider(MarketDataProvider):
             volume=50000.0,
             amount=5000000.0,
             change_pct=0.82,
-            name=f"Demo_{symbol}"
+            name=f"Demo_{info['name']}",
+            source="DemoMarketDataProvider",
+            data_mode="DEMO",
+            is_real=False,
+            status="AVAILABLE"
         )
 
     def get_history(
@@ -71,4 +82,3 @@ class DemoMarketDataProvider(MarketDataProvider):
         for sym in symbols:
             res[sym] = self.get_history(sym, start_date=start_date, end_date=end_date)
         return res
-

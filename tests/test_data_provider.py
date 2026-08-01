@@ -69,4 +69,6 @@ def test_invalid_symbol(tmp_path):
     provider = AkShareProvider(cache=cache, use_cache=True)
     md = provider.get_latest("99999999")
     assert md is not None
-    assert md.symbol == "99999999"
+    assert md.status == "DATA_UNAVAILABLE"
+    assert md.close is None
+

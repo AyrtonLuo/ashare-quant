@@ -22,12 +22,13 @@ from src.execution.costs import RealisticTransactionCostModel
 
 def test_research_vs_demo_isolation():
     demo = DemoMarketDataProvider()
-    demo_quote = demo.get_latest("000001")
+    demo_quote = demo.get_latest("000001.SH")
     assert demo_quote.close == 3280.50
 
     cache = LocalCache()
     ak = AkShareProvider(cache=cache)
     assert ak is not None
+
 
 
 def test_stock_research_pipeline(tmp_path):

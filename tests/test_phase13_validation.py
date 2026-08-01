@@ -26,8 +26,9 @@ def test_external_data_cross_validation():
     provider = DemoMarketDataProvider()
     rep = ExternalDataValidator.validate_data(provider)
     assert rep.passed_count > 0
-    assert len(rep.audit_records) == 6
-    assert rep.audit_records[0]["status"] == "PASS"
+    assert len(rep.audit_records) == 7
+    assert rep.audit_records[0]["passed"] is True
+
 
 
 

@@ -153,21 +153,32 @@ def render_dashboard(portfolio_svc: PortfolioService, services: Dict[str, Any], 
 
 def render_market(services: Dict[str, Any]):
     st.markdown("# 📊 Market Overview & Stock Research Terminal")
-    st.caption("全市场 A 股盘口走势、严格指数映射代码与单股全景研报")
+    st.caption("全市场 A 股盘口走势、严格指数 Namespace 隔离与单股全景研报")
 
-    st.markdown("<span class='badge-verified'>● Market Data Verified</span> <span style='color:#8b949e; font-size:12px;'>Last Updated: 2026-08-01 15:00 CST</span>", unsafe_allow_html=True)
-    st.write("")
+    provider = services["provider"]
+    idx_symbols = [
+        ("000001.SH", "上证指数 (000001.SH)"),
+        ("399001.SZ", "深证成指 (399001.SZ)"),
+        ("399006.SZ", "创业板指 (399006.SZ)"),
+        ("000300.SH", "沪深300 (000300.SH)"),
+        ("000852.SH", "中证1000 (000852.SH)")
+    ]
 
-    m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("上证指数 (000001.SH)", "3,280.50", "+0.45%")
-    m2.metric("深证成指 (399001.SZ)", "10,450.20", "+0.68%")
-    m3.metric("创业板指 (399006.SZ)", "2,180.10", "+1.12%")
-    m4.metric("沪深300 (000300.SH)", "3,890.40", "+0.82%")
-    m5.metric("中证1000 (000852.SH)", "5,600.30", "+0.35%")
+    cols = st.columns(5)
+    for i, (sym, label) in enumerate(idx_symbols):
+        m_data = provider.get_latest(sym)
+        with cols[i]:
+            if m_data.status == "AVAILABLE" and m_data.close is not None:
+                st.metric(label, f"{m_data.close:,.2f}", f"{m_data.change_pct:+.2f}%")
+                st.caption(f"Source: {m_data.source or 'Real API'} ({m_data.data_mode})")
+            else:
+                st.metric(label, "N/A", "REAL DATA UNAVAILABLE")
+                st.caption("Status: DATA_UNAVAILABLE")
 
     st.divider()
     st.markdown("### 🔍 个股全景深度研报 (Stock Detail Research Pipeline)")
-    search_sym = st.text_input("输入股票代码 (如 600519, 000001, 300750, 601899)", value="600519")
+    search_sym = st.text_input("输入股票代码 (如 600519.SH, 000001.SZ, 300750.SZ, 601899.SH)", value="600519.SH")
+
 
     if st.button("🚀 检索个股全景研报", use_container_width=True):
         res_svc: ResearchService = services["research"]
