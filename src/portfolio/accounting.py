@@ -48,5 +48,7 @@ class PortfolioAccounting:
             "realized_pnl": round(self.realized_pnl, 2),
             "unrealized_pnl": round(tot_unrealized_pnl, 2),
             "total_pnl": round(total_pnl, 2),
-            "pnl_pct": round(pnl_pct, 2)
+            "pnl_pct": round(pnl_pct, 2),
+            "total_return_pct": round(pnl_pct, 2)
         }
+

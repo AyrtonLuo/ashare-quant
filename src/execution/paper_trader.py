@@ -198,9 +198,13 @@ class PaperAccount:
             "market_value": summary["market_value"],
             "total_equity": summary["equity"],
             "pnl_pct": summary["pnl_pct"],
-            "positions_df": pd.DataFrame(pos_list) if pos_list else pd.DataFrame(),
+            "total_return_pct": summary.get("total_return_pct", summary["pnl_pct"]),
+            "positions_df": pd.DataFrame(pos_list) if pos_list else pd.DataFrame(columns=[
+                "股票代码", "股票名称", "总持股数", "可卖股份 (T+1)", "今日买入冻结", "持仓成本价", "最新价", "持仓市值", "浮动盈亏 %"
+            ]),
             "trade_logs_df": pd.DataFrame(self.trade_logs) if self.trade_logs else pd.DataFrame()
         }
+
 
     def rebalance(self, target_portfolio: pd.DataFrame, market_regime_info: Dict[str, Any] = None) -> Dict[str, Any]:
         """
