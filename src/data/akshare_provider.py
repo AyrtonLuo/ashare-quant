@@ -64,6 +64,7 @@ class AkShareProvider(MarketDataProvider):
             cached_df = self.cache.load(code6)
             if cached_df is not None and not cached_df.empty:
                 df = cached_df.copy()
+                df['date'] = pd.to_datetime(df['date'])
                 if start_date:
                     df = df[df['date'] >= pd.to_datetime(start_date)]
                 if end_date:
@@ -74,6 +75,7 @@ class AkShareProvider(MarketDataProvider):
         if df is not None and not df.empty:
             if self.use_cache:
                 self.cache.save(code6, df)
+            df['date'] = pd.to_datetime(df['date'])
             if start_date:
                 df = df[df['date'] >= pd.to_datetime(start_date)]
             if end_date:

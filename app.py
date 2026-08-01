@@ -664,7 +664,7 @@ def main() -> None:
     summary = account.get_summary(price_map)
     render_header()
 
-    overview_tab, rebalance_tab, positions_tab, intel_tab = st.tabs(["总览", "调仓", "持仓", "情报"])
+    overview_tab, rebalance_tab, positions_tab, intel_tab, lab_tab = st.tabs(["总览", "调仓", "持仓", "情报", "🧪 Strategy Lab"])
 
     with overview_tab:
         render_overview(summary, market_regime, source_map)
@@ -682,6 +682,45 @@ def main() -> None:
             target_plan if "target_plan" in locals() else st.session_state["target_plan_cache"],
             summary,
         )
+
+    with lab_tab:
+        st.markdown("### 🧪 Strategy Lab (策略实验室)")
+        st.caption("基于 Phase 3 统一架构运行策略历史回测，包含防未来函数数据切片、A 股交易费用与动态大盘避险风控。")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            strat_choice = st.selectbox("选择策略", ["双均线择时 (MA5/10)"])
+        with col2:
+            freq_choice = st.selectbox("调仓频率", ["Daily (每日)", "Weekly (每周)", "Monthly (每季)"])
+        with col3:
+            bm_choice = st.selectbox("基准指数", ["000300 (沪深300)", "000905 (中证500)"])
+
+        if st.button("🚀 运行策略回测", use_container_width=True):
+            from src.strategy.ma_cross_strategy import MACrossStrategy
+            from src.backtest_engine_v2 import BacktestEngine2
+            freq_map = {"Daily (每日)": "daily", "Weekly (每周)": "weekly", "Monthly (每季)": "monthly"}
+            provider = get_market_provider()
+            strat = MACrossStrategy(symbols=["600519", "000001", "600690", "300308", "600398"])
+            engine = BacktestEngine2(
+                strategy=strat,
+                data_provider=provider,
+                initial_capital=1000000.0,
+                rebalance_frequency=freq_map[freq_choice],
+                risk_allocator=DynamicCapitalAllocator(index_price=sh_price, index_ma20=sh_price*0.98, market_volume_yi=9200.0)
+            )
+            with st.spinner("正在运行 Phase 3 统一架构回测..."):
+                hist_df, perf, _ = engine.run(
+                    symbols=["600519", "000001", "600690", "300308", "600398"],
+                    start_date="2023-01-01",
+                    end_date=pd.Timestamp.now().strftime("%Y-%m-%d"),
+                    benchmark_symbol=bm_choice.split(" ")[0]
+                )
+            st.success("回测完成！")
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("策略总收益率", perf["TotalReturnPct"])
+            m2.metric("年化夏普比率", str(perf["Sharpe"]))
+            m3.metric("最大回撤", perf["MaxDrawdownPct"])
+            m4.metric("基准收益率", perf["BenchmarkReturnPct"])
+            st.line_chart(hist_df.set_index("timestamp")[["equity", "cash", "market_value"]])
 
     if "target_plan" in locals():
         st.session_state["target_plan_cache"] = target_plan
