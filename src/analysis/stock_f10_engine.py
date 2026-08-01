@@ -97,66 +97,71 @@ def get_stock_kline_data(
     sub_df['date'] = pd.to_datetime(sub_df['date'])
     sub_df = sub_df.sort_values('date').reset_index(drop=True)
 
-    # 时间范围过滤
-    if time_range == "近半年":
-        sub_df = sub_df.tail(120).copy()
-    elif time_range == "近1年":
-        sub_df = sub_df.tail(250).copy()
-    elif time_range == "近3年":
-        sub_df = sub_df.tail(750).copy()
-
+    # 获取全量上市至今数据供重采样使用
     return sub_df
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def convert_kline_period(df: pd.DataFrame, period: str = "日K") -> pd.DataFrame:
+def convert_kline_period(df: pd.DataFrame, period: str = "日K", time_range: str = "上市至今") -> pd.DataFrame:
     """
-    多周期 K 线重采样引擎 (Resampling Engine):
-    - 日K: 原始日线数据
-    - 周K: 按周 (W) 重采样
-    - 月K: 按月 (M) 重采样
-    - 季K: 按季度 (Q) 重采样
-    - 年K: 按年度 (Y) 重采样
+    多周期 K 线重采样与智能切片引擎 (Resampling Engine):
+    - 在全量历史数据上进行周/月/季/年 K线重采样
+    - 根据周期自适应切割最合适数量的蜡烛图，保证各类周期 K 线丰满、美观、指标齐备
     """
-    if df is None or df.empty or period == "日K":
-        return df.copy()
+    if df is None or df.empty:
+        return pd.DataFrame()
 
     res = df.copy()
     res['date'] = pd.to_datetime(res['date'])
     res = res.sort_values('date').set_index('date')
 
-    rule_map = {
-        "周K": "W-FRI",
-        "月K": "ME" if hasattr(pd.Series, 'resample') else "M",
-        "季K": "QE" if hasattr(pd.Series, 'resample') else "Q",
-        "年K": "YE" if hasattr(pd.Series, 'resample') else "Y"
-    }
+    if period != "日K":
+        rule_map = {
+            "周K": "W-FRI",
+            "月K": "ME" if hasattr(pd.Series, 'resample') else "M",
+            "季K": "QE" if hasattr(pd.Series, 'resample') else "Q",
+            "年K": "YE" if hasattr(pd.Series, 'resample') else "Y"
+        }
 
-    rule = rule_map.get(period, "W-FRI")
+        rule = rule_map.get(period, "W-FRI")
 
-    try:
-        resampled = res.resample(rule).agg({
-            'open': 'first',
-            'high': 'max',
-            'low': 'min',
-            'close': 'last',
-            'volume': 'sum'
-        }).dropna(subset=['close']).reset_index()
-    except Exception:
-        fallback_rules = {"周K": "W", "月K": "M", "季K": "Q", "年K": "Y"}
-        resampled = res.resample(fallback_rules.get(period, "W")).agg({
-            'open': 'first',
-            'high': 'max',
-            'low': 'min',
-            'close': 'last',
-            'volume': 'sum'
-        }).dropna(subset=['close']).reset_index()
+        try:
+            resampled = res.resample(rule).agg({
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last',
+                'volume': 'sum'
+            }).dropna(subset=['close']).reset_index()
+        except Exception:
+            fallback_rules = {"周K": "W", "月K": "M", "季K": "Q", "年K": "Y"}
+            resampled = res.resample(fallback_rules.get(period, "W")).agg({
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last',
+                'volume': 'sum'
+            }).dropna(subset=['close']).reset_index()
 
-    if not resampled.empty and 'symbol' not in resampled.columns and not df.empty:
-        resampled['symbol'] = df['symbol'].iloc[0]
-        resampled['name'] = df['name'].iloc[0] if 'name' in df.columns else ""
+        if not resampled.empty and 'symbol' not in resampled.columns and not df.empty:
+            resampled['symbol'] = df['symbol'].iloc[0]
+            resampled['name'] = df['name'].iloc[0] if 'name' in df.columns else ""
+        resampled_df = resampled.reset_index(drop=True)
+    else:
+        resampled_df = res.reset_index()
 
-    return resampled.reset_index(drop=True)
+    # 时间范围自适应切片 (保证不同周期下均有丰满的蜡烛形态)
+    if time_range == "近半年":
+        limit_map = {"日K": 120, "周K": 26, "月K": 12, "季K": 8, "年K": 5}
+        resampled_df = resampled_df.tail(limit_map.get(period, 120)).copy()
+    elif time_range == "近1年":
+        limit_map = {"日K": 250, "周K": 52, "月K": 24, "季K": 12, "年K": 8}
+        resampled_df = resampled_df.tail(limit_map.get(period, 250)).copy()
+    elif time_range == "近3年":
+        limit_map = {"日K": 750, "周K": 156, "月K": 36, "季K": 16, "年K": 10}
+        resampled_df = resampled_df.tail(limit_map.get(period, 750)).copy()
+
+    return resampled_df.reset_index(drop=True)
 
 
 def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
@@ -355,19 +360,28 @@ def build_interactive_kline_chart(
     recent_start = date_str.iloc[-120] if len(date_str) > 120 else date_str.iloc[0]
     recent_end = date_str.iloc[-1]
 
-    # 计算休市日与节假日断层节点
-    all_days = pd.date_range(start=df['date'].min(), end=df['date'].max(), freq='D')
-    trading_set = set(date_str)
-    missing_dates = [d.strftime('%Y-%m-%d') for d in all_days if d.strftime('%Y-%m-%d') not in trading_set]
+    # 视口限制与休市日断层处理：仅对日 K 线开启缺失日期剔除；周/月/季/年 K 使用 category 坐标以防变形
+    is_daily = "日K" in stock_name or ("周K" not in stock_name and "月K" not in stock_name and "季K" not in stock_name and "年K" not in stock_name)
+    
+    if is_daily:
+        recent_start = date_str.iloc[-120] if len(date_str) > 120 else date_str.iloc[0]
+        recent_end = date_str.iloc[-1]
+        all_days = pd.date_range(start=df['date'].min(), end=df['date'].max(), freq='D')
+        trading_set = set(date_str)
+        missing_dates = [d.strftime('%Y-%m-%d') for d in all_days if d.strftime('%Y-%m-%d') not in trading_set]
 
-    r_breaks = [dict(bounds=["sat", "mon"])]
-    if missing_dates:
-        r_breaks.append(dict(values=missing_dates))
+        r_breaks = [dict(bounds=["sat", "mon"])]
+        if missing_dates:
+            r_breaks.append(dict(values=missing_dates))
 
-    # 彻底关闭 RangeSlider 溢出杂影，并剔除周末/节假日空白断层，保持交易日无缝顺畅连接
-    fig.update_xaxes(range=[recent_start, recent_end], rangebreaks=r_breaks, rangeslider_visible=False, row=1, col=1)
-    fig.update_xaxes(range=[recent_start, recent_end], rangebreaks=r_breaks, rangeslider_visible=False, row=2, col=1)
-    fig.update_xaxes(range=[recent_start, recent_end], rangebreaks=r_breaks, rangeslider_visible=False, row=3, col=1)
+        fig.update_xaxes(range=[recent_start, recent_end], rangebreaks=r_breaks, rangeslider_visible=False, row=1, col=1)
+        fig.update_xaxes(range=[recent_start, recent_end], rangebreaks=r_breaks, rangeslider_visible=False, row=2, col=1)
+        fig.update_xaxes(range=[recent_start, recent_end], rangebreaks=r_breaks, rangeslider_visible=False, row=3, col=1)
+    else:
+        # 周K、月K、季K、年K：使用 category 等距排列，彻底避免 Plotly 将大时间间隔当作断层拉扯变形
+        fig.update_xaxes(type='category', rangeslider_visible=False, row=1, col=1)
+        fig.update_xaxes(type='category', rangeslider_visible=False, row=2, col=1)
+        fig.update_xaxes(type='category', rangeslider_visible=False, row=3, col=1)
 
     # Y 轴自适应缩放与成交量格式化 (rangemode="normal" 放置主图 Y 轴伸拉至 0 刻度)
     fig.update_yaxes(rangemode="normal", zeroline=False, autorange=True, fixedrange=False, gridcolor="#2A2E39", showgrid=True, row=1, col=1)

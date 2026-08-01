@@ -242,9 +242,9 @@ def render_kline_with_dialog(symbol: str, name: str, df_composite: pd.DataFrame,
             key=f"time_range_slider_{key_prefix}_{sym}"
         )
 
-    # 1. 获取全量上市至今 K 线并按周期重采样
-    raw_kline = get_stock_kline_data(sym, name, df_composite, time_range=range_choice)
-    kline_df = convert_kline_period(raw_kline, period=period_choice)
+    # 1. 获取全量上市至今 K 线并按周期重采样与智能切片
+    raw_kline = get_stock_kline_data(sym, name, df_composite, time_range="上市至今")
+    kline_df = convert_kline_period(raw_kline, period=period_choice, time_range=range_choice)
     
     # 2. 绘制 Plotly K 线图表
     fig_kline = build_interactive_kline_chart(
