@@ -1,8 +1,9 @@
 """
 symbol_utils.py
 标准化 A 股代码与指数 Namespace 隔离解析工具库：
-1. 明确声明 INDEX_SYMBOLS 与 STOCK_SYMBOLS 注册表，100% 隔离上证指数 (000001.SH) 与平安银行 (000001.SZ)。
-2. 提供 normalize_ashare_code(symbol: str) 函数输出包含 code6, prefix, suffix, market, is_index 的元数据。
+1. 明确声明 INDEX_SYMBOLS, STOCK_SYMBOLS 与 CANONICAL_SYMBOL_NAMES 注册表。
+2. 100% 隔离上证指数 (000001.SH) 与平安银行 (000001.SZ)。
+3. 提供 normalize_ashare_code(symbol: str) 函数，保证输出字典必然包含 name 字段，杜绝 KeyError。
 """
 
 import re
@@ -25,6 +26,19 @@ STOCK_SYMBOLS = {
     "SMIC": "688981.SH",
 }
 
+CANONICAL_SYMBOL_NAMES = {
+    "000001.SH": "上证指数",
+    "000001.SZ": "平安银行",
+    "399001.SZ": "深证成指",
+    "399006.SZ": "创业板指",
+    "000300.SH": "沪深300",
+    "000852.SH": "中证1000",
+    "600519.SH": "贵州茅台",
+    "300750.SZ": "宁德时代",
+    "601899.SH": "紫金矿业",
+    "688981.SH": "中芯国际",
+}
+
 # 明确的指数映射词典
 EXPLICIT_INDEX_MAP = {
     "000001.SH": ("000001", "SH", "sh000001", "上证指数"),
@@ -44,11 +58,10 @@ EXPLICIT_INDEX_MAP = {
 }
 
 
-
 def normalize_ashare_code(symbol: str) -> Dict[str, Any]:
     """
     标准化 A 股股票与指数代码解析：
-    严格隔离 000001.SH (上证指数) 与 000001.SZ (平安银行)。
+    保证返回字典 100% 包含 'code6', 'prefix', 'suffix', 'market', 'name', 'is_index' 字段。
     """
     raw = str(symbol).strip().upper()
 
@@ -88,19 +101,26 @@ def normalize_ashare_code(symbol: str) -> Dict[str, Any]:
     else:
         market = "SZ"
 
+    suffix = f"{code6}.{market}"
+    prefix = f"{market.lower()}{code6}"
+
     # 若输入显式包含 .SH 且为 000001，定性为指数
     is_idx = (raw == "000001.SH") or (code6 in ["399001", "399006", "000300", "000852"] and market == "SH" and code6 != "000001")
     if code6 == "000001" and market == "SZ":
         is_idx = False
 
-    prefix = f"{market.lower()}{code6}"
-    suffix = f"{code6}.{market}"
+    name = CANONICAL_SYMBOL_NAMES.get(suffix)
+    if not name:
+        if code6 == "000001":
+            name = "上证指数" if is_idx else "平安银行"
+        else:
+            name = suffix
 
     return {
         "code6": code6,
         "prefix": prefix,
         "suffix": suffix,
         "market": market,
-        "name": "平安银行" if (code6 == "000001" and not is_idx) else code6,
+        "name": name,
         "is_index": is_idx
     }
