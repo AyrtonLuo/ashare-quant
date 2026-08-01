@@ -18,7 +18,9 @@ from src.data.akshare_provider import AkShareProvider
 from src.data.demo_provider import DemoMarketDataProvider
 from src.data.cache import LocalCache
 from src.data.symbol_utils import normalize_ashare_code
+from src.data.contract import normalize_market_data_contract
 from src.strategy.risk_engine import DynamicCapitalAllocator
+
 from src.experiments.registry import ExperimentRegistry
 from src.system.integrity import ResearchIntegrityChecker
 from src.system.health import SystemHealthMonitor
@@ -166,14 +168,16 @@ def render_market(services: Dict[str, Any]):
 
     cols = st.columns(5)
     for i, (sym, label) in enumerate(idx_symbols):
-        m_data = provider.get_latest(sym)
+        raw_quote = provider.get_latest(sym)
+        contract = normalize_market_data_contract(raw_quote)
         with cols[i]:
-            if m_data.status == "AVAILABLE" and m_data.close is not None:
-                st.metric(label, f"{m_data.close:,.2f}", f"{m_data.change_pct:+.2f}%")
-                st.caption(f"Source: {m_data.source or 'Real API'} ({m_data.data_mode})")
+            if contract.status == "AVAILABLE" and contract.close is not None:
+                st.metric(label, f"{contract.close:,.2f}", f"{contract.change_pct:+.2f}%")
+                st.caption(f"Source: {contract.source or 'Real API'} ({contract.data_mode})")
             else:
                 st.metric(label, "N/A", "REAL DATA UNAVAILABLE")
-                st.caption("Status: DATA_UNAVAILABLE")
+                st.caption(f"Status: {contract.status}")
+
 
     st.divider()
     st.markdown("### 🔍 个股全景深度研报 (Stock Detail Research Pipeline)")

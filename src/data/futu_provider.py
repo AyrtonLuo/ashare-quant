@@ -29,8 +29,10 @@ class FutuProvider(MarketDataProvider):
             symbol=symbol,
             timestamp=pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
             open=price, high=price, low=price, close=price,
-            volume=0.0, amount=0.0, change_pct=0.0, name=futu_code
+            volume=0.0, amount=0.0, change_pct=0.0, name=futu_code,
+            source="FutuSimTrader", data_mode="RESEARCH", is_real=True, status="AVAILABLE"
         )
+
 
     def get_history(self, symbol: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
         """
