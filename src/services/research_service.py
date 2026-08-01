@@ -43,6 +43,15 @@ class ResearchService:
             neutralize=neutralize
         )
 
+    def compute_factor_correlation_matrix(
+        self,
+        symbols: List[str],
+        cutoff_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        df = self.run_factor_analysis(symbols, cutoff_date=cutoff_date)
+        numeric_df = df.drop(columns=["symbol"], errors="ignore")
+        return numeric_df.corr().round(3)
+
     def create_multi_factor_strategy(
         self,
         symbols: List[str],
@@ -56,3 +65,4 @@ class ResearchService:
             neutralize=neutralize,
             top_k=top_k
         )
+

@@ -1,0 +1,39 @@
+{
+  "experiment_id": "exp_e2e",
+  "strategy_id": "E2E_Test_Strategy",
+  "universe": [
+    "600519"
+  ],
+  "date_range": "2026-07",
+  "benchmark": "000300",
+  "performance_metrics": {
+    "TotalReturn": 0.3748,
+    "TotalReturnPct": "37.48%",
+    "CAGR": 54.1909,
+    "CAGRPct": "5419.09%",
+    "Sharpe": 15.32,
+    "Sortino": 0.0,
+    "MaxDrawdown": 0.0002,
+    "MaxDrawdownPct": "0.02%",
+    "Volatility": 0.266,
+    "VolatilityPct": "26.60%",
+    "Calmar": 289018.32,
+    "BenchmarkReturn": 0.0,
+    "BenchmarkReturnPct": "0.00%",
+    "TradingDays": 20
+  },
+  "ml_metrics": {},
+  "factor_importances": {},
+  "decay_info": {
+    "annual_ics": {
+      "2023": 0.08,
+      "2024": 0.07,
+      "2025": 0.06
+    }
+  },
+  "overfitting_info": {
+    "train_sharpe": 1.6,
+    "val_sharpe": 1.5,
+    "test_sharpe": 15.32
+  }
+}
