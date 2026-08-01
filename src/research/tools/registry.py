@@ -61,18 +61,18 @@ class AgentToolRegistry:
         """统一派发执行工具，强制安全鉴权与留痕"""
         tool = cls.get(name)
 
-        # 1. 鉴权
-        tool.check_permission(context)
-
-        # 2. 生成参数哈希
+        # 生成参数哈希
         arg_str = f"{name}|{sorted(kwargs.items())}"
         arg_hash = hashlib.sha256(arg_str.encode("utf-8")).hexdigest()[:12]
 
         try:
-            # 3. 执行工具
+            # 1. 鉴权
+            tool.check_permission(context)
+
+            # 2. 执行工具
             result = tool.execute(context, **kwargs)
 
-            # 4. 留痕存证
+            # 3. 留痕存证
             record = ToolExecutionRecord(
                 run_id=context.run_id,
                 tool_name=name,
@@ -102,6 +102,7 @@ class AgentToolRegistry:
                 error=str(e),
                 warnings=[f"Tool [{name}] 执行异常: {str(e)}"]
             )
+
 
     @classmethod
     def get_execution_records(cls) -> List[ToolExecutionRecord]:

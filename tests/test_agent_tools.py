@@ -126,9 +126,18 @@ def test_market_tool_rejects_bare_symbol():
     assert "拒绝裸代码 '000001'" in res.error
 
 
-def test_factor_tool_uses_alpha_registry():
+def test_factor_tool_uses_alpha_registry(monkeypatch):
     services = get_services("RESEARCH MODE")
     context = ToolExecutionContext(mode="RESEARCH MODE", data_mode="RESEARCH", services=services)
+
+    mock_df = pd.DataFrame({
+        "timestamp": pd.date_range("2025-01-01", periods=30, freq="B"),
+        "close": np.linspace(1400, 1500, 30),
+        "volume": [1000] * 30,
+        "amount": [10000] * 30
+    })
+    provider = services["provider"]
+    monkeypatch.setattr(provider, "get_hist", lambda sym, s, e: mock_df)
 
     res = AgentToolRegistry.execute("compute_factor", context, alpha_id="MOM_20D", symbols=["600519.SH"])
     assert res.success is True
@@ -136,9 +145,19 @@ def test_factor_tool_uses_alpha_registry():
     assert res.evidence["alpha_id"] == "MOM_20D"
 
 
-def test_factor_tool_generates_evidence():
+
+def test_factor_tool_generates_evidence(monkeypatch):
     services = get_services("RESEARCH MODE")
     context = ToolExecutionContext(mode="RESEARCH MODE", data_mode="RESEARCH", services=services)
+
+    mock_df = pd.DataFrame({
+        "timestamp": pd.date_range("2025-01-01", periods=30, freq="B"),
+        "close": np.linspace(10, 15, 30),
+        "volume": [1000] * 30,
+        "amount": [10000] * 30
+    })
+    provider = services["provider"]
+    monkeypatch.setattr(provider, "get_hist", lambda sym, s, e: mock_df)
 
     res = AgentToolRegistry.execute("compute_factor", context, alpha_id="REV_20D", symbols=["000001.SZ"])
     assert res.success is True
@@ -146,6 +165,7 @@ def test_factor_tool_generates_evidence():
     assert len(evidences) == 1
     assert evidences[0]["symbol"] == "000001.SZ"
     assert evidences[0]["is_real"] is True
+
 
 
 def test_factor_tool_rejects_invalid_alpha():
@@ -211,14 +231,24 @@ def test_tool_result_has_evidence():
     assert res.evidence["scenarios_count"] > 0
 
 
-def test_end_to_end_agent_tool_pipeline():
+def test_end_to_end_agent_tool_pipeline(monkeypatch):
     """端到端: AgentToolRegistry -> Market Tool -> Research Provider -> MarketDataContract -> IntegrityGate -> Evidence"""
     services = get_services("RESEARCH MODE")
     context = ToolExecutionContext(mode="RESEARCH MODE", data_mode="RESEARCH", services=services, run_id="e2e_run_999")
 
+    mock_df = pd.DataFrame({
+        "timestamp": pd.date_range("2025-01-01", periods=30, freq="B"),
+        "close": np.linspace(1400, 1500, 30),
+        "volume": [1000] * 30,
+        "amount": [10000] * 30
+    })
+    provider = services["provider"]
+    monkeypatch.setattr(provider, "get_hist", lambda sym, s, e: mock_df)
+
     # 1. 查询行情
     r1 = AgentToolRegistry.execute("get_market_quote", context, symbol="600519.SH")
     assert r1.success is True
+
 
     # 2. 计算 Alpha
     r2 = AgentToolRegistry.execute("compute_factor", context, alpha_id="MOM_20D", symbols=["600519.SH"])

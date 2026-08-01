@@ -10,6 +10,9 @@ from src.data.contract import normalize_market_data_contract
 from src.system.integrity_gate import ResearchDataIntegrityGate, ResearchDataIntegrityError
 
 
+from src.factors.alpha_zoo.validation import validate_symbol_integrity, AlphaValidationError
+
+
 class GetMarketQuoteTool(AgentTool):
     name = "get_market_quote"
     description = "获取指定 A 股股票或指数的最新实时/盘后行情数据"
@@ -23,9 +26,15 @@ class GetMarketQuoteTool(AgentTool):
     permission = ToolPermission.READ_ONLY
 
     def execute(self, context: ToolExecutionContext, symbol: str, **kwargs) -> ToolResult:
+        try:
+            validate_symbol_integrity([symbol])
+        except AlphaValidationError as e:
+            return ToolResult(success=False, data=None, error=str(e), warnings=[str(e)])
+
         provider = context.services.get("provider")
         if not provider:
             return ToolResult(success=False, data=None, error="Provider Service 未注入 Tool 上下文")
+
 
         raw_quote = provider.get_latest(symbol)
         contract = normalize_market_data_contract(raw_quote)

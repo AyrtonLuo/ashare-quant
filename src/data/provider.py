@@ -25,3 +25,8 @@ class MarketDataProvider(ABC):
     def get_daily(self, symbols: List[str], start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, pd.DataFrame]:
         """批量获取多只股票日线"""
         pass
+
+    def get_hist(self, symbol: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
+        """获取前复权历史 K 线数据 (get_history 的别名)"""
+        return self.get_history(symbol, start_date, end_date)
+
