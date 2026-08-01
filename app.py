@@ -539,11 +539,11 @@ elif menu == "🔍 概念板块与龙头搜索":
     
     col_c1, col_c2 = st.columns([3, 1])
     with col_c1:
-        kw_input = st.text_input("🔍 输入概念板块关键词或股票代码/名称 (如：AI算力, 半导体, 600941):", "AI算力/半导体龙头")
+        kw_input = st.text_input("🔍 输入概念板块关键词或股票中文名称/代码 (如：双杰电气, 中国移动, 立讯精密, 002792):", "双杰电气", key="stock_search_input")
     with col_c2:
         st.write("")
         st.write("")
-        search_btn = st.button("🚀 检索龙头板块")
+        search_btn = st.button("🚀 检索龙头板块", key="btn_stock_search")
         
     search_res = search_concept_or_stock(kw_input, engine_data['df_composite'])
     
