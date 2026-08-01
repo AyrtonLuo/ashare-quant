@@ -104,7 +104,8 @@ def fetch_stock_specific_news(symbol: str, name: str) -> pd.DataFrame:
                 '新闻内容': 'content',
                 '发布时间': 'time',
                 '文章来源': 'source',
-                '新闻网址': 'url'
+                '新闻网址': 'url',
+                '新闻链接': 'url'
             })
             df['date'] = df['time'].astype(str).str[:10]
             df['full_text'] = df['title'].fillna('') + ' ' + df['content'].fillna('')
@@ -374,22 +375,19 @@ def get_stock_timeline_news(
                 "link_html": f'<a href="{art_url}" target="_blank" style="color: #1f77b4; font-weight: bold; text-decoration: none;">🔗 点击阅读【{source}】真实原文 ↗</a>'
             })
 
-    # 2. 如果专属新闻数量不足 5 条，仅补充与该个股所属行业强相关的全网新闻
+    # 2. 如果专属新闻数量较少，仅补充显式包含该股票/代码/特定概念的真实新闻
     if len(timeline_items) < 5:
         latest_market = fetch_latest_news(max_items=50)
         if not latest_market.empty:
-            industry_kws = ["家电", "智能家居", "消费", "半导体", "芯片", "新能源", "汽车", "电力", "特高压", "分红", "央企", "回购", "降息", "消费券", "补贴", "重组"]
             concept_kw = str(concept).replace("龙头", "").replace("板块", "").strip()
-            if concept_kw:
-                industry_kws.append(concept_kw[:2])
 
             for _, row in latest_market.iterrows():
                 title = str(row.get('title', '')).strip()
                 content = str(row.get('content', '')).strip()
                 text = title + " " + content
                 
-                # 严格相关性校验：必须包含个股名称、代码、或行业强相关关键词
-                is_relevant = (sym in text) or (clean_n in text) or any(kw in text for kw in industry_kws)
+                # 严格相关性校验：必须精准包含个股代码、股票名称、或特定板块名称
+                is_relevant = (sym in text) or (clean_n in text) or (len(concept_kw) >= 2 and concept_kw in text)
                 if not is_relevant or not title or title in seen_titles:
                     continue
                 seen_titles.add(title)
