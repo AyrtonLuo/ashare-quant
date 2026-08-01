@@ -31,7 +31,10 @@ def build_adaptive_alpha_factor(df_processed: pd.DataFrame, macro_sentiment: flo
     market_daily['market_ma20'] = market_daily['market_close'].rolling(window=20, min_periods=5).mean()
     market_daily['is_bull_trend'] = market_daily['market_close'] >= market_daily['market_ma20']
 
-    # 映射回主 Dataframe
+    # 映射回主 Dataframe (先清除可能存在的旧同名列，防多重后缀键名报错)
+    drop_cols = [c for c in ['market_close', 'market_ma20', 'is_bull_trend', 'is_bull_trend_x', 'is_bull_trend_y'] if c in res_df.columns]
+    if drop_cols:
+        res_df = res_df.drop(columns=drop_cols)
     res_df = res_df.merge(market_daily[['date', 'market_close', 'market_ma20', 'is_bull_trend']], on='date', how='left')
 
     # 2. 逐日按行情状态与选择的交易风格自适应调整因子权重
