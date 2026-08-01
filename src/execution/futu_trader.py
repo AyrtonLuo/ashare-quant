@@ -97,6 +97,17 @@ def to_ashare_symbol(futu_code: str) -> str:
     return str(futu_code)
 
 
+def is_opend_port_open(host: str = "127.0.0.1", port: int = 11111, timeout: float = 0.1) -> bool:
+    """极速 5 毫秒检测 OpenD 套接字端口是否在本地处于开启监听状态，防止 socket 超时导致 Streamlit 页面冻结"""
+    import socket
+    try:
+        s = socket.create_connection((host, int(port)), timeout=timeout)
+        s.close()
+        return True
+    except Exception:
+        return False
+
+
 class FutuSimTrader:
     """富途港股模拟交易执行器 (TrdMarket.HK)"""
 
@@ -124,7 +135,7 @@ class FutuSimTrader:
         trd_ctx = None
         is_connected = False
 
-        if not self.is_mock and HAS_FUTU_SDK:
+        if not self.is_mock and HAS_FUTU_SDK and is_opend_port_open(self.host, self.port):
             try:
                 # 初始化富途交易上下文 (连接 Mac 本地 OpenD 网关)
                 trd_ctx = OpenTrdContext(
@@ -287,8 +298,8 @@ class FutuSimTrader:
         """
         连接富途 OpenD 抓取真实富途模拟盘账号资金与持仓 (TrdEnv.SIMULATE)
         """
-        if self.is_mock or not HAS_FUTU_SDK:
-            return {"is_connected": False, "mode": "Mock Local Engine"}
+        if self.is_mock or not HAS_FUTU_SDK or not is_opend_port_open(self.host, self.port, timeout=0.1):
+            return {"is_connected": False, "mode": "OpenD Gateway Disconnected"}
 
         trd_ctx = None
         try:
