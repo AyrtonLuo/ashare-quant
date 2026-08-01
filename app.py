@@ -177,26 +177,80 @@ def cached_social_sentiment(symbol: str, name: str, alpha_score: float = 0.1):
 
 def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.DataFrame):
     """
-    同花顺 F10 级单股 AI 深度诊断专区全景面板：
-    1. 📈 K线图与均线/MACD 技术指标 Plotly 交互图表 (MA5/10/20/60 + 成交量 + MACD)
-    2. 🏛️ 机构共识评级与业绩基本面 F10 速览卡片
-    3. 📜 近 1~6 个月全景新闻与催化剂时间线 (带分类标签与 ⭐️ 评级，倒序排列)
-    4. 🔥 散户与社会情绪风向标
+    同花顺 / TradingView 级单股全景 K 线行情终端与 F10 诊断面板：
+    1. 控制栏布局 (Controls Box):
+       - col1: K线周期 st.radio ("日K", "周K", "月K", "季K", "年K")
+       - col2: 主图叠加 st.selectbox ("均线系统 (MA)", "布林通道 (BOLL)", "无")
+       - col3: 副图指标 st.selectbox ("MACD (平滑异同)", "KDJ (随机指标)", "RSI (相对强弱)", "成交量均线")
+       - col4: 时间范围 st.select_slider ("近半年", "近1年", "近3年", "上市至今")
+    2. 📈 TradingView 暗黑专业级 K 线 Plotly 图表
+    3. 🏛️ 机构评级共识与 F10 基本面速览
+    4. 📜 1~6 个月全景倒序事件时间线
+    5. 🔥 散户情绪风向标
     """
-    from src.analysis.stock_f10_engine import get_stock_kline_data, build_interactive_kline_chart, get_broker_ratings_and_f10
+    from src.analysis.stock_f10_engine import (
+        get_stock_kline_data,
+        convert_kline_period,
+        build_interactive_kline_chart,
+        get_broker_ratings_and_f10
+    )
     from src.analysis.news_analyzer import get_stock_timeline_news
     
     sym = str(symbol).zfill(6)
     
     st.markdown("---")
-    st.subheader(f"📌 [{sym} {name}] 同花顺 F10 级全景诊断与技术面智脑")
+    st.subheader(f"📌 [{sym} {name}] TradingView 级专业 K 线终端 & F10 全景智脑")
     
-    # 1. 📈 K线图与均线/MACD 技术指标
-    kline_df = get_stock_kline_data(sym, name, df_composite, days=120)
-    fig_kline = build_interactive_kline_chart(kline_df, stock_name=f"{sym} {name}")
+    # 顶部多维度交互控制栏
+    ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([2.2, 1.2, 1.2, 1.4])
+    
+    with ctrl_col1:
+        period_choice = st.radio(
+            "⏱️ K 线周期:",
+            ["日K", "周K", "月K", "季K", "年K"],
+            index=0,
+            horizontal=True,
+            key=f"kline_period_radio_{sym}"
+        )
+        
+    with ctrl_col2:
+        main_ind_choice = st.selectbox(
+            "📐 主图技术叠加:",
+            ["均线系统 (MA)", "布林通道 (BOLL)", "无"],
+            index=0,
+            key=f"main_ind_select_{sym}"
+        )
+        
+    with ctrl_col3:
+        sub_ind_choice = st.selectbox(
+            "📊 副图技术指标:",
+            ["MACD (平滑异同)", "KDJ (随机指标)", "RSI (相对强弱)", "成交量均线"],
+            index=0,
+            key=f"sub_ind_select_{sym}"
+        )
+        
+    with ctrl_col4:
+        range_choice = st.select_slider(
+            "⏳ 显示时间范围:",
+            options=["近半年", "近1年", "近3年", "上市至今"],
+            value="上市至今",
+            key=f"time_range_slider_{sym}"
+        )
+
+    # 1. 获取全量上市至今 K 线并按周期重采样
+    raw_kline = get_stock_kline_data(sym, name, df_composite, time_range=range_choice)
+    kline_df = convert_kline_period(raw_kline, period=period_choice)
+    
+    # 2. 绘制 Plotly 极客暗黑 K 线图表
+    fig_kline = build_interactive_kline_chart(
+        kline_df,
+        stock_name=f"{sym} {name} ({period_choice})",
+        main_indicator=main_ind_choice,
+        sub_indicator=sub_ind_choice
+    )
     st.plotly_chart(fig_kline, use_container_width=True)
     
-    # 2. 🏛️ 机构评级共识与业绩基本面 F10 模块
+    # 3. 🏛️ 机构评级共识与业绩基本面 F10 模块
     latest_price = float(kline_df['close'].iloc[-1]) if not kline_df.empty else 10.0
     f10_info = get_broker_ratings_and_f10(sym, name, latest_price=latest_price)
     
@@ -210,7 +264,7 @@ def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.Da
     
     st.info(f"📊 **估值与基本面速览**: 动态 PE `{f10_info['pe_ratio']}` | PB 市净率 `{f10_info['pb_ratio']}` | 估值百分位 `{f10_info['percentile']}`")
     
-    # 3. 📜 近 1~6 个月全景新闻与催化剂时间线流 (倒序排列)
+    # 4. 📜 近 1~6 个月全景新闻与催化剂时间线流 (倒序排列)
     st.markdown("---")
     st.markdown(f"#### 📜 [{sym} {name}] 近 1~6 个月全景事件与催化剂时间线 (最新事件倒序排列)")
     
@@ -238,7 +292,7 @@ def render_f10_stock_diagnosis_panel(symbol: str, name: str, df_composite: pd.Da
         st.markdown(f"- ⏱️ `[{t_stamp}]` `{badge}` **{title}** ({stars}) — {link_h}", unsafe_allow_html=True)
         st.caption(f"   影响评估: {summary}")
         
-    # 4. 🔥 散户与社会情绪风向标
+    # 5. 🔥 散户与社会情绪风向标
     st.markdown("---")
     soc_res = cached_social_sentiment(sym, name, alpha_score=0.8)
     st.markdown(f"##### 🔥 [{name}] 散户与社会情绪智脑 (`⏱️ 上次更新: {soc_res.get('update_time', '')}`)")
