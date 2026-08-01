@@ -664,7 +664,7 @@ elif menu == "⚡ 当日实时分时行情看板":
     
     col_rt1, col_rt2, col_rt3 = st.columns([2.5, 1.5, 1.2])
     with col_rt1:
-        stock_query = st.text_input("输入股票代码或中文名称 (如：002792 双杰电气 / 300308 中际旭创):", "002792 双杰电气", key="realtime_stock_input")
+        stock_query = st.text_input("输入股票代码或中文名称 (如：002792 通宇通讯 / 300308 中际旭创 / 300390 天华新能 / 300444 双杰电气):", "002792 通宇通讯", key="realtime_stock_input")
     with col_rt2:
         auto_refresh = st.toggle("⏱️ 开启秒级实时刷盘", value=False, key="toggle_auto_refresh")
     with col_rt3:
@@ -673,12 +673,25 @@ elif menu == "⚡ 当日实时分时行情看板":
         if st.button("刷新分时行情", key="btn_refresh_intraday"):
             st.rerun()
 
-    sym_clean = stock_query.split(" ")[0].strip().zfill(6)
-    name_clean = stock_query.split(" ")[-1].strip() if " " in stock_query else sym_clean
+    # 智能提取 6 位股票代码与中文简称
+    digits6 = re.findall(r'\d{6}', stock_query)
+    if digits6:
+        sym_clean = digits6[0]
+    else:
+        digits_any = re.findall(r'\d+', stock_query)
+        if digits_any:
+            sym_clean = digits_any[0].zfill(6)
+        else:
+            match_df = engine_data['df_composite'][engine_data['df_composite']['name'].astype(str).str.contains(stock_query.strip(), case=False)] if 'name' in engine_data['df_composite'].columns else pd.DataFrame()
+            if not match_df.empty:
+                sym_clean = str(match_df.iloc[0]['symbol']).zfill(6)
+            else:
+                sym_clean = "002792"
     
-    with st.spinner(f"⚡ 正在极速连接 240 分钟分时通道 [{sym_clean} {name_clean}]..."):
+    with st.spinner(f"⚡ 正在极速连接 240 分钟分时通道 [{sym_clean}]..."):
+        snap = get_stock_level2_snapshot(sym_clean)
+        name_clean = snap['name']
         df_min = get_intraday_min_data(sym_clean)
-        snap = get_stock_level2_snapshot(sym_clean, name_clean)
     
     col_main, col_level2 = st.columns([3, 1.2])
     
@@ -721,7 +734,7 @@ elif menu == "全市场概念板块与龙头识别":
     
     col_c1, col_c2 = st.columns([3, 1])
     with col_c1:
-        kw_input = st.text_input("输入概念板块关键词或股票中文名称/代码 (如：双杰电气, 中国移动, 立讯精密, 002792):", "AI算力/半导体龙头", key="stock_search_input")
+        kw_input = st.text_input("输入概念板块关键词或股票中文名称/代码 (如：通宇通讯 002792, 双杰电气 300444, 中国移动 600941):", "AI算力/半导体龙头", key="stock_search_input")
     with col_c2:
         st.write("")
         st.write("")
