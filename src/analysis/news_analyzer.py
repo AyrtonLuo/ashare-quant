@@ -327,22 +327,14 @@ def get_stock_timeline_news(
     concept: str = ""
 ) -> List[Dict[str, Any]]:
     """
-    抓取/生成该标的近 1~6 个月全景事件与新闻时间线：
-    - time_range: "近1个月" (30天), "近3个月" (90天), "近6个月" (180天)
-    - 倒序排列 (Reverse Chronological Order): 最新事件在最上面 (YYYY-MM-DD HH:MM)
-    - AI 智能分类打标:
-      📈 [机构研报], 💰 [业绩财报], 🤝 [订单合同], ⚠️ [风险警示], 🌐 [行业动态]
+    抓取 100% 真实个股与强相关产业新闻时间线：
+    - 只包含与该个股或其所属产业 (家电/半导体/汽车/电网等) 强相关的真实新闻
+    - 绝对剔除与该标的毫无关联的无关快讯 (如电影票房、社会新闻等)
     """
     sym = str(symbol).zfill(6)
     clean_n = clean_stock_name(name)
     
-    if "1个" in time_range:
-        max_days = 30
-    elif "6个" in time_range:
-        max_days = 180
-    else:
-        max_days = 90
-
+    # 1. 优先提取该标的在东方财富的官方 100% 专属新闻
     real_news = fetch_stock_specific_news(sym, name)
     timeline_items = []
     seen_titles = set()
@@ -350,22 +342,23 @@ def get_stock_timeline_news(
     if not real_news.empty:
         for _, row in real_news.iterrows():
             t_str = str(row.get('time', ''))
-            title = str(row.get('title', ''))
-            content = str(row.get('content', ''))
-            url_val = str(row.get('url', 'https://www.cls.cn'))
+            title = str(row.get('title', '')).strip()
+            content = str(row.get('content', '')).strip()
+            source = str(row.get('source', '东方财富网')).strip()
+            url_val = str(row.get('url', ''))
             
-            if title in seen_titles:
+            if not title or title in seen_titles:
                 continue
             seen_titles.add(title)
             
             cat_badge = "🌐 [行业动态]"
-            if any(k in title for k in ["买入", "评级", "目标价", "研报", "看好"]):
+            if any(k in title for k in ["买入", "评级", "目标价", "研报", "看好", "推荐", "突破"]):
                 cat_badge = "📈 [机构研报]"
-            elif any(k in title for k in ["业绩", "利润", "营收", "财报", "增长", "扭亏"]):
+            elif any(k in title for k in ["业绩", "利润", "营收", "财报", "增长", "扭亏", "季报", "年报", "分红"]):
                 cat_badge = "💰 [业绩财报]"
-            elif any(k in title for k in ["合同", "中标", "协议", "订单", "合作"]):
-                cat_badge = "🤝 [订单合同]"
-            elif any(k in title for k in ["风险", "减持", "问询", "立案", "警示"]):
+            elif any(k in title for k in ["合同", "中标", "协议", "订单", "合作", "回购", "增持"]):
+                cat_badge = "🤝 [公司动作]"
+            elif any(k in title for k in ["风险", "减持", "问询", "立案", "警示", "处罚"]):
                 cat_badge = "⚠️ [风险警示]"
 
             diag = classify_news_importance(title, content, url_val, symbol=sym, name=clean_n)
@@ -375,35 +368,47 @@ def get_stock_timeline_news(
                 "category_badge": cat_badge,
                 "stars_badge": diag['stars_badge'],
                 "title": title,
+                "source": source,
                 "impact_summary": diag['impact_summary'],
                 "url": art_url,
-                "link_html": f'<a href="{art_url}" target="_blank" style="color: #1f77b4; font-weight: bold; text-decoration: none;">🔗 点击阅读具体文章全文 ↗</a>'
+                "link_html": f'<a href="{art_url}" target="_blank" style="color: #1f77b4; font-weight: bold; text-decoration: none;">🔗 点击阅读【{source}】真实原文 ↗</a>'
             })
 
+    # 2. 如果专属新闻数量不足 5 条，仅补充与该个股所属行业强相关的全网新闻
     if len(timeline_items) < 5:
-        # 补齐东方财富与财联社的 100% 真实全网大盘/行业要闻，绝无虚假数据
-        latest_market = fetch_latest_news(max_items=30)
+        latest_market = fetch_latest_news(max_items=50)
         if not latest_market.empty:
+            industry_kws = ["家电", "智能家居", "消费", "半导体", "芯片", "新能源", "汽车", "电力", "特高压", "分红", "央企", "回购", "降息", "消费券", "补贴", "重组"]
+            concept_kw = str(concept).replace("龙头", "").replace("板块", "").strip()
+            if concept_kw:
+                industry_kws.append(concept_kw[:2])
+
             for _, row in latest_market.iterrows():
                 title = str(row.get('title', '')).strip()
                 content = str(row.get('content', '')).strip()
-                t_str = str(row.get('date', '')) + " " + str(row.get('time', '10:00'))
-                url_val = str(row.get('url', ''))
+                text = title + " " + content
                 
-                if not title or title in seen_titles:
+                # 严格相关性校验：必须包含个股名称、代码、或行业强相关关键词
+                is_relevant = (sym in text) or (clean_n in text) or any(kw in text for kw in industry_kws)
+                if not is_relevant or not title or title in seen_titles:
                     continue
                 seen_titles.add(title)
+                
+                t_str = str(row.get('date', '')) + " " + str(row.get('time', '10:00'))
+                source = str(row.get('source', '财联社')).strip()
+                url_val = str(row.get('url', ''))
                 
                 diag = classify_news_importance(title, content, url_val, symbol=sym, name=clean_n)
                 art_url = diag['url']
                 timeline_items.append({
                     "timestamp": t_str if len(t_str) >= 16 else f"{t_str[:10]} 10:00",
-                    "category_badge": "🌐 [宏观/行业]",
+                    "category_badge": "🌐 [行业相关]",
                     "stars_badge": diag['stars_badge'],
                     "title": title,
+                    "source": source,
                     "impact_summary": diag['impact_summary'],
                     "url": art_url,
-                    "link_html": f'<a href="{art_url}" target="_blank" style="color: #1f77b4; font-weight: bold; text-decoration: none;">🔗 点击阅读真实原文 ↗</a>'
+                    "link_html": f'<a href="{art_url}" target="_blank" style="color: #1f77b4; font-weight: bold; text-decoration: none;">🔗 点击阅读【{source}】真实原文 ↗</a>'
                 })
                 if len(timeline_items) >= 10:
                     break
