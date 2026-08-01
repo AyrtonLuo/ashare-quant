@@ -1027,10 +1027,13 @@ elif menu == "🚀 智能跟投与一键调仓":
     start_stream_engine()
     paper_acc = PaperAccount(initial_capital=1000000.0)
     
+    from src.execution.futu_trader import is_opend_port_open
+    auto_detect_connected = is_opend_port_open("127.0.0.1", 11111)
+    
     # 对接富途 OpenD 模拟盘
     c_f1, c_f2 = st.columns([2.5, 1.5])
     with c_f1:
-        use_futu_opend = st.toggle("🔌 对接富途牛牛模拟盘 API (Futu OpenD Gateway)", value=False, key="toggle_futu_opend")
+        use_futu_opend = st.toggle("🔌 对接富途牛牛模拟盘 API (Futu OpenD Gateway)", value=auto_detect_connected, key="toggle_futu_opend")
     with c_f2:
         opend_host = st.text_input("OpenD 网关 IP (Mac 本地为 127.0.0.1):", value="127.0.0.1", key="input_opend_host")
         
