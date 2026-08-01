@@ -177,9 +177,12 @@ def cached_social_sentiment(symbol: str, name: str, alpha_score: float = 0.1):
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_and_process_quant_engine(style: str = "⚖️ 攻守兼备型 (自适应)"):
-    """读取本地 Parquet 数据，并运行 AI 多因子计算、IC 诊断与风控回测"""
     if not os.path.exists(DAILY_PARQUET):
-        update_quality_universe_data(max_workers=8)
+        try:
+            update_quality_universe_data(max_workers=4)
+        except Exception as e:
+            st.error(f"⚠️ 无法自动下载 A 股全量历史数据: {e}")
+            st.stop()
         
     raw_df = pd.read_parquet(DAILY_PARQUET)
     raw_df['date'] = pd.to_datetime(raw_df['date'])
