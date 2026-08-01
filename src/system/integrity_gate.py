@@ -32,5 +32,16 @@ class ResearchDataIntegrityGate:
         if hasattr(data_obj, "is_real") and not getattr(data_obj, "is_real"):
             raise ResearchDataIntegrityError(f"[{context}] RESEARCH DATA INTEGRITY ERROR: 非真实行情数据禁止注入研究引擎")
 
-        if hasattr(data_obj, "source") and getattr(data_obj, "source") is None:
-            raise ResearchDataIntegrityError(f"[{context}] RESEARCH DATA INTEGRITY ERROR: 数据源头元数据 (Source Metadata) 缺失")
+        if hasattr(data_obj, "symbol"):
+            sym = str(getattr(data_obj, "symbol")).strip().upper()
+            if sym == "000001":
+                raise ResearchDataIntegrityError(f"[{context}] RESEARCH DATA INTEGRITY ERROR: 拒绝裸代码 '000001'，必须为 '000001.SH' 或 '000001.SZ'")
+            
+            # 特别断言：000001.SH 绝不能包含 Ping An Bank 价格
+            if sym == "000001.SH" and hasattr(data_obj, "close"):
+                c_val = getattr(data_obj, "close")
+                if c_val is not None and isinstance(c_val, (int, float)) and c_val < 500:
+                    raise ResearchDataIntegrityError(
+                        f"[{context}] RESEARCH DATA INTEGRITY ERROR: 发现上证指数 (000001.SH) 数据被平安银行 (价格 {c_val}) 污染！"
+                    )
+
