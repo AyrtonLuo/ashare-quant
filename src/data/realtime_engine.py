@@ -259,10 +259,43 @@ def fetch_realtime_stock_data(symbol: str) -> Dict[str, Any]:
 @st.cache_data(ttl=30, show_spinner=False)
 def get_intraday_min_data(symbol: str) -> pd.DataFrame:
     """
-    获取个股 100% 真实当日/最近交易日 240 分钟 1 分钟分时数据 (包含 真实价格, VWAP 均价, 成交量, 昨收基准, 涨跌幅)
+    获取个股 100% 真实当日/最近交易日 240 分钟 1 分钟分时数据 (基于 AkShare 官方接口 ak.stock_zh_a_hist_min_em)
     """
-    code = str(symbol).zfill(6)
-    prefix = "sh" if code.startswith(("6", "9", "5")) else "sz"
+    info = normalize_ashare_code(symbol)
+    code = info["code6"]
+    prefix = info["prefix"]
+
+    # 0. 优先使用 AkShare 官方标准接口 ak.stock_zh_a_hist_min_em 获取 1 分钟级分时
+    try:
+        min_df = ak.stock_zh_a_hist_min_em(symbol=code, period='1', adjust='qfq')
+        if min_df is not None and not min_df.empty:
+            min_df = min_df.rename(columns={
+                '时间': 'time', '收盘': 'price', '成交量': 'volume'
+            })
+            min_df['time'] = min_df['time'].astype(str).str[-8:-3]
+            pre_close = float(min_df['price'].iloc[0])
+            records = []
+            cum_vol = 0.0
+            cum_amt = 0.0
+            for _, row in min_df.iterrows():
+                p = float(row['price'])
+                v = float(row['volume'])
+                cum_vol += v
+                cum_amt += p * v
+                vwap = cum_amt / cum_vol if cum_vol > 0 else p
+                records.append({
+                    "time": str(row['time']),
+                    "price": round(p, 2),
+                    "vwap": round(vwap, 2),
+                    "volume": round(v, 0),
+                    "pre_close": pre_close,
+                    "chg_pct": round(((p - pre_close) / pre_close * 100.0) if pre_close > 0 else 0.0, 2)
+                })
+            if records:
+                return pd.DataFrame(records)
+    except Exception as ex:
+        logger.warning(f"AkShare 官方 1 分钟分时接口异常 ({ex})，尝试备用真实分时通道...")
+
     secid = f"1.{code}" if code.startswith(("6", "9", "5")) else f"0.{code}"
     
     # 1. 尝试从 Eastmoney 历史/实时分时行情接口抓取 100% 真实 240 分钟 Tick
