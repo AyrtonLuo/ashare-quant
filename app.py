@@ -1106,7 +1106,13 @@ elif menu == "🚀 智能跟投与一键调仓":
 - 💡 **解决方案 (2 种方式)**：
   1. **Mac 本地直连模式 (推荐)**：在 Mac 终端运行 `./venv/bin/streamlit run app.py` 打开 `http://localhost:8501`，即可秒级连上您 Mac 上的富途 OpenD！
   2. **IP 局域网直连**：若您在 Mac 上的 Futu OpenD 勾选了“允许局域网连接”，可在右上角输入框中填写您 Mac 的局域网 IP (如 `192.168.x.x`)。
-- 此时控制台已自动为您开启**全功能 100% 仿真模拟盘**，您可以照常体验动态调仓与持仓盈亏！
+""")
+        st.info("""
+💻 **当前交易模式：【本网站内置高仿真模拟盘引擎 (Built-in Web Simulator)】**
+- **账户属性**：Web 平台内置独立沙盒模拟盘账户（全功能体验，与券商隔离，无需安装第三方软件）
+- **交易规则**：100% 遵守 A 股交易规则（严格 T+1 规则、100 股一手向下取整、0.05% 印花税 + 0.025% 佣金）
+- **行情推流**：已对接 1s 极速 A 股盘口实时数据流
+- 💡 *提示：若需对接富途牛牛账号，请勾选上方【🔌 对接富途牛牛模拟盘 API】*
 """)
         acc_summary = paper_acc.get_summary(price_dict)
     
@@ -1231,7 +1237,8 @@ elif menu == "🚀 智能跟投与一键调仓":
     st.markdown("---")
 
     # 下部 Tab 栏：📦 当前持仓明细 & 📜 调仓历史交易日志
-    tab_p1, tab_p2 = st.tabs(["📦 当前持仓明细 (A股 T+1 规则 / 富途模拟盘)", "📜 调仓历史交易日志 (印花税+佣金明细)"])
+    tab_title = "📦 当前持仓明细 (富途牛牛模拟盘)" if (use_futu_opend and futu_acc['is_connected']) else "📦 当前持仓明细 (本网站内置高仿真模拟盘)"
+    tab_p1, tab_p2 = st.tabs([tab_title, "📜 调仓历史交易日志 (印花税+佣金明细)"])
     
     with tab_p1:
         pos_df = acc_summary['positions_df']
