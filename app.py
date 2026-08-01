@@ -1012,117 +1012,161 @@ elif menu == "AI优质精选榜单":
 
 
 # =============================================================================
-# 页面 1：🚀 智能跟投与一键调仓 (Paper Trading & Rebalance Console)
+# 页面 1：🚀 智能跟投与一键调仓 (A-Share T+1 Paper Trading Console)
 # =============================================================================
 elif menu == "🚀 智能跟投与一键调仓":
     st.header("🚀 智能跟投与一键调仓控制台")
-    st.caption("基于全自动 Alpha 选股与 Markowitz 二次规划调权算子，提供极简 100% 仿真模拟盘自动交易与一键调仓。")
+    st.caption("A股标准 🔴 红涨 🟢 跌配色 | 严格 T+1 可用/冻结股份管控 | 结合大盘量价的动态现金避险引擎。")
     
     from src.execution.paper_trader import PaperAccount
+    from src.strategy.risk_engine import DynamicCapitalAllocator
+    from src.data.ashare_stream import start_stream_engine, get_stream_tick
     from src.strategy.portfolio_optimizer import auto_calculate_portfolio_size, filter_and_allocate_portfolio
     
+    start_stream_engine()
     paper_acc = PaperAccount(initial_capital=1000000.0)
     
-    # 算目标持仓
+    # 1. 评估大盘风控状态
+    idx_tick = get_stream_tick("000001")
+    sh_price = float(idx_tick.get("price", 3200.0))
+    sh_ma20 = float(sh_price * 0.985)
+    sh_vol_yi = float(idx_tick.get("amount_wan", 4500000.0)) / 10000.0 * 2.1
+    
+    allocator = DynamicCapitalAllocator(sh_price, sh_ma20, sh_vol_yi)
+    regime = allocator.evaluate_market_regime()
+    
+    # 2. 计算策略目标持仓
     styled_pool = get_styled_recommendations(engine_data['df_composite'], style_choice, top_pct=0.20)
     auto_n = auto_calculate_portfolio_size(paper_acc.cash)
     alloc_res = filter_and_allocate_portfolio(styled_pool, total_capital=paper_acc.initial_capital, target_count=auto_n)
     target_p_df = alloc_res['portfolio_df']
     
-    # 构建价格字典
+    # 3. 价格字典
     price_dict = {}
     if not target_p_df.empty:
         for _, r in target_p_df.iterrows():
-            price_dict[str(r['symbol']).zfill(6)] = float(r.get('close', 10.0))
+            sym = str(r['symbol']).zfill(6)
+            tick = get_stream_tick(sym)
+            price_dict[sym] = float(tick.get('price') or r.get('close', 10.0))
             
     acc_summary = paper_acc.get_summary(price_dict)
     
-    # 1. 顶部：账户资产核心 Metrics (st.metric)
-    m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns([1.2, 1.2, 1.2, 1.2, 1])
+    # 顶部 4 大核心 Metrics
+    m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns([1.2, 1.2, 1.2, 1.5, 1])
     m_col1.metric("总资产", f"¥{acc_summary['total_equity']:,.2f}")
     m_col2.metric("可用现金", f"¥{acc_summary['cash']:,.2f}")
     m_col3.metric("持仓市值", f"¥{acc_summary['market_value']:,.2f}")
     
-    pnl_color = "normal" if acc_summary['pnl_pct'] == 0 else ("inverse" if acc_summary['pnl_pct'] < 0 else "normal")
-    m_col4.metric("累计收益率", f"{acc_summary['pnl_pct']:+.2f}%", delta=f"{acc_summary['pnl_pct']:+.2f}%", delta_color=pnl_color)
+    m_col4.metric("大盘风控模式", regime['regime'], delta=f"建议现金保留 {regime['cash_reserve_pct']:.0f}%", delta_color="off")
     
     with m_col5:
         st.write("")
-        if st.button("🔄 重置账户", key="btn_reset_paper_account", use_container_width=True):
+        if st.button("🔄 重置账户", key="btn_reset_paper_account_t1", use_container_width=True):
             paper_acc.reset_account(1000000.0)
-            st.success("模拟账户资金已重置为 ¥1,000,000.00！")
+            st.success("模拟账户资金与 T+1 持仓已重置！")
             st.rerun()
+
+    st.info(f"💡 **大盘风控智能研判**：{regime['advice']}")
+    st.markdown("---")
+    
+    # 中部：资产分布 Plotly 环形图 & 调仓大按钮
+    col_chart1, col_chart2 = st.columns([1.5, 1.5])
+    
+    with col_chart1:
+        st.markdown("#### 💰 资产配置分布 (持仓股票 vs 避险现金)")
+        donut_data = pd.DataFrame([
+            {"类别": "股票持仓市值", "金额 (元)": acc_summary['market_value']},
+            {"类别": "避险现金储备", "金额 (元)": acc_summary['cash']}
+        ])
+        fig_donut = px.pie(
+            donut_data,
+            values="金额 (元)",
+            names="类别",
+            hole=0.5,
+            color="类别",
+            color_discrete_map={"股票持仓市值": "#FF3333", "避险现金储备": "#00E676"}
+        )
+        fig_donut.update_traces(textinfo="label+percent+value")
+        fig_donut.update_layout(template="plotly_dark", height=320, margin=dict(l=20, r=20, t=30, b=20))
+        st.plotly_chart(fig_donut, use_container_width=True)
+
+    with col_chart2:
+        st.markdown("#### ⚡ 动态风控一键调仓")
+        st.caption("系统将自动依据当前大盘量价保留避险现金，并严格按 T+1 与 100 股向下取整执行买卖。")
+        
+        if st.button("⚡ 一键按动态权重自动调仓", key="btn_rebalance_t1", use_container_width=True, type="primary"):
+            with st.spinner("正在对比 T+1 可用持仓与动态现金门槛，模拟撮合下发订单..."):
+                reb_res = paper_acc.rebalance(target_p_df, market_regime_info=regime)
+                orders = reb_res.get('executed_orders', [])
+                if orders:
+                    st.success(f"🎉 调仓成功！下发 {len(orders)} 笔撮合订单 (已自动扣除 0.05% 印花税与 0.025% 佣金)。")
+                else:
+                    st.info("当前持仓已与动态风险权重完全对齐，无需调仓。")
+                st.rerun()
+
+        st.markdown("---")
+        auto_stream_toggle = st.toggle("⏱️ 开启 1s 秒级实时行情刷盘", value=False, key="toggle_auto_stream")
+        if auto_stream_toggle:
+            st.caption("实时刷盘开启中：每秒极速同步腾讯实时盘口与持仓浮动盈亏。")
 
     st.markdown("---")
     
-    # 2. 中部：调仓执行控制台
-    c_btn1, c_btn2 = st.columns([2, 2])
-    with c_btn1:
-        if st.button("⚡ 一键完成模拟盘调仓", key="btn_one_click_rebalance", use_container_width=True, type="primary"):
-            with st.spinner("正在根据最新 Markowitz 最佳权重与一手 (100股) 规则自动比对差额并撮合调仓..."):
-                reb_res = paper_acc.rebalance(target_p_df)
-                orders = reb_res.get('executed_orders', [])
-                if orders:
-                    st.success(f"🎉 调仓成功！共完成 {len(orders)} 笔自动撮合订单（买入/卖出已自动扣除 0.03% 模拟印花佣金）。")
-                else:
-                    st.info("当前持仓已与 Markowitz 目标权重完全对齐，无需调仓。")
-                st.rerun()
-
-    with c_btn2:
-        auto_reb_toggle = st.toggle("⏱️ 开启每日盘后自动模拟调仓", value=False, key="toggle_auto_paper_rebalance")
-        if auto_reb_toggle:
-            st.caption("自动跟投开启中：系统检测到新调仓周期时将自动对齐 Markowitz 目标权重。")
-
-    st.markdown("#### 🎯 策略调仓预演对比 (当前持仓 vs Markowitz 目标权重)")
-    
     # 调仓预演对比表
+    st.markdown("#### 🎯 T+1 调仓预演对比 (当前持仓 vs 动态 Markowitz 目标)")
     preview_rows = []
     if not target_p_df.empty:
         for _, r in target_p_df.iterrows():
             sym = str(r['symbol']).zfill(6)
             name = str(r['name'])
-            price = float(r.get('close', 10.0))
-            target_w = float(r.get('Markowitz 建议权重 %', 0.0))
+            price = float(price_dict.get(sym, r.get('close', 10.0)))
+            raw_w = float(r.get('Markowitz 建议权重 %', 0.0))
+            scaled_w = raw_w * (regime['equity_cap_pct'] / 100.0)
             
             curr_pos = paper_acc.positions.get(sym, {})
-            curr_shares = curr_pos.get('shares', 0)
-            curr_val = curr_shares * price
+            curr_tot = curr_pos.get('shares', 0)
+            curr_usable = curr_pos.get('usable_shares', curr_tot)
+            curr_frozen = curr_pos.get('frozen_shares', 0)
+            
+            curr_val = curr_tot * price
             curr_w = (curr_val / acc_summary['total_equity'] * 100.0) if acc_summary['total_equity'] > 0 else 0.0
             
-            target_amt = acc_summary['total_equity'] * (target_w / 100.0)
+            target_amt = (acc_summary['total_equity'] * (regime['equity_cap_pct'] / 100.0)) * (raw_w / 100.0)
             target_hands = int(target_amt // (price * 100))
             target_shares = target_hands * 100
-            diff_shares = target_shares - curr_shares
+            diff_shares = target_shares - curr_tot
             
             action = "持平"
             if diff_shares > 0:
-                action = f"买入 +{diff_shares} 股"
+                action = f"买入 +{diff_shares} 股 (T+1冻结)"
             elif diff_shares < 0:
-                action = f"卖出 {diff_shares} 股"
+                sellable = min(abs(diff_shares), curr_usable)
+                action = f"卖出 {sellable} 股" if sellable > 0 else "受限 T+1 无法卖出"
                 
             preview_rows.append({
                 "股票代码": sym,
                 "股票名称": name,
-                "当前持股数": curr_shares,
+                "当前总持股": curr_tot,
+                "可卖股份 (T+1)": curr_usable,
+                "今日买入冻结": curr_frozen,
                 "当前持仓权重 %": round(curr_w, 2),
-                "策略目标权重 %": round(target_w, 2),
-                "拟买卖动作与数量": action
+                "动态风控目标权重 %": round(scaled_w, 2),
+                "拟买卖动作": action
             })
 
     if preview_rows:
-        st.dataframe(pd.DataFrame(preview_rows).style.background_gradient(subset=['策略目标权重 %'], cmap='Reds'), use_container_width=True)
+        st.dataframe(pd.DataFrame(preview_rows).style.background_gradient(subset=['动态风控目标权重 %'], cmap='Reds'), use_container_width=True)
 
     st.markdown("---")
 
-    # 3. 下部：两大核心明细表 (当前持仓明细 & 调仓历史交易日志)
-    tab_p1, tab_p2 = st.tabs(["📦 当前持仓明细 (Current Positions)", "📜 调仓历史交易日志 (Trade History Log)"])
+    # 下部 Tab 栏：📦 当前持仓明细 & 📜 调仓历史交易日志
+    tab_p1, tab_p2 = st.tabs(["📦 当前持仓明细 (A股 T+1 规则)", "📜 调仓历史交易日志 (印花税+佣金明细)"])
     
     with tab_p1:
         pos_df = acc_summary['positions_df']
         if not pos_df.empty:
             st.dataframe(pos_df.style.background_gradient(subset=['浮动盈亏 %'], cmap='RdYlGn'), use_container_width=True)
         else:
-            st.info("当前模拟盘暂无任何股票持仓，请点击上方【⚡ 一键完成模拟盘调仓】完成初始建仓！")
+            st.info("当前模拟盘暂无任何股票持仓，请点击上方【⚡ 一键按动态权重自动调仓】完成建仓！")
 
     with tab_p2:
         log_df = acc_summary['trade_logs_df']
