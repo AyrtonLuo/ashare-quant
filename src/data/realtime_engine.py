@@ -392,8 +392,10 @@ def build_realtime_intraday_chart(df_min: pd.DataFrame, stock_name: str = "") ->
         row=1, col=1
     )
     
-    # 4. 分时成交量柱状图 (涨红跌绿)
-    vol_colors = np.where(prices >= pre_close, "#FF3333", "#00E676")
+    # 4. 分时成交量柱状图 (对比前一分钟价格：上涨/持平显示高亮红 #FF3333，下跌显示高亮绿 #00E676)
+    price_diff = prices.diff()
+    price_diff.iloc[0] = prices.iloc[0] - pre_close
+    vol_colors = np.where(price_diff >= 0, "#FF3333", "#00E676")
     fig.add_trace(
         go.Bar(
             x=times,

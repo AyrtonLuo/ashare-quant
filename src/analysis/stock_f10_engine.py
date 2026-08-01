@@ -577,8 +577,9 @@ def build_intraday_minute_chart(date_str: str, open_p: float, high_p: float, low
         row=1, col=1
     )
     
-    # Row 2: 分时成交量柱
-    vol_colors = np.where(prices >= open_p, "#FF3333", "#00E676")
+    # Row 2: 分时成交量柱 (对比前一分钟价格：上涨/持平显示红柱 #FF3333，下跌显示绿柱 #00E676)
+    p_diff = np.diff(np.insert(prices, 0, open_p))
+    vol_colors = np.where(p_diff >= 0, "#FF3333", "#00E676")
     fig.add_trace(
         go.Bar(
             x=time_labels,
