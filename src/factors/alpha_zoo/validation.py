@@ -111,6 +111,17 @@ def validate_pit_compliance(alpha: AlphaDefinition) -> bool:
     return True
 
 
+def validate_pit_cutoff_date(trading_date: str, publication_date: str) -> bool:
+    """断言财报发布日必须 <= 交易切片日，禁止未来财报暴露"""
+    t_date = pd.to_datetime(trading_date)
+    p_date = pd.to_datetime(publication_date)
+    if p_date > t_date:
+        raise AlphaValidationError(
+            f"PIT 未来财报泄露拦截：财报发布日 {publication_date} > 当前交易日 {trading_date}！"
+        )
+    return True
+
+
 def validate_alpha(alpha: AlphaDefinition, sample_df: Optional[pd.DataFrame] = None) -> Tuple[bool, List[str]]:
     """完整 5 维 Alpha 校验流"""
     warnings: List[str] = []
@@ -122,3 +133,4 @@ def validate_alpha(alpha: AlphaDefinition, sample_df: Optional[pd.DataFrame] = N
         return True, warnings
     except AlphaValidationError as e:
         return False, [str(e)]
+
