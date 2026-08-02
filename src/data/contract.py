@@ -9,7 +9,9 @@ contract.py
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, Any, Optional, List
+import hashlib
 import pandas as pd
+
 from src.data.symbol_utils import normalize_ashare_code, CANONICAL_SYMBOL_NAMES
 
 
@@ -286,6 +288,55 @@ class HistoricalMarketDataContract:
     source: str = "MarketDataProvider"
     data_mode: str = "RESEARCH"
     is_real: bool = True
+
+
+class CrossSourceStatus(str, Enum):
+    """跨数据源交叉验证状态"""
+    EXACT_MATCH = "EXACT_MATCH"
+    ACCEPTABLE_DIFFERENCE = "ACCEPTABLE_DIFFERENCE"
+    SOURCE_CONFLICT = "SOURCE_CONFLICT"
+    SOURCE_UNAVAILABLE = "SOURCE_UNAVAILABLE"
+
+
+@dataclass
+class ExternalDataEvidenceRecord:
+    """外部真实 API 数据对账存证卡片 (ExternalDataEvidenceRecord)"""
+    symbol: str
+    provider: str
+    provider_symbol: str
+    field: str
+    raw_value: Any
+    normalized_value: Any
+    trading_date: str
+    fetch_timestamp: str
+    source: str
+    data_mode: str = "RESEARCH"
+    is_real: bool = True
+    cross_source_status: str = CrossSourceStatus.EXACT_MATCH.value
+    evidence_hash: str = ""
+
+    def __post_init__(self):
+        if not self.evidence_hash:
+            raw_str = f"{self.symbol}|{self.provider}|{self.field}|{self.raw_value}|{self.normalized_value}|{self.trading_date}"
+            self.evidence_hash = hashlib.sha256(raw_str.encode("utf-8")).hexdigest()[:16]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "symbol": self.symbol,
+            "provider": self.provider,
+            "provider_symbol": self.provider_symbol,
+            "field": self.field,
+            "raw_value": self.raw_value,
+            "normalized_value": self.normalized_value,
+            "trading_date": self.trading_date,
+            "fetch_timestamp": self.fetch_timestamp,
+            "source": self.source,
+            "data_mode": self.data_mode,
+            "is_real": self.is_real,
+            "cross_source_status": self.cross_source_status,
+            "evidence_hash": self.evidence_hash
+        }
+
 
 
 
