@@ -1,0 +1,22 @@
+[
+  {"symbol": "600519.SH", "name": "贵州茅台", "category": "Large Cap / High Margin", "list_date": "2001-08-27", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "000001.SZ", "name": "平安银行", "category": "High Dividend Bank", "list_date": "1991-04-03", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "000858.SZ", "name": "五粮液", "category": "Large Cap Liquor", "list_date": "1998-04-27", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "601318.SH", "name": "中国平安", "category": "Financial Insurance", "list_date": "2007-03-01", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "600900.SH", "name": "长江电力", "category": "Utility High Dividend", "list_date": "2003-11-18", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "300750.SZ", "name": "宁德时代", "category": "ChiNext Growth / Lithium", "list_date": "2018-06-11", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "688981.SH", "name": "中芯国际", "category": "STAR Market Semiconductor", "list_date": "2020-07-16", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "000002.SZ", "name": "万科A", "category": "Real Estate Corporate Action", "list_date": "1991-01-29", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "600000.SH", "name": "示例亏损股", "category": "Negative EPS Loss Stock", "list_date": "1999-11-10", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "600001.SH", "name": "退市科技", "category": "Delisted Security Case", "list_date": "2000-01-01", "delist_date": "2020-05-01", "status": "DELISTED"},
+  {"symbol": "600519_2020", "symbol_real": "600519.SH", "name": "茅台历史2020时期", "category": "Historical Era 2020", "list_date": "2001-08-27", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "000651.SZ", "name": "格力电器", "category": "Consumer Appliance", "list_date": "1996-11-18", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "600276.SH", "name": "恒瑞医药", "category": "Pharma Healthcare", "list_date": "2000-10-18", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "601899.SH", "name": "紫金矿业", "category": "Cyclical Mining", "list_date": "2008-04-25", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "002415.SZ", "name": "海康威视", "category": "Tech Hardware", "list_date": "2010-05-28", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "600036.SH", "name": "招商银行", "category": "Banking Financial", "list_date": "2002-04-09", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "002594.SZ", "name": "比亚迪", "category": "EV Automotive", "list_date": "2011-06-30", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "601012.SH", "name": "隆基绿能", "category": "Solar Photovoltaic", "list_date": "2012-04-11", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "300059.SZ", "name": "东方财富", "category": "Fintech Brokerage", "list_date": "2010-03-19", "delist_date": null, "status": "ACTIVE"},
+  {"symbol": "600028.SH", "name": "中国石化", "category": "State Energy Giant", "list_date": "2001-08-08", "delist_date": null, "status": "ACTIVE"}
+]
