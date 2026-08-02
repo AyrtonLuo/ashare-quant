@@ -7,7 +7,8 @@ contract.py
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional
+from enum import Enum
+from typing import Dict, Any, Optional, List
 from src.data.symbol_utils import normalize_ashare_code, CANONICAL_SYMBOL_NAMES
 
 
@@ -140,6 +141,14 @@ def normalize_market_data_contract(data_obj: Any) -> MarketDataContract:
     if close_val is None:
         close_val = _safe_get(data_obj, "price")
 
+    if close_val is not None:
+        try:
+            f_close = float(close_val)
+            if f_close != f_close:  # NaN check
+                close_val = None
+        except (ValueError, TypeError):
+            close_val = None
+
     status_val = _safe_get(data_obj, "status")
     source_val = _safe_get(data_obj, "source")
     data_mode_val = str(_safe_get(data_obj, "data_mode", "RESEARCH"))
@@ -158,6 +167,7 @@ def normalize_market_data_contract(data_obj: Any) -> MarketDataContract:
         status_val = "UNAVAILABLE"
     elif not status_val or status_val == "DATA_UNAVAILABLE":
         status_val = "AVAILABLE"
+
 
     if raw_is_real is not None:
         is_real_val = bool(raw_is_real)
@@ -181,4 +191,85 @@ def normalize_market_data_contract(data_obj: Any) -> MarketDataContract:
         data_mode=data_mode_val,
         is_real=is_real_val
     )
+
+
+class ErrorStatus(str, Enum):
+    """全平台统一错误状态枚举"""
+    AVAILABLE = "AVAILABLE"
+    DATA_UNAVAILABLE = "DATA_UNAVAILABLE"
+    DATA_INSUFFICIENT = "DATA_INSUFFICIENT"
+    INVALID_SYMBOL = "INVALID_SYMBOL"
+    INVALID_DATE = "INVALID_DATE"
+    PIT_REJECTED = "PIT_REJECTED"
+    SOURCE_ERROR = "SOURCE_ERROR"
+    CALCULATION_ERROR = "CALCULATION_ERROR"
+
+
+@dataclass
+class FundamentalDataContract:
+    """全平台统一基本面数据契约 (FundamentalDataContract)"""
+    symbol: str
+    trading_date: str
+    fiscal_period: str
+    publication_date: str
+    effective_date: str
+    pe_ttm: Optional[float] = None
+    pb: Optional[float] = None
+    roe: Optional[float] = None
+    eps: Optional[float] = None
+    revenue: Optional[float] = None
+    net_profit: Optional[float] = None
+    source: str = "PIT Fundamental Provider"
+    status: str = ErrorStatus.AVAILABLE.value
+    is_real: bool = True
+    data_mode: str = "RESEARCH"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "symbol": self.symbol,
+            "trading_date": self.trading_date,
+            "fiscal_period": self.fiscal_period,
+            "publication_date": self.publication_date,
+            "effective_date": self.effective_date,
+            "pe_ttm": self.pe_ttm,
+            "pb": self.pb,
+            "roe": self.roe,
+            "eps": self.eps,
+            "revenue": self.revenue,
+            "net_profit": self.net_profit,
+            "source": self.source,
+            "status": self.status,
+            "is_real": self.is_real,
+            "data_mode": self.data_mode
+        }
+
+
+@dataclass
+class MLFeatureContract:
+    """全平台统一 ML 特征契约 (MLFeatureContract)"""
+    symbol: str
+    feature_timestamp: str
+    feature_names: List[str]
+    feature_values: List[float]
+    source: str = "FactorEngine"
+    status: str = ErrorStatus.AVAILABLE.value
+    is_real: bool = True
+    data_mode: str = "RESEARCH"
+
+
+@dataclass
+class PredictionContract:
+    """全平台统一 ML 预测输出契约 (PredictionContract)"""
+    symbol: str
+    model_name: str
+    model_version: str
+    prediction_timestamp: str
+    feature_timestamp: str
+    prediction: float
+    feature_names: List[str] = field(default_factory=list)
+    source: str = "MLModel"
+    status: str = ErrorStatus.AVAILABLE.value
+    is_real: bool = True
+    data_mode: str = "RESEARCH"
+
 

@@ -58,6 +58,28 @@ EXPLICIT_INDEX_MAP = {
 }
 
 
+def is_canonical_symbol(symbol: str) -> bool:
+    """断言是否为规范代码 (如 600519.SH, 000001.SZ, 000001.SH)"""
+    if not isinstance(symbol, str):
+        return False
+    s = symbol.strip().upper()
+    return bool(re.match(r"^\d{6}\.(SH|SZ|BJ)$", s))
+
+
+def to_akshare_symbol(symbol: str) -> str:
+    """在底座通信层将 Canonical Symbol 转换为 AkShare API 格式 (code6 或 prefix)"""
+    info = normalize_ashare_code(symbol)
+    if info["is_index"]:
+        return info["prefix"]  # e.g., sh000001
+    return info["code6"]      # e.g., 600519
+
+
+def to_tencent_symbol(symbol: str) -> str:
+    """在底座通信层将 Canonical Symbol 转换为 Tencent API 格式 (prefix e.g. sh000001)"""
+    info = normalize_ashare_code(symbol)
+    return info["prefix"]
+
+
 def normalize_ashare_code(symbol: str) -> Dict[str, Any]:
     """
     标准化 A 股股票与指数代码解析：
@@ -124,3 +146,4 @@ def normalize_ashare_code(symbol: str) -> Dict[str, Any]:
         "name": name,
         "is_index": is_idx
     }
+
