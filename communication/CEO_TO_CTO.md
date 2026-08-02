@@ -2,36 +2,22 @@
 
 ## Current Directive
 
-**Directive ID**: CEO-2026-08-01-001  
+**Directive ID**: CEO-2026-08-01-002  
 **Date**: 2026-08-01  
 **Priority**: HIGH  
 **Status**: APPROVED  
 
 ### Objective
-正式验证 CEO → CTO → Verification → CTO Report → CEO Review 的完整闭环。本阶段只进行只读 Architecture Health Check，绝对不允许修改 AI Quant Pro 的任何产品逻辑。
+开始实施 **Phase 16 Step 5.1 — Multi-Agent Orchestration Core**。建立最小、可测试、可扩展的 `ResearchOrchestrator` 分发核心，集成 `ResearchAgent`, `DataAgent`, `QuantAgent` 三大逻辑角色，维持 100% 经过 `AgentToolRegistry` 与 `ResearchDataIntegrityGate` 的安全防线。
 
 ### Task Scope
-对当前 AI Quant Pro 项目进行一次只读 Architecture Health Check：
-1. 当前项目目录结构
-2. `src/data/`
-3. `src/factors/`
-4. `src/research/`
-5. `src/system/`
-6. `app.py`
-7. 当前测试体系
-8. CEO ↔ CTO infrastructure
-9. 当前 Git 状态
-10. 当前 ROADMAP / STATUS / DECISIONS 的一致性
+1. 创建 `src/research/orchestrator/` 包含 `schema.py` (`ResearchContext`, `AgentResult`, `OrchestratorStatus`), `orchestrator.py` (`ResearchOrchestrator`), `agents.py` (`ResearchAgent`, `DataAgent`, `QuantAgent`)；
+2. 建立 `tests/test_multi_agent_orchestrator.py` 覆盖 10 项确定性测试；
+3. 更新 `ARCHITECTURE.md`, `DECISIONS.md`, `ROADMAP.md`, `STATUS.md`；
+4. 运行全量 Pytest (必须在原有 303 项测试基础上全绿)；
+5. 生成 `communication/CTO_TO_CEO.md` 并等待 CEO Review。
 
-### Requirements
-- 只允许：Read, Analyze, Report
-- 严禁：修改产品代码、修改数据库、修改 API、修改依赖、重构、删除文件或创建新功能。
-
-### Verification
-- 运行完整 pytest，要求 `303+ tests, 0 failures`。
-
-### Final State
-1. 更新 `communication/CTO_TO_CEO.md`
-2. 更新 `STATUS.md`
-3. 不更新 `DONE.md`，直到 CEO Review
-4. 等待 CEO Review
+### Constraints & Non-Goals
+- 严禁实现 Web UI, Streamlit 重构, FastAPI, MCP, Redis, Celery；
+- 严禁绕过 `AgentToolRegistry` 或 `ResearchDataIntegrityGate`；
+- 严禁使用 Mock/Demo 假数据覆盖真实 Research Mode。

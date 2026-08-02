@@ -41,3 +41,26 @@ API 超时或缺失时必须严格抛出 `SOURCE_ERROR` / `DATA_UNAVAILABLE`，�
 
 ### Approved By
 Founder & CEO
+
+
+## Decision 2026-08-01-03: Multi-Agent Orchestrator + AgentResult + ResearchContext Architecture
+
+### Decision
+采用 `ResearchOrchestrator` 作为中央调度内核，结合强契约结构体 `ResearchContext` 与 `AgentResult`，实现 `ResearchAgent`, `DataAgent`, `QuantAgent` 三逻辑角色的显式协同编排。
+
+### Context
+在多 Agent 协同体系中，若 Agent 之间使用裸文本或非结构化字典传递状态，容易导致工具调用存证失真、权限隔离失效以及错误拦截不明确。
+
+### Alternatives Considered
+1. **纯分布式 Agent 自发通信**: 难以做到 100% 留痕审计与强确定性测试；
+2. **重型 Celery / Redis 异步队列**: 在单机 / 交互终端场景下增加了非必要的复杂度。
+
+### Reason
+`ResearchOrchestrator` 具备最小、可测试、可扩充、Transport Independent 属性，保证所有 Agent 工具调用 100% 经过 `AgentToolRegistry` 与 `ResearchDataIntegrityGate`。
+
+### Consequences
+支持确定性 Multi-Agent 协同研究与完整 `ToolExecutionRecord` 血缘防篡改透传。
+
+### Approved By
+Founder & CEO
+

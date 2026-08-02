@@ -68,6 +68,31 @@ Streamlit Web UI / Terminal (app.py)
 - **Agent**: `ReActResearchAgent` 遵循 `Plan -> Tool -> Observe -> Integrity -> Evidence -> Final` 闭环；
 - **Boundary**: Agent 只能使用 `AgentToolRegistry.execute()` 访问功能，严禁裸 DataFrame / Parquet / HTTP 调用。
 
+## Multi-Agent Orchestration
+Phase 16 Step 5.1 建立了基于 `ResearchOrchestrator` 的最小可扩展 Multi-Agent 编排引擎：
+
+### Agent Roles
+- **ResearchAgent**: 负责假设拆解、规划推演与 ReAct 逻辑综合（复用 `ReActResearchAgent`）；
+- **DataAgent**: 负责行情发现、K 线与 PIT 基本面数据拉取（100% 经过 `AgentToolRegistry`）；
+- **QuantAgent**: 负责因子计算与 Alpha 分析（对接 `AlphaRegistry` 与 `AgentToolRegistry`）。
+
+### Orchestrator
+`ResearchOrchestrator` 负责管理研究生命周期，决定调度的 Agent 角色组合，透传 `ToolExecutionRecord` 存证，并汇总为统一的 `ResearchContext`。
+
+### Research Context & Agent Result
+- **ResearchContext**: 包含 `research_id`, `user_query`, `active_agents`, `agent_results`, `tool_execution_records`, `errors`, `status`；
+- **AgentResult**: 强类型、可序列化的 Agent 输出结构体，包含 `agent_id`, `agent_role`, `status`, `summary`, `evidence`, `tool_execution_records`, `errors`。
+
+### Permission & Integrity Boundary
+所有 Agent 的工具调用 100% 经过 `AgentToolRegistry` 鉴权与 `ResearchDataIntegrityGate` 防线，绝不上漏硬编码或假数据。
+
+### Failure Model
+支持强鲁棒单 Agent 异常捕获，单 Agent 失败时不崩溃系统，将 Context 标记为 `PARTIAL` 或 `FAILED` 并记录具体错误归因。
+
+### Future Integration (MCP / API / UI)
+Orchestrator 保持 Transport Independent，可直接被 CLI、FastAPI、MCP Server 或 Streamlit 交互层安全调用。
+
+
 ## Security
 - 敏感配置、API Secret、私钥严禁写入 Git 代码库；
 - 强保护 `.env` 与私密文件在 `.gitignore` 中被忽视；
