@@ -1,4 +1,4 @@
-# CEO Technical Review
+# CEO Technical Review (.ai-company Protocol)
 
 Directive ID: CEO-2026-08-01-001
 
