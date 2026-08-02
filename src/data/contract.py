@@ -60,72 +60,104 @@ def get_canonical_symbol_name(symbol: str, default_name: Optional[str] = None) -
     return name
 
 
+def _safe_get(obj: Any, key: str, default: Any = None) -> Any:
+    """极其安全的通用字段提取器，防护 KeyError / AttributeError / TypeError"""
+    if obj is None:
+        return default
+
+    # 1. 优先属性提取
+    try:
+        if hasattr(obj, key):
+            val = getattr(obj, key, None)
+            if val is not None:
+                return val
+    except Exception:
+        pass
+
+    # 2. dict / mapping .get() 提取
+    try:
+        if isinstance(obj, dict):
+            val = obj.get(key)
+            if val is not None:
+                return val
+    except Exception:
+        pass
+
+    # 3. get 方法提取
+    try:
+        if hasattr(obj, "get") and callable(getattr(obj, "get")):
+            val = obj.get(key, default)
+            if val is not None:
+                return val
+    except Exception:
+        pass
+
+    # 4. __getitem__ 索引提取
+    try:
+        if hasattr(obj, "__getitem__"):
+            val = obj[key]
+            if val is not None:
+                return val
+    except Exception:
+        pass
+
+    return default
+
+
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    """安全的 float 转换器，防御 None / NaN / 无效字符串"""
+    if val is None:
+        return default
+    try:
+        f = float(val)
+        return default if (f != f) else f
+    except (ValueError, TypeError):
+        return default
+
+
 def normalize_market_data_contract(data_obj: Any) -> MarketDataContract:
     """
     将任意 Provider 返回的对象 (MarketData, dict, 缓存反序列化对象) 归一化为标准的 MarketDataContract。
-    使用安全分层解析 (Tiered Resolution)，零 KeyError 风险。
+    使用全防御 Tiered Resolution，零 KeyError / AttributeError 风险。
     """
     if isinstance(data_obj, MarketDataContract):
         return data_obj
 
     # 1. 确定 Symbol 与解析元数据
-    raw_sym = None
-    if isinstance(data_obj, dict):
-        raw_sym = data_obj.get("symbol") or data_obj.get("code")
-    else:
-        raw_sym = getattr(data_obj, "symbol", None)
-
+    raw_sym = _safe_get(data_obj, "symbol") or _safe_get(data_obj, "code")
     sym = str(raw_sym or "000001.SH").strip().upper()
     info = normalize_ashare_code(sym)
     suffix = info.get("suffix", sym)
     market = info.get("market", "SH")
 
     # 2. 安全确定名称 (Priority: data_obj.name -> info["name"] -> CANONICAL_SYMBOL_NAMES -> suffix)
-    obj_name = None
-    if isinstance(data_obj, dict):
-        obj_name = data_obj.get("name")
-    else:
-        obj_name = getattr(data_obj, "name", None)
-
+    obj_name = _safe_get(data_obj, "name")
     info_name = info.get("name") or CANONICAL_SYMBOL_NAMES.get(suffix)
     resolved_name = str(obj_name or info_name or suffix)
 
     # 3. 安全提取价格与基础数据
-    if isinstance(data_obj, dict):
-        close_val = data_obj.get("close")
-        if close_val is None:
-            close_val = data_obj.get("price")
-        status_val = data_obj.get("status")
-        source_val = data_obj.get("source")
-        data_mode_val = str(data_obj.get("data_mode", "RESEARCH"))
-        raw_is_real = data_obj.get("is_real")
-        ts_val = data_obj.get("timestamp")
-        open_val = data_obj.get("open")
-        high_val = data_obj.get("high")
-        low_val = data_obj.get("low")
-        vol_val = float(data_obj.get("volume", 0.0))
-        amt_val = float(data_obj.get("amount", 0.0))
-        chg_val = float(data_obj.get("change_pct", 0.0))
-    else:
-        close_val = getattr(data_obj, "close", None)
-        status_val = getattr(data_obj, "status", None)
-        source_val = getattr(data_obj, "source", None)
-        data_mode_val = str(getattr(data_obj, "data_mode", "RESEARCH"))
-        raw_is_real = getattr(data_obj, "is_real", None)
-        ts_val = getattr(data_obj, "timestamp", None)
-        open_val = getattr(data_obj, "open", None)
-        high_val = getattr(data_obj, "high", None)
-        low_val = getattr(data_obj, "low", None)
-        vol_val = float(getattr(data_obj, "volume", 0.0))
-        amt_val = float(getattr(data_obj, "amount", 0.0))
-        chg_val = float(getattr(data_obj, "change_pct", 0.0))
+    close_val = _safe_get(data_obj, "close")
+    if close_val is None:
+        close_val = _safe_get(data_obj, "price")
 
-    # 统一规范 status 与 is_real
+    status_val = _safe_get(data_obj, "status")
+    source_val = _safe_get(data_obj, "source")
+    data_mode_val = str(_safe_get(data_obj, "data_mode", "RESEARCH"))
+    raw_is_real = _safe_get(data_obj, "is_real")
+    ts_val = _safe_get(data_obj, "timestamp")
+    open_val = _safe_get(data_obj, "open")
+    high_val = _safe_get(data_obj, "high")
+    low_val = _safe_get(data_obj, "low")
+
+    vol_val = _safe_float(_safe_get(data_obj, "volume"), 0.0)
+    amt_val = _safe_float(_safe_get(data_obj, "amount"), 0.0)
+    chg_val = _safe_float(_safe_get(data_obj, "change_pct"), 0.0)
+
+    # 4. 统一规范 status 与 is_real
     if close_val is None:
         status_val = "UNAVAILABLE"
     elif not status_val or status_val == "DATA_UNAVAILABLE":
         status_val = "AVAILABLE"
-
 
     if raw_is_real is not None:
         is_real_val = bool(raw_is_real)
@@ -149,3 +181,4 @@ def normalize_market_data_contract(data_obj: Any) -> MarketDataContract:
         data_mode=data_mode_val,
         is_real=is_real_val
     )
+
