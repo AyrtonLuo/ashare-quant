@@ -17,3 +17,11 @@ __pycache__/
 .DS_Store
 .vscode/
 .idea/
+
+# Secrets & Local Config
+.env
+*.env
+*.secret
+*.key
+*.pem
+
