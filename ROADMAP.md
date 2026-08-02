@@ -41,6 +41,7 @@
 - Scope: 组装 Multi-Agent Swarm 调度内核、Agent UI 与研究记忆系统。
 
 ## Phase 16 Step 5.1 — Multi-Agent Orchestration Core
-- Status: **IN_PROGRESS / REVIEW**
+- Status: **COMPLETED / APPROVED**
 - Scope: 建立 `ResearchOrchestrator` 编排核心，集成 `ResearchAgent`, `DataAgent`, `QuantAgent` 三大逻辑角色，建立 `ResearchContext` 与 `AgentResult` 数据契约模型，完成 10 项确定性单元与集成测试。
+
 
