@@ -28,9 +28,10 @@ def compute_mom_20d(df: pd.DataFrame) -> pd.Series:
     
     if "symbol" in df.columns and "timestamp" in df.columns:
         df_sorted = df.sort_values(["symbol", "timestamp"])
-        res = df_sorted.groupby("symbol")["close"].pct_change(periods=20)
+        res = df_sorted.groupby("symbol")["close"].pct_change(periods=20, fill_method=None)
         return res
-    return df["close"].pct_change(periods=20)
+    return df["close"].pct_change(periods=20, fill_method=None)
+
 
 
 def compute_mom_60d(df: pd.DataFrame) -> pd.Series:

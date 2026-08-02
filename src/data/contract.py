@@ -9,6 +9,7 @@ contract.py
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, Any, Optional, List
+import pandas as pd
 from src.data.symbol_utils import normalize_ashare_code, CANONICAL_SYMBOL_NAMES
 
 
@@ -271,5 +272,20 @@ class PredictionContract:
     status: str = ErrorStatus.AVAILABLE.value
     is_real: bool = True
     data_mode: str = "RESEARCH"
+
+
+@dataclass
+class HistoricalMarketDataContract:
+    """全平台统一历史行情数据契约 (HistoricalMarketDataContract)"""
+    symbol: str
+    start_date: str
+    end_date: str
+    adjust: str = "qfq"
+    data: pd.DataFrame = field(default_factory=pd.DataFrame)
+    status: str = ErrorStatus.AVAILABLE.value
+    source: str = "MarketDataProvider"
+    data_mode: str = "RESEARCH"
+    is_real: bool = True
+
 
 

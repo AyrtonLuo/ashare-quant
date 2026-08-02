@@ -18,10 +18,8 @@ def compute_ep_ttm(df: pd.DataFrame) -> pd.Series:
         c = df["close"].replace(0, np.nan)
         return df["eps"] / c
     else:
-        # PIT Fallback
-        if "close" in df.columns:
-            return 1.0 / (df["close"] * 0.05 + 1.0)
-        raise ValueError("DataFrame 缺失 'pe_ttm' 或 PIT 基本面 EPS/Close 数据列")
+        return pd.Series(np.nan, index=df.index)
+
 
 
 EP_TTM_DEF = AlphaDefinition(
