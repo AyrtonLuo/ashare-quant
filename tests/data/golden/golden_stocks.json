@@ -1,0 +1,47 @@
+[
+  {
+    "symbol": "600519.SH",
+    "name": "贵州茅台",
+    "category": "Large Cap / High Margin",
+    "test_price": 1650.00,
+    "annual_eps": 58.00,
+    "book_value_per_share": 180.00,
+    "cash_dividend_12m": 25.00,
+    "expected_pe_lyr": 28.4483,
+    "expected_pe_lyr_status": "VALID",
+    "expected_pb": 9.1667,
+    "expected_pb_status": "VALID",
+    "expected_dividend_yield_ttm": 1.5152,
+    "expected_dividend_yield_status": "VALID"
+  },
+  {
+    "symbol": "000001.SZ",
+    "name": "平安银行",
+    "category": "High Dividend / Low PE Bank",
+    "test_price": 11.50,
+    "annual_eps": 2.20,
+    "book_value_per_share": 21.00,
+    "cash_dividend_12m": 0.70,
+    "expected_pe_lyr": 5.2273,
+    "expected_pe_lyr_status": "VALID",
+    "expected_pb": 0.5476,
+    "expected_pb_status": "VALID",
+    "expected_dividend_yield_ttm": 6.087,
+    "expected_dividend_yield_status": "VALID"
+  },
+  {
+    "symbol": "600000.SH",
+    "name": "Negative EPS Loss Stock Case",
+    "category": "Negative EPS Unprofitable Stock",
+    "test_price": 8.00,
+    "annual_eps": -0.50,
+    "book_value_per_share": 4.00,
+    "cash_dividend_12m": 0.00,
+    "expected_pe_lyr": null,
+    "expected_pe_lyr_status": "NOT_MEANINGFUL",
+    "expected_pb": 2.0,
+    "expected_pb_status": "VALID",
+    "expected_dividend_yield_ttm": 0.0,
+    "expected_dividend_yield_status": "VALID"
+  }
+]
