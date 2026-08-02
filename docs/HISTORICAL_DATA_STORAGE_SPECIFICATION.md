@@ -1,7 +1,7 @@
 # 💾 Historical Data Storage Specification — Parquet & DuckDB Architecture
 
-**Document Version**: 1.0.0  
-**Directive ID**: `CEO-2026-08-01-REBUILD-005A`  
+**Document Version**: 2.0.0  
+**Directive ID**: `CEO-2026-08-01-REBUILD-005B`  
 **Target Repository**: `/Users/yuhanluo/ashare-quant`  
 **Status**: APPROVED FOR EXECUTION  
 
@@ -9,30 +9,27 @@
 
 ## 1. Storage Architecture & Layering
 
-Large historical binary datasets are stored outside Git version control. The storage architecture is partitioned into 4 logical tiers:
+Large historical binary datasets are stored outside Git version control. The storage architecture is partitioned into 5 logical tiers:
 
 ```text
 data/
-├── raw/            # Raw JSON / CSV provider payload snapshots
-├── normalized/     # Schema-normalized daily bar and statement tables
-├── validated/      # Point-in-time verified data (Passed DataTrustGate)
-└── research/       # Optimized Parquet / DuckDB columnar datasets for Quant Engine
+├── raw/            # Raw JSON / CSV provider payload snapshots (Git Ignored)
+├── normalized/     # Schema-normalized daily bar and statement tables (Git Ignored)
+├── validated/      # Point-in-time verified data (Passed DataTrustGate) (Git Ignored)
+├── research/       # Production Apache Parquet symbol partitions (Git Ignored)
+└── manifests/      # SHA-256 DatasetManifest JSON provenance files (Git Tracked)
 ```
 
 ---
 
-## 2. Format Evaluation & Decision: Apache Parquet + DuckDB
+## 2. Production Storage Implementation (Parquet + DuckDB)
 
-| Evaluated Format | Read Scan Speed | Columnar Querying | Compression Ratio | Schema Versioning | Python Ecosystem Support | Final Decision |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Apache Parquet** | **Ultra Fast** | **Native Columnar** | **High (Snappy/GZIP)** | **Strong (PyArrow)** | **Native** | **SELECTED FOR PRODUCTION** |
-| **DuckDB** | **Ultra Fast** | **Native SQL OLAP** | **High** | **Strong** | **Native** | **SELECTED FOR ANALYTICS** |
-| **CSV** | Slow | No (Row-based) | Low (Plain Text) | Weak | Universal | REJECTED FOR LARGE DATA |
-| **SQLite** | Medium | No (Row-based) | Medium | Moderate | Native | REJECTED FOR OLAP SCANS |
+- **Parquet Storage Adapter**: Implemented in `src/data/storage/parquet_adapter.py` (`ParquetStorageAdapter`). Performs columnar writes and symbol-date deduplicated reads.
+- **DuckDB Analytical Query Engine**: Implemented in `src/data/storage/duckdb_adapter.py` (`DuckDBQueryEngine`). Executes high-speed in-memory OLAP SQL queries directly over Parquet partitions (`read_parquet`).
 
 ---
 
 ## 3. Git Version Control Policy
 
-- Large `.parquet` or `.db` files are strictly added to `.gitignore`.
-- Git tracks only: `DatasetManifest` files (`manifest.json`), Golden Dataset fixtures (`tests/data/golden/`), Data Contracts, and Storage Adapters.
+- `data/raw/`, `data/normalized/`, `data/validated/`, `data/research/`, `*.parquet`, and `*.db` are strictly excluded in `.gitignore`.
+- Git tracks only: Source code, `DatasetManifest` provenance files (`data/manifests/`), Golden Dataset fixtures (`tests/data/golden/`), Data Contracts, and Storage Adapters.

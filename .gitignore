@@ -3,3 +3,12 @@ venv/
 __pycache__/
 *.pyc
 .env
+
+# Data Warehouse Directories — Large datasets excluded from Git
+data/raw/
+data/normalized/
+data/validated/
+data/research/
+data/manifests/
+*.parquet
+*.db
