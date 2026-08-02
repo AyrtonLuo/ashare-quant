@@ -1,4 +1,4 @@
-# CTO → CEO Executive Report
+# CTO → CEO Executive Report (.ai-company Protocol)
 
 ## Directive Reference
 - **Directive ID**: CEO-2026-08-01-001

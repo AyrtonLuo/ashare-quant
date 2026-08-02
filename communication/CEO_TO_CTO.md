@@ -2,38 +2,36 @@
 
 ## Current Directive
 
-**Date**: 2026-08-01
+**Directive ID**: CEO-2026-08-01-001  
+**Date**: 2026-08-01  
+**Priority**: HIGH  
+**Status**: APPROVED  
 
-**Priority**: HIGH
+### Objective
+正式验证 CEO → CTO → Verification → CTO Report → CEO Review 的完整闭环。本阶段只进行只读 Architecture Health Check，绝对不允许修改 AI Quant Pro 的任何产品逻辑。
 
-**Objective**: 建立 CEO ↔ CTO 协作操作系统基础设施与 Shared Memory 文件协议。
+### Task Scope
+对当前 AI Quant Pro 项目进行一次只读 Architecture Health Check：
+1. 当前项目目录结构
+2. `src/data/`
+3. `src/factors/`
+4. `src/research/`
+5. `src/system/`
+6. `app.py`
+7. 当前测试体系
+8. CEO ↔ CTO infrastructure
+9. 当前 Git 状态
+10. 当前 ROADMAP / STATUS / DECISIONS 的一致性
 
-**Context**: 项目已完成 Phase 16 Step 4.6 (API Alignment)、Step 4.7 (Numerical Truth) 与 Step 4.8 (External Truth Audit)。现暂停 Step 5 开发，先搭建规范的 CEO ↔ CTO 协作架构。
+### Requirements
+- 只允许：Read, Analyze, Report
+- 严禁：修改产品代码、修改数据库、修改 API、修改依赖、重构、删除文件或创建新功能。
 
-**Requirements**:
-1. 检查项目环境，不得覆盖已有配置，不得删除用户数据或 Git 历史；
-2. 建立 `PRODUCT.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `DECISIONS.md`, `STATUS.md`；
-3. 建立 `communication/CEO_TO_CTO.md`, `communication/CTO_TO_CEO.md`, `communication/REVIEW.md`；
-4. 建立 `tasks/TODO.md`, `tasks/IN_PROGRESS.md`, `tasks/DONE.md`；
-5. 配置 CTO Agent Rules (`.agents/rules/cto.md`)；
-6. 不进行任何具体产品功能开发；
-7. 输出完整的 CEO ↔ CTO System Setup Report。
+### Verification
+- 运行完整 pytest，要求 `303+ tests, 0 failures`。
 
-**Constraints**:
-- 严禁把 secrets / API keys 写进 Git；
-- 绝不伪造测试假行情或降级补 0；
-- 遵循确定性 8 步工作循环 (`READ -> UNDERSTAND -> PLAN -> EXECUTE -> VERIFY -> REVIEW -> REPORT -> UPDATE`)。
-
-**Acceptance Criteria**:
-- 所有的通信与状态文件规范建齐；
-- Pytest 全量测试 100% 保持绿灯；
-- 提交 Git 本地 Commit。
-
-**Technical Notes**:
-- CEO (ChatGPT) 会通过修改本文件或者向 Founder 发送 Markdown 内容下达 Directive。
-
-**Do Not Do**:
-- 不要擅自进入 Phase 16 Step 5 开发 Multi-Agent Swarm 或 UI。
-
-**Expected Deliverable**:
-- 全套系统文件与 CEO ↔ CTO System Setup Report。
+### Final State
+1. 更新 `communication/CTO_TO_CEO.md`
+2. 更新 `STATUS.md`
+3. 不更新 `DONE.md`，直到 CEO Review
+4. 等待 CEO Review
