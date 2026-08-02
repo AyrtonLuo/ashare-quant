@@ -1,3 +1,0 @@
-"""
-benchmarks module init
-"""

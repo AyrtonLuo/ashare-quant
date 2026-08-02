@@ -1,3 +1,0 @@
-"""
-fundamental module init
-"""

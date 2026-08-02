@@ -1,177 +1,38 @@
-# A股量化研究系统 (ashare-quant) - 第一阶段 MVP
+# 📈 AI Quant Pro — Clean Foundation
 
-这是一个极简、轻量且 100% 开源免费的 A 股量化研究系统（MVP 第一阶段）。系统基于 Python 3.10+ 构建，无需任何数据库、付费 API Key、云账号或 Token 注册。
-
----
-
-## 📁 项目目录结构
-
-```text
-ashare-quant/
-├── data/                  # 本地 Parquet 数据缓存与结果输出
-│   ├── 600519.parquet     # 贵州茅台前复权日线数据
-│   ├── stocks_daily.parquet # 10 只成分股汇总数据
-│   └── equity_curve_600519.png # 策略净值对比曲线图
-├── src/
-│   ├── __init__.py
-│   ├── data_fetch.py      # 数据获取脚本（基于 akshare）
-│   ├── data_quality.py    # 数据质量检查与报告生成
-│   ├── backtest.py        # 基于 Pandas 的向量化回测引擎
-│   └── strategy/
-│       ├── __init__.py
-│       └── ma_cross.py    # 双均线交叉策略（5日穿10日）
-├── tests/
-│   └── test_quant.py      # 单元测试（校验计算与防未来函数逻辑）
-├── requirements.txt       # 项目依赖
-├── .gitignore             # Git 忽略配置
-└── README.md              # 说明文档
-```
+**AI Quantitative Trading Platform (Clean Foundation)**
 
 ---
 
-## 🛠️ 环境准备与快速上手
+## Project Overview
 
-### 1. 克隆与搭建虚拟环境
+`ashare-quant` has undergone a **Complete System Reset** to establish a clean foundation for the next-generation AI Quantitative Trading Platform.
 
-```bash
-# 1.1 进入项目目录
-cd ashare-quant
-
-# 1.2 创建虚拟环境 (venv)
-python3 -m venv venv
-
-# 1.3 激活虚拟环境
-# macOS/Linux:
-source venv/bin/activate
-# Windows:
-# venv\Scripts\activate
-
-# 1.4 安装项目依赖
-pip install -r requirements.txt
-```
+- **Preserved Asset**: Existing Web / Cloud UI (`app.py` Streamlit Terminal)
+- **Status**: Clean Foundation Ready for New Quant Architecture
+- **Collaboration Mode**: Direct Manual Collaboration (`ChatGPT / CEO -> Founder Manual Copy -> Coding Agent -> ashare-quant`)
 
 ---
 
-## 🚀 运行流程（4 步跑通全流程）
+## Web UI Launch
 
-### 2. 步骤一：一键拉取 A 股前复权日线数据
-
-使用 `akshare` 抓取沪深300精选 10 只成分股近 3 年（2023 ~ 2026）的前复权日线数据，并保存至本地 `data/*.parquet`：
-
-```bash
-python src/data_fetch.py
-```
-
-### 3. 步骤二：数据质量审计
-
-检查本地 Parquet 数据中是否存在 NaN 缺失值、价格异常或停牌缺口，输出诊断报告：
-
-```bash
-python src/data_quality.py
-```
-
-### 4. 步骤三：运行 A 股真实交易约束（涨跌停 & T+1）对比回测
-
-运行基于 Pandas 向量化计算与真实交易约束状态机的回测引擎。系统会自动区分主板 (±10%) 与 创业板/科创板 (±20%) 涨跌停规则，模拟涨停封板买不进、跌停砸盘卖不出及 T+1 锁仓约束，并保存对比曲线图：
-
-```bash
-python src/backtest.py
-```
-
-*10 只成分股回测绩效总览输出样例：*
-```text
-=====================================================================================
- 🏆 10 只成分股 A 股交易约束前后回测绩效总览 🏆 
-=====================================================================================
-    代码   名称   理想总收益   真实总收益 理想最大回撤 真实最大回撤  理想夏普  真实夏普
-000001 平安银行  -4.35%  -4.35% 20.93% 20.93% -0.01 -0.01
-000651 格力电器  28.66%  28.66% 16.16% 16.16%  0.57  0.57
-002594  比亚迪  32.24%  32.24% 24.38% 24.38%  0.53  0.53
-300750 宁德时代  51.76%  51.76% 36.04% 36.04%  0.62  0.62
-600036 招商银行  41.88%  41.88% 14.09% 14.09%  0.82  0.82
-600519 贵州茅台 -18.01% -18.01% 19.48% 19.48% -0.39 -0.39
-600900 长江电力  17.42%  17.42%  8.37%  8.37%  0.56  0.56
-601012 隆基绿能   9.90%   9.90% 29.37% 29.37%  0.25  0.25
-601318 中国平安  36.15%  36.15% 20.92% 20.92%  0.63  0.63
-601899 紫金矿业  73.78%  73.78% 22.99% 22.99%  0.88  0.88
-=====================================================================================
-```
-
-### 5. 步骤四：运行多因子 IC 检验与周频分层回测 (Phase 3)
-
-计算 10 只成分股的基础因子（动量、低波动率、均线偏离度），进行每日横截面 MAD 去极值与 Z-Score 标准化，输出 IC Mean、IC IR 评价报告与周频分层回测超额收益：
-
-```bash
-python src/factor_analyzer.py
-```
-
-*因子 IC 检验报告与分层回测输出样例：*
-```text
-=====================================================================================
- 📋 基础多因子 IC 检验诊断报告 (Rank IC) 📋 
-=====================================================================================
-      因子名称  IC 均值 (IC Mean)  IC 标准差 (IC Std)  IC 信息比率 (IC IR) IC 胜率 (IC > 0)  有效交易日数
-    MOM_20         0.008493         0.388033         0.021887         52.12%     706
-    VOL_20        -0.034968         0.423153        -0.082637         46.46%     706
-LOW_VOL_20         0.034968         0.423153         0.082637         53.54%     706
- MA_DEV_20        -0.000976         0.389408        -0.002506         51.63%     707
-=====================================================================================
-
-======================================================================
- 🏆 多因子周频分层回测超额收益对比总览 🏆 
-======================================================================
-      因子名称 Top 多头组收益 Benchmark 基准收益 Top 超额收益
-    MOM_20    64.73%         38.56%   18.89%
-LOW_VOL_20    18.95%         38.56%  -14.15%
- MA_DEV_20    35.70%         38.56%   -2.06%
-======================================================================
-```
-
-### 6. 步骤五：运行 Streamlit Web 可视化控制台 (Phase 7)
-
-一键启动轻量级专业 Web Dashboard，查看 90亿+ 中大盘优质标的池选股清单、Plotly 动态风控净值曲线及因子 IC 诊断实验室：
+To launch the preserved Streamlit Web UI locally:
 
 ```bash
 streamlit run app.py
 ```
 
-启动后在浏览器打开 `http://localhost:8501` 即可体验 4 大专业功能模块。
-
-### 7. 步骤六：运行单元测试
-
-使用 `pytest` 自动化测试信号生成、A股交易约束逻辑、因子 MAD 去极值与 IC 对齐逻辑：
-
-```bash
-pytest tests/
-```
-
 ---
 
-## ⚡ VectorBT 开源回测引擎与现版 Pandas 回测对齐报告
+## Directory Structure
 
-在 `src/backtest_vbt.py` 中引入开源 VectorBT 框架 (`vbt.Portfolio.from_signals`) 跑相同的 MA5/MA10 双均线策略，并与现有的手写 Pandas 向量化回测引擎进行基准对齐。
-
-### 📊 贵州茅台 (600519) 策略绩效指标对比表 (无风险利率 `risk_free = 0.0`)
-
-| 评估指标 (Metric) | 现版 Pandas 回测引擎 (`src/backtest.py`) | VectorBT 开源引擎 (`src/backtest_vbt.py`) | 对齐状态与说明 |
-| :--- | :---: | :---: | :---: |
-| **策略总收益率 (Total Return)** | **-13.34%** | **-13.34%** | 🟢 **100% 精确对齐** |
-| **最大回撤 (Max Drawdown)** | **24.15%** | **24.15%** | 🟢 **100% 精确对齐** |
-| **年化夏普比率 (Sharpe Ratio)** | **-0.20** | **-0.20** | 🟢 **100% 精确对齐** (日度收益率标准化) |
-
-*运行 VectorBT 独立回测命令：*
-```bash
-python src/backtest_vbt.py
+```text
+ashare-quant/
+├── app.py                      # Preserved Web UI Terminal Entry Point
+├── PRESERVED_UI_FILES.md       # Preserved UI Asset Inventory
+├── PROJECT_RESET_REPORT.md     # System Reset Execution Report
+├── requirements.txt            # UI & Project Dependencies
+├── README.md                   # Project Overview
+├── STATUS.md                   # Current System Status
+└── .git/                       # Version Control History
 ```
-
----
-
-## 🛡️ 量化设计说明：防未来函数、因子预处理与收益率对齐
-
-1. **防未来函数 (Lookahead Bias)**：
-   在 `src/backtest.py` 中使用 `signal.shift(1)` 延后 1 个交易日执行；在 `src/factor_analyzer.py` 中严格匹配第 T 日因子值与第 T+1 日真实收益率 `forward_return_1d`。
-2. **横截面 MAD 去极值与 Z-Score 标准化**：
-   每日横截面上使用 `MAD = median(|X - median(X)|)` 截断 3 倍 MAD 之外的离群点，再进行 Z-Score 标准化，消除不同因子间的量纲差异。
-3. **周频分层回测 (Layered Backtest)**：
-   每 5 个交易日（周频）按因子得分重排选出 Top 组与 Bottom 组，评估 Top 组相对于等权基准的 α 超额收益。
-
