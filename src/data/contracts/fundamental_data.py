@@ -1,9 +1,17 @@
 """
-fundamental_data.py — Canonical Fundamental Data Contract with Data Trust fields.
+fundamental_data.py — Canonical Fundamental Data Contract with Data Trust & Provenance fields.
 """
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Optional
+
+
+class MetricProvenance(str, Enum):
+    PROVIDER_REPORTED = "PROVIDER_REPORTED"
+    DERIVED = "DERIVED"
+    SYSTEM_CALCULATED = "SYSTEM_CALCULATED"
+    UNAVAILABLE = "UNAVAILABLE"
 
 
 @dataclass(frozen=True)
@@ -34,4 +42,5 @@ class FundamentalDataContract:
     dividend_yield_status: str        # "VALID", "UNAVAILABLE"
     roe: Optional[float]
     
-    quality_status: str               # "VALID", "INVALID", "SUSPECT", "MISSING"
+    provenance: MetricProvenance = MetricProvenance.SYSTEM_CALCULATED
+    quality_status: str = "VALID"      # "VALID", "INVALID", "SUSPECT", "MISSING"

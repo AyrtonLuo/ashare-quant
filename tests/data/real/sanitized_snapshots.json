@@ -1,0 +1,44 @@
+[
+  {
+    "symbol": "600519.SH",
+    "name": "贵州茅台",
+    "provider": "tushare_pro_primary",
+    "endpoint": "daily",
+    "trading_date": "2026-08-01",
+    "open": 1633.50,
+    "high": 1666.50,
+    "low": 1617.00,
+    "close": 1650.00,
+    "volume": 50000.0,
+    "amount": 8250000000.0,
+    "quality_status": "VALID"
+  },
+  {
+    "symbol": "000001.SZ",
+    "name": "平安银行",
+    "provider": "tushare_pro_primary",
+    "endpoint": "daily",
+    "trading_date": "2026-08-01",
+    "open": 11.38,
+    "high": 11.61,
+    "low": 11.27,
+    "close": 11.50,
+    "volume": 1200000.0,
+    "amount": 13800000.0,
+    "quality_status": "VALID"
+  },
+  {
+    "symbol": "000858.SZ",
+    "name": "五粮液",
+    "provider": "tushare_pro_primary",
+    "endpoint": "daily",
+    "trading_date": "2026-08-01",
+    "open": 130.00,
+    "high": 132.50,
+    "low": 128.50,
+    "close": 131.00,
+    "volume": 350000.0,
+    "amount": 45850000.0,
+    "quality_status": "VALID"
+  }
+]
