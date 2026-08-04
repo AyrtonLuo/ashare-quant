@@ -1,4 +1,4 @@
-# Open-Source Quantitative PIT & Snapshot Research Log (Phase 7)
+# Open-Source Quantitative PIT & Snapshot Research Log (Phase 7 / Phase 7C)
 
 ## 1. Referenced Open-Source Frameworks
 We surveyed leading quantitative data and backtesting platforms to analyze their approach to Point-in-Time integrity, revision management, and reproducibility:
@@ -25,3 +25,6 @@ We surveyed leading quantitative data and backtesting platforms to analyze their
 | **Complex Event Sourcing Engine** | Enterprise Frameworks | Over-engineered for research engine scope. Simple `RevisionStore` + `SnapshotManager` handles PIT semantics deterministically without event bus complexity. |
 | **In-Place Database Mutability** | Generic DB adapters (vn.py / Backtrader) | In-place updates corrupt historical backtest integrity. |
 | **Un-PIT Provider API Direct Calls** | Direct SDK feeds | Bypassing temporal gating introduces severe look-ahead leaks. |
+
+## 4. Phase 7C Production-Scale Dataset Verification
+Phase 7C establishes production-scale verification over real A-Share market datasets (`RealDataVerificationEngine`), proving end-to-end dataset ingestion, quality auditing, snapshot isolation, and deterministic replay verification (`ReplayStatus.REPRODUCIBLE`).
