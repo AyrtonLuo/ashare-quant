@@ -99,6 +99,8 @@ class AkShareProviderAdapter(UnifiedDataProvider):
                 bonus_ratio=0.0,
                 split_ratio=1.0,
                 announcement_date="2026-05-20",
+                available_at=datetime(2026, 5, 20, 15, 0),
+                received_at=datetime(2026, 5, 20, 15, 0),
                 quality_status="VALID",
                 data_origin="SYNTHETIC_DATA"
             )

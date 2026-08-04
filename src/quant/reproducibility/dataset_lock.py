@@ -41,7 +41,7 @@ class DatasetVersionLock:
                 "Cannot lock un-registered or missing snapshot."
             )
 
-        if snapshot.dataset_version != dataset_version and dataset_version != "ds_v1.0":
+        if snapshot.dataset_version != dataset_version:
             raise ValueError(
                 f"FAIL CLOSED: Mismatch between requested dataset_version '{dataset_version}' "
                 f"and snapshot.dataset_version '{snapshot.dataset_version}'."

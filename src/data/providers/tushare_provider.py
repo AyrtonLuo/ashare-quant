@@ -115,6 +115,8 @@ class TuShareAdapter(UnifiedDataProvider):
                 bonus_ratio=0.0,
                 split_ratio=1.0,
                 announcement_date="2026-05-20",
+                available_at=datetime(2026, 5, 20, 15, 0),
+                received_at=datetime(2026, 5, 20, 15, 0),
                 quality_status="VALID",
                 data_origin="SYNTHETIC_DATA"
             )
@@ -244,6 +246,18 @@ class LiveTuShareAdapter(UnifiedDataProvider):
             ex_date = row.get("ex_date")
             if not ex_date or not (start_date.replace("-", "") <= str(ex_date) <= end_date.replace("-", "")):
                 continue
+            # available_at MUST come from the real disclosure timestamp (ann_date), never
+            # inferred from ex_date/effective_date. If the provider omits ann_date, fail
+            # closed rather than guess a PIT-relevant availability timestamp.
+            ann_date_raw = row.get("ann_date")
+            if not ann_date_raw:
+                raise ProviderError(
+                    self.provider_id,
+                    f"TuShare dividend record for {symbol} ex_date={ex_date} is missing ann_date; "
+                    "cannot determine available_at without inferring it from ex_date, which is prohibited."
+                )
+            ann_date_str = str(ann_date_raw)
+            announcement_dt = datetime.strptime(ann_date_str, "%Y%m%d")
             actions.append(CorporateActionContract(
                 symbol=symbol,
                 ex_date=f"{str(ex_date)[:4]}-{str(ex_date)[4:6]}-{str(ex_date)[6:8]}",
@@ -251,7 +265,9 @@ class LiveTuShareAdapter(UnifiedDataProvider):
                 cash_amount_per_share=float(row["cash_div"]) if row.get("cash_div") is not None else 0.0,
                 bonus_ratio=float(row["stk_div"]) if row.get("stk_div") is not None else 0.0,
                 split_ratio=1.0,
-                announcement_date=str(row.get("ann_date") or ex_date),
+                announcement_date=f"{ann_date_str[:4]}-{ann_date_str[4:6]}-{ann_date_str[6:8]}",
+                available_at=announcement_dt,
+                received_at=datetime.now(),
                 quality_status="VALID",
                 data_origin="REAL_PROVIDER"
             ))

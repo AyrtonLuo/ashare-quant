@@ -77,6 +77,8 @@ def test_corporate_action_contract():
         bonus_ratio=0.0,
         split_ratio=1.0,
         announcement_date="2026-05-20",
+        available_at=datetime(2026, 5, 20, 15, 0),
+        received_at=datetime(2026, 5, 20, 15, 0),
         quality_status="VALID"
     )
     assert ca.cash_amount_per_share == 25.0

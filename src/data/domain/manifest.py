@@ -2,10 +2,9 @@
 manifest.py — Dataset Manifest Contract & SHA-256 Provenance Verification Manager.
 """
 
-import hashlib
-import json
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from typing import Dict, Any, List
+from src.quant.reproducibility.canonical import compute_canonical_sha256
 
 
 @dataclass(frozen=True)
@@ -28,8 +27,9 @@ class DatasetManifestManager:
 
     @staticmethod
     def compute_sha256(data_payload: Any) -> str:
-        serialized = json.dumps(data_payload, sort_keys=True).encode("utf-8")
-        return hashlib.sha256(serialized).hexdigest()
+        """Delegates to the single authoritative canonical serializer (canonical.py) so
+        dataset checksums and research-result hashes use identical serialization semantics."""
+        return compute_canonical_sha256(data_payload)
 
     @staticmethod
     def create_manifest(
