@@ -55,3 +55,9 @@ class ResearchRunIdentity:
     input_hash: str
     result_hash: str
     created_at: str
+
+    # Phase 8A: hash of how multiple factors' cross-sectional z-scores combine into one
+    # composite signal. Trailing defaulted field so every existing (Phase 7A-7J) constructor
+    # of ResearchRunIdentity remains valid unmodified; only Phase 8A's factor-driven certified
+    # path ever sets a real value. Mirrors factor_definition_hash's existing pattern.
+    signal_configuration_hash: str = "NOT_APPLICABLE"

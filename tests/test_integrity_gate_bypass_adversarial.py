@@ -1,5 +1,8 @@
 """
-test_integrity_gate_bypass_adversarial.py — Phase 7J adversarial tests (Directive 007J §6).
+test_integrity_gate_bypass_adversarial.py — Phase 7J adversarial tests (Directive 007J §6),
+updated for Phase 8A's mandatory factor_definitions (CEO directive 008A-IMPLEMENT §3: fixture
+setup/input updated to supply a valid factor configuration; no assertion weakened, no test
+deleted, no expected result loosened).
 
 Not "does the correct path work" — "is every incorrect path rejected." Each of the 20
 scenarios enumerated in the directive gets its own test proving FAIL CLOSED.
@@ -22,12 +25,17 @@ from src.data.security.secret_audit import SecurityAuditManager
 from src.quant.reproducibility.store import ResearchRunStore
 from src.quant.reproducibility.certified_replay_engine import CertifiedReplayEngine
 from src.quant.reproducibility.identity import get_code_version
+from src.quant.factors.registry import FactorSpec
+from src.quant.factors.multi_factor import FactorWeightConfig, FactorDirection
 from src.quant.research.integrity_gate import CertifiedResearchRequest, CertifiedResearchRunExecutor
 
 SYMBOL = "600519.SH"
 DATES = ["2026-08-01", "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06"]
 PRICES = [100.0, 100.0, 101.0, 101.0, 102.0]
 AS_OF = datetime(2026, 8, 10)
+
+MOMENTUM_ONLY = [FactorSpec("momentum_20d:v1", {"window_days": 3})]
+MOMENTUM_ONLY_SIGNAL = [FactorWeightConfig("momentum_20d:v1", 1.0, FactorDirection.POSITIVE)]
 
 
 def _persist_dataset(tmp_path, dataset_id="ds_test", dataset_version="v1", prices=None):
@@ -90,7 +98,14 @@ def _make_request(setup, run_id="run_1", **overrides):
         corporate_action_store=setup["corporate_action_store"],
         raw_price_series={SYMBOL: (DATES, PRICES)},
         provider_data_origin={SYMBOL: "GOLDEN_DATASET"},
-        factor_definitions=[{"factor": "momentum_20d:v1"}], parameters={"top_n": 1},
+        factor_definitions=MOMENTUM_ONLY,
+        fundamental_data={},
+        signal_config=MOMENTUM_ONLY_SIGNAL,
+        # This file's fixture is single-symbol (its focus is dataset/snapshot/PIT/corp-action/
+        # cost-model/replay concerns, not cross-sectional sampling — that gets its own dedicated
+        # tests in test_factor_engine_adversarial.py), so the sample-size floor is relaxed here.
+        min_cross_sectional_samples=1,
+        parameters={"top_n": 1},
         cost_model_config={"commission_rate": 0.0003}, strategy_id="strat_test", strategy_version="1.0.0",
         benchmark_id="000300.SH", benchmark_version="1.0", run_store=setup["run_store"],
     )
@@ -112,7 +127,7 @@ def test_baseline_certified_replay_succeeds_when_untampered(setup):
     CertifiedResearchRunExecutor.execute(_make_request(setup, run_id="run_replay_ok"))
     replay_engine = CertifiedReplayEngine(
         setup["run_store"], setup["snapshot_manager"], setup["manifest_store"],
-        setup["corporate_action_store"],
+        setup["corporate_action_store"], setup["security_master"], {},
     )
     report = replay_engine.replay("run_replay_ok")
     assert report.status.value == "REPRODUCIBLE"
@@ -301,7 +316,7 @@ def test_14_replay_against_modified_dataset_fails(setup):
 
     replay_engine = CertifiedReplayEngine(
         setup["run_store"], setup["snapshot_manager"], setup["manifest_store"],
-        setup["corporate_action_store"],
+        setup["corporate_action_store"], setup["security_master"], {},
     )
     with pytest.raises(ValueError, match="FAIL CLOSED"):
         replay_engine.replay("run_replay_1")
@@ -315,7 +330,7 @@ def test_15_replay_against_missing_snapshot_fails(setup):
 
     replay_engine = CertifiedReplayEngine(
         setup["run_store"], fresh_snapshot_manager, setup["manifest_store"],
-        setup["corporate_action_store"],
+        setup["corporate_action_store"], setup["security_master"], {},
     )
     with pytest.raises(ValueError, match="FAIL CLOSED"):
         replay_engine.replay("run_replay_2")
@@ -339,7 +354,7 @@ def test_16_replay_against_changed_corporate_action_data_fails(setup):
 
     replay_engine = CertifiedReplayEngine(
         setup["run_store"], setup["snapshot_manager"], setup["manifest_store"],
-        setup["corporate_action_store"],
+        setup["corporate_action_store"], setup["security_master"], {},
     )
     with pytest.raises(ValueError, match="FAIL CLOSED"):
         replay_engine.replay("run_replay_3")

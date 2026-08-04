@@ -71,7 +71,16 @@ class ResearchReplayEngine:
                 "Cannot replay without the original inputs."
             )
 
-        targets = [PortfolioTarget(input_manifest.start_date, input_manifest.strategy_id, {s: 1.0 / len(input_manifest.universe_symbols) for s in input_manifest.universe_symbols}, 1.0)]
+        # Weight only over symbols actually present in the price artifact being replayed, not
+        # over the full declared universe. Phase 8A hardening made BacktestEngine fail closed
+        # when weights reference a symbol absent from daily_prices — this line previously
+        # constructed weights from input_manifest.universe_symbols regardless of which symbols
+        # the stored 'daily_prices' artifact actually covered, silently masked before Phase 8A
+        # only because the pre-hardening engine ignored portfolio_targets entirely. Equal-weight
+        # reconstruction here remains Phase 7A's original approximation for plain (non-certified)
+        # replay; CertifiedReplayEngine's own factor/signal/portfolio recomputation (Phase 8A)
+        # is what makes weights reproduce the actually-certified values for certified runs.
+        targets = [PortfolioTarget(input_manifest.start_date, input_manifest.strategy_id, {s: 1.0 / len(prices) for s in prices.keys()}, 1.0)]
 
         # Step 3: Re-execute Backtest using locked snapshot
         backtest_res = self.backtest_engine.run_backtest(

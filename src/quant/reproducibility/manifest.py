@@ -2,7 +2,7 @@
 manifest.py — ResearchInputManifest, ResearchResultManifest & ResearchRunManifest.
 """
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import Dict, Any, List, Optional
 from src.quant.reproducibility.canonical import compute_canonical_sha256
 
@@ -38,6 +38,15 @@ class ResearchInputManifest:
     code_version: str
     code_state: str
     created_at: str
+
+    # Phase 8A: how multiple factors' cross-sectional z-scores combine into one composite
+    # signal (List[FactorWeightConfig]-as-dicts) plus its hash. Trailing defaulted fields —
+    # added after every other field so existing constructors (Phase 7A-7J) remain valid
+    # without modification; only Phase 8A's factor-driven certified path ever sets a real
+    # (non-default) value. "NOT_APPLICABLE" distinguishes "single-factor run, no combination
+    # scheme" / "pre-Phase-8A run" from a field that was simply never populated.
+    signal_config: List[Dict[str, Any]] = field(default_factory=list)
+    signal_configuration_hash: str = "NOT_APPLICABLE"
 
     def compute_input_hash(self) -> str:
         return compute_canonical_sha256(asdict(self))
