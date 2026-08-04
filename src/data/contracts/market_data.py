@@ -23,6 +23,11 @@ class MarketDataContract:
     trading_status: str       # "NORMAL", "SUSPENDED", "HALTED"
     quality_status: str       # "VALID", "INVALID", "SUSPECT", "MISSING", "STALE"
 
+    # Provenance: REAL_PROVIDER | LOCAL_PRODUCTION_VERIFICATION_DATA | GOLDEN_DATASET | SYNTHETIC_DATA
+    # Defaults to SYNTHETIC_DATA (fail-closed). Only a code path that actually parsed a live
+    # network provider response may set REAL_PROVIDER.
+    data_origin: str = "SYNTHETIC_DATA"
+
     def __post_init__(self):
         if not self.symbol or "." not in self.symbol:
             raise ValueError(f"Invalid symbol format: {self.symbol}. Expected format '600519.SH'")

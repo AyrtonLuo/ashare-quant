@@ -40,11 +40,15 @@ class HistoricalDataWarehouse:
                             available_at=mc.timestamp,
                             received_at=mc.timestamp,
                             as_of=as_of_cutoff,
-                            quality_status=mc.quality_status
+                            quality_status=mc.quality_status,
+                            provider_id=mc.data_origin,
+                            data_origin=mc.data_origin
                         )
                     )
         else:
-            # Fallback fixture for Golden testing
+            # No Parquet-backed data exists for this symbol/range. Rather than silently
+            # fabricating a value, return an explicitly-tagged GOLDEN_DATASET fixture so
+            # downstream code / reports cannot mistake this for real or production data.
             temporal_contracts.append(
                 TemporalDataContract(
                     symbol=symbol,
@@ -54,7 +58,9 @@ class HistoricalDataWarehouse:
                     effective_date=start_date,
                     available_at=dt_start,
                     received_at=dt_start,
-                    as_of=as_of_cutoff
+                    as_of=as_of_cutoff,
+                    provider_id="golden_fixture",
+                    data_origin="GOLDEN_DATASET"
                 )
             )
 

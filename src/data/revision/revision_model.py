@@ -31,3 +31,8 @@ class DataRevision:
     provider_field: Optional[str] = None
     provider_timestamp: Optional[datetime] = None
     as_of_limit: Optional[datetime] = None
+
+    # Provenance: REAL_PROVIDER | LOCAL_PRODUCTION_VERIFICATION_DATA | GOLDEN_DATASET | SYNTHETIC_DATA
+    # Defaults to SYNTHETIC_DATA (fail-closed). Only a code path that actually parsed a live
+    # network provider response may set REAL_PROVIDER.
+    data_origin: str = "SYNTHETIC_DATA"

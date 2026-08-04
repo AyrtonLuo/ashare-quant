@@ -39,6 +39,11 @@ class TemporalDataContract:
     provider_id: str = "tushare_pro_primary"
     quality_status: str = "VALID"
 
+    # Provenance: REAL_PROVIDER | LOCAL_PRODUCTION_VERIFICATION_DATA | GOLDEN_DATASET | SYNTHETIC_DATA
+    # Defaults to SYNTHETIC_DATA (fail-closed). Only a code path that actually parsed a live
+    # network provider response may set REAL_PROVIDER.
+    data_origin: str = "SYNTHETIC_DATA"
+
     @property
     def latency_seconds(self) -> float:
         return (self.received_at - self.event_time).total_seconds()

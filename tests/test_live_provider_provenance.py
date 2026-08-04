@@ -17,4 +17,7 @@ def test_live_provider_provenance_tagging(tmp_path):
     engine = LiveProviderVerificationEngine(audit_dir=str(tmp_path))
     res = engine.execute_live_verification_pipeline(run_store_dir=str(tmp_path / "runs"))
 
-    assert res["provenance_status"] == "VERIFIED_LIVE_PROVIDER"
+    # NOTE: credential availability alone does not make the certified dataset verified-real —
+    # this pipeline still seeds its dataset from a synthetic fixture (see Phase 7H
+    # specification) until a genuine live-fetch dataset path replaces it.
+    assert res["provenance_status"] == "NOT_VERIFIED_SYNTHETIC_FIXTURE_PIPELINE"

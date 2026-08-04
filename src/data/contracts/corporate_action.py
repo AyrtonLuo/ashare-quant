@@ -16,3 +16,8 @@ class CorporateActionContract:
     split_ratio: float        # Split ratio (e.g. 2.0 for 1-to-2 split)
     announcement_date: str    # Disclosure date
     quality_status: str       # "VALID", "SUSPECT"
+
+    # Provenance: REAL_PROVIDER | LOCAL_PRODUCTION_VERIFICATION_DATA | GOLDEN_DATASET | SYNTHETIC_DATA
+    # Defaults to SYNTHETIC_DATA (fail-closed). Only a code path that actually parsed a live
+    # network provider response may set REAL_PROVIDER.
+    data_origin: str = "SYNTHETIC_DATA"

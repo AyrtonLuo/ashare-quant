@@ -1,10 +1,17 @@
 """
-akshare_provider.py — AkShare Provider Adapter converting raw data to Canonical Contracts.
+akshare_provider.py — AkShare Provider Adapters.
+
+Mirrors tushare_provider.py's split: `AkShareProviderAdapter` is a SYNTHETIC FIXTURE (no network
+access, always data_origin="SYNTHETIC_DATA"); `LiveAkShareProviderAdapter` is the REAL PROVIDER
+adapter that calls the `akshare` package and stamps data_origin="REAL_PROVIDER" only on values it
+actually parsed from a live response. `akshare` is not installed in this environment, so the live
+adapter's field-mapping has not been exercised against a real response — treat it as unverified
+until run once against the real package and reviewed.
 """
 
 from datetime import datetime
 from typing import Optional
-from src.data.providers.base import UnifiedDataProvider
+from src.data.providers.base import UnifiedDataProvider, ProviderError
 from src.data.contracts.market_data import MarketDataContract
 from src.data.contracts.fundamental_data import FundamentalDataContract
 from src.data.contracts.corporate_action import CorporateActionContract
@@ -12,6 +19,10 @@ from src.data.fundamentals.metrics.calculator import FinancialMetricsCalculator
 
 
 class AkShareProviderAdapter(UnifiedDataProvider):
+    """SYNTHETIC FIXTURE adapter. Deterministic hardcoded values — no network access.
+    Every returned contract carries data_origin="SYNTHETIC_DATA". Do not use to back
+    any REAL_PROVIDER or LOCAL_PRODUCTION_VERIFICATION_DATA certification claim."""
+
     @property
     def provider_id(self) -> str:
         return "akshare_primary"
@@ -20,9 +31,7 @@ class AkShareProviderAdapter(UnifiedDataProvider):
     def provider_version(self) -> str:
         return "1.12.0"
 
-
     def fetch_market_data(self, symbol: str, trade_date: str) -> Optional[MarketDataContract]:
-        """Adapter converting AkShare daily bar data into Canonical MarketDataContract."""
         # Simulated raw values for demonstration & testing
         raw_price = 1650.00 if symbol == "600519.SH" else 12.50
         return MarketDataContract(
@@ -38,11 +47,11 @@ class AkShareProviderAdapter(UnifiedDataProvider):
             adj_factor=1.0,
             unadjusted_close=raw_price,
             trading_status="NORMAL",
-            quality_status="VALID"
+            quality_status="VALID",
+            data_origin="SYNTHETIC_DATA"
         )
 
     def fetch_fundamental_data(self, symbol: str, trade_date: str) -> Optional[FundamentalDataContract]:
-        """Adapter converting AkShare financial data into Canonical FundamentalDataContract."""
         price = 1650.00 if symbol == "600519.SH" else 12.50
         eps_annual = 58.00 if symbol == "600519.SH" else -0.50
         trailing_eps = [14.0, 14.5, 14.5, 15.0] if symbol == "600519.SH" else [-0.1, -0.1, -0.15, -0.15]
@@ -76,7 +85,8 @@ class AkShareProviderAdapter(UnifiedDataProvider):
             dividend_yield_ttm=div_yield,
             dividend_yield_status=div_status,
             roe=32.2 if symbol == "600519.SH" else -10.0,
-            quality_status="VALID"
+            quality_status="VALID",
+            data_origin="SYNTHETIC_DATA"
         )
 
     def fetch_corporate_actions(self, symbol: str, start_date: str, end_date: str) -> list:
@@ -89,7 +99,65 @@ class AkShareProviderAdapter(UnifiedDataProvider):
                 bonus_ratio=0.0,
                 split_ratio=1.0,
                 announcement_date="2026-05-20",
-                quality_status="VALID"
+                quality_status="VALID",
+                data_origin="SYNTHETIC_DATA"
             )
         ]
 
+
+class LiveAkShareProviderAdapter(UnifiedDataProvider):
+    """REAL PROVIDER adapter. Calls the `akshare` package over the network.
+    Never fabricates a value: any missing package, unreachable source, empty response, or
+    missing required field raises ProviderError instead of returning a default.
+    UNVERIFIED against a live response in this environment — see module docstring."""
+
+    def _client(self):
+        try:
+            import akshare as ak
+        except ImportError as e:
+            raise ProviderError(self.provider_id, f"akshare package not installed: {e}")
+        return ak
+
+    @property
+    def provider_id(self) -> str:
+        return "akshare_secondary"
+
+    @property
+    def provider_version(self) -> str:
+        return "1.12.0"
+
+    def fetch_market_data(self, symbol: str, trade_date: str) -> Optional[MarketDataContract]:
+        ak = self._client()
+        ak_symbol = symbol.split(".")[0]
+        ak_date = trade_date.replace("-", "")
+        try:
+            df = ak.stock_zh_a_hist(symbol=ak_symbol, start_date=ak_date, end_date=ak_date, adjust="")
+        except Exception as e:
+            raise ProviderError(self.provider_id, f"AkShare stock_zh_a_hist() call failed: {e}")
+
+        if df is None or df.empty:
+            raise ProviderError(self.provider_id, f"AkShare returned no daily bar for {symbol} on {trade_date}.")
+
+        row = df.iloc[0]
+        return MarketDataContract(
+            symbol=symbol,
+            timestamp=datetime.now(),
+            trading_date=trade_date,
+            open_price=float(row["开盘"]),
+            high_price=float(row["最高"]),
+            low_price=float(row["最低"]),
+            close_price=float(row["收盘"]),
+            volume=float(row["成交量"]),
+            amount=float(row["成交额"]),
+            adj_factor=1.0,
+            unadjusted_close=float(row["收盘"]),
+            trading_status="NORMAL",
+            quality_status="VALID",
+            data_origin="REAL_PROVIDER"
+        )
+
+    def fetch_fundamental_data(self, symbol: str, trade_date: str) -> Optional[FundamentalDataContract]:
+        raise ProviderError(self.provider_id, "LiveAkShareProviderAdapter.fetch_fundamental_data is not yet implemented against a verified real akshare response.")
+
+    def fetch_corporate_actions(self, symbol: str, start_date: str, end_date: str) -> list:
+        raise ProviderError(self.provider_id, "LiveAkShareProviderAdapter.fetch_corporate_actions is not yet implemented against a verified real akshare response.")

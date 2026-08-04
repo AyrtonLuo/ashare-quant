@@ -1,7 +1,13 @@
 """
-real_data_verifier.py — Real Historical Dataset Verification Engine & Audit Report Pipeline.
-Handles real provider data detection, production-scale dataset ingestion, PIT snapshot generation,
-quality auditing, replay verification, and performance profiling.
+real_data_verifier.py — Historical Dataset Verification Engine & Audit Report Pipeline.
+
+IMPORTANT: `generate_verification_dataset` below seeds every price from an in-memory formula
+(`base_prices x date multiplier`) — it never reads a file or calls a provider, regardless of
+`check_provider_credentials()`'s result. It exercises the PIT/snapshot/revision/replay
+architecture, not real market data. Every `DataRevision` it creates carries
+`data_origin="SYNTHETIC_DATA"` (the dataclass default) precisely because of this. See
+docs/PHASE_7H_SPECIFICATION.md for the plan to replace this with a genuine, persisted,
+credentialed ingestion.
 """
 
 import os
@@ -74,9 +80,11 @@ def check_provider_credentials() -> Dict[str, Any]:
 
 class RealDataVerificationEngine:
     """
-    Production-Scale Real Data Verification Engine.
+    Production-Scale Architecture Verification Engine.
     Executes end-to-end dataset ingestion, quality validation, snapshot creation,
-    backtest execution, replay verification, and performance profiling.
+    backtest execution, replay verification, and performance profiling — against a
+    SYNTHETIC_DATA formula-generated dataset (see module docstring). Proves the
+    architecture; does not by itself certify anything about real market data.
     """
 
     def __init__(self, audit_dir: str = "/Users/yuhanluo/ashare-quant/data/research/audit/real_data_verification"):
@@ -92,14 +100,15 @@ class RealDataVerificationEngine:
         end_date: str = "2024-12-31"
     ) -> Tuple[DatasetManifest, RevisionStore, SnapshotManager]:
         """
-        Ingests real historical A-Share data (or verifies production local dataset pipeline).
+        Generates a SYNTHETIC formula-based dataset exercising the PIT/snapshot/revision
+        architecture across the 20 verification symbols. Does NOT ingest real historical data.
         Returns (DatasetManifest, RevisionStore, SnapshotManager).
         """
         symbols = symbols or VERIFICATION_SYMBOLS
         store = RevisionStore()
         sec_registry = SecurityMasterRegistry()
 
-        # Seed real PIT revisions across the 20 symbols over historical trading days
+        # Seed SYNTHETIC formula-generated PIT revisions across the 20 symbols (NOT real data — see module docstring)
         base_prices = {
             "600519.SH": 1800.0, "600036.SH": 35.0, "000858.SZ": 160.0, "300750.SZ": 220.0,
             "300059.SZ": 20.0, "688981.SH": 50.0, "000001.SZ": 12.0, "601318.SH": 45.0,

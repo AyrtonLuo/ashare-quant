@@ -61,11 +61,15 @@ class ResearchReplayEngine:
             snapshot_manager=self.snapshot_manager
         )
 
-        # Step 2: Extract Replay Prices / Data
+        # Step 2: Extract Replay Prices / Data (fail closed — never substitute a different
+        # price series than the one the original run actually used, since that would let a
+        # MISMATCH be masked or a false REPRODUCIBLE result be produced by coincidence).
         prices = artifacts.get("daily_prices")
         if not prices:
-            # Fallback to golden dataset prices for test replay
-            prices = {"600519.SH": [1600.0, 1620.0, 1610.0]}
+            raise RuntimeError(
+                f"FAIL CLOSED: Research Run '{research_run_id}' has no saved 'daily_prices' artifact. "
+                "Cannot replay without the original inputs."
+            )
 
         targets = [PortfolioTarget(input_manifest.start_date, input_manifest.strategy_id, {s: 1.0 / len(input_manifest.universe_symbols) for s in input_manifest.universe_symbols}, 1.0)]
 

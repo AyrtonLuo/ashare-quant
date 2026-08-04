@@ -18,4 +18,8 @@ def test_live_provider_credentialed_execution(tmp_path):
     res = engine.execute_phase_7g_certification(run_store_dir=str(tmp_path / "runs"))
 
     assert res["is_live_provider_available"] is True
-    assert res["data_origin"] == "REAL_PROVIDER"
+    # NOTE: credential availability alone does not make the certified dataset REAL_PROVIDER —
+    # this pipeline still seeds its dataset from a synthetic fixture (see Phase 7H
+    # specification). data_origin only becomes REAL_PROVIDER once a genuine live-fetch dataset
+    # path replaces the formula-generated one.
+    assert res["data_origin"] == "SYNTHETIC_DATA"
