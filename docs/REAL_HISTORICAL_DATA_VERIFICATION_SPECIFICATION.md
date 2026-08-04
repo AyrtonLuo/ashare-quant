@@ -1,7 +1,7 @@
-# Real Historical Data Verification Specification (Phase 7C)
+# Real Historical Data Verification Specification (Phase 7C / Phase 7D)
 
 ## 1. Overview & Objectives
-Phase 7C establishes a production-scale verification pipeline for real A-Share market datasets.
+Phase 7C and Phase 7D establish a production-scale verification pipeline for real A-Share market datasets and live API data feeds.
 
 The pipeline proves the complete end-to-end chain:
 $$\text{REAL MARKET DATA} \rightarrow \text{CANONICAL INGESTION} \rightarrow \text{PARQUET/DUCKDB} \rightarrow \text{PIT SNAPSHOT} \rightarrow \text{DATASET LOCK} \rightarrow \text{RESEARCH RUN} \rightarrow \text{REPLAY ENGINE} \rightarrow \text{IDENTICAL SHA-256 HASH}$$
@@ -31,5 +31,7 @@ Historical Data Warehouse
 ResearchDataAPI (Point-in-Time Gated)
 ```
 
-## 4. Credential Detection & Fail-Closed Policy
-If `TUSHARE_TOKEN` is detected, the engine executes live provider queries. If credentials are missing, the system gracefully records `REAL_DATA_CREDENTIALS_UNAVAILABLE`, marks real-data tests with `@pytest.mark.real_data`, and executes local dataset verification without fabricating tokens or pretending live ingestion occurred.
+## 4. Credential Pre-Flight Audit & Anti-Fabrication Policy
+- Live API tokens are inspected via `ProviderCredentialPreflight` from environment variable `TUSHARE_TOKEN`. Zero tokens are logged or committed.
+- If credentials are available, live network tests execute over real API endpoints.
+- If credentials are unavailable, live provider tests are marked `SKIPPED`, status is recorded as `PASS WITH LIMITATIONS`, and local production dataset verification is maintained without fabricating fake tokens or synthetic API responses.
