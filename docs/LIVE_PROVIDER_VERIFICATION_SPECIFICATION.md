@@ -1,28 +1,30 @@
-# Live Provider Verification Specification (Phase 7D)
+# Live Provider Verification & Cross-Provider Certification Specification (Phase 7E)
 
-## 1. Overview & Objectives
-Phase 7D defines the Live Provider Credentialed Verification protocol for live network data feeds.
+## 1. Overview & Executive Objectives
+Phase 7E specifies the production data certification, credential preflight audit, data origin classification, and cross-provider reconciliation protocols for live quantitative research platforms.
 
-The purpose of Phase 7D is certifying the live API provenance chain:
-$$\text{REAL PROVIDER API} \rightarrow \text{REAL API RESPONSE} \rightarrow \text{PROVIDER ADAPTER} \rightarrow \text{CANONICAL NORMALIZATION} \rightarrow \text{DATATRUSTGATE} \rightarrow \text{PARQUET} \rightarrow \text{DUCKDB} \rightarrow \text{PIT SNAPSHOT} \rightarrow \text{DATASET LOCK} \rightarrow \text{RESEARCH RUN} \rightarrow \text{REPLAY} \rightarrow \text{IDENTICAL HASH}$$
+The pipeline proves the complete end-to-end certification chain:
+$$\text{REAL PROVIDER} \rightarrow \text{PREFLIGHT} \rightarrow \text{LIVE API FETCH} \rightarrow \text{PROVENANCE} \rightarrow \text{DATATRUSTGATE} \rightarrow \text{CROSS-RECONCILIATION} \rightarrow \text{PARQUET/DUCKDB} \rightarrow \text{PIT SNAPSHOT} \rightarrow \text{DATASET CERTIFICATION} \rightarrow \text{RESEARCH RUN} \rightarrow \text{REPLAY} \rightarrow \text{IDENTICAL HASH}$$
 
 ## 2. Safety & Zero Secret Leakage Policy
-- Live API tokens are read strictly from environment variable `TUSHARE_TOKEN`.
-- Hardcoding credentials in source code, unit tests, log files, dataset manifests, or exception tracebacks is strictly prohibited.
-- `ProviderCredentialPreflight` inspects credential status without logging or exposing secret bytes.
+- Provider API credentials are read strictly from environment variable `TUSHARE_TOKEN`.
+- `ProviderCredentialPreflight` inspects credential availability without printing, logging, or persisting secret bytes.
+- If credentials are absent, live provider tests skip gracefully (`@pytest.mark.real_provider`), final status is reported as `PASS WITH LIMITATIONS`, and `LIVE_PROVIDER_VERIFICATION` is certified as `NOT VERIFIED`.
 
-## 3. Pre-Flight Credential Audit Matrix
+## 3. Data Origin Certification Matrix
 
-| Preflight Status | System Action | Audit Result Tag |
+| Tag Name | Definition | Authorized Usage |
 | :--- | :--- | :--- |
-| `AVAILABLE` | Execute live API queries over 5 symbols (`600519.SH`, `000858.SZ`, `000001.SZ`, `300750.SZ`, `688981.SH`). | `VERIFIED_LIVE_PROVIDER` |
-| `UNAVAILABLE` | Skip `@pytest.mark.real_provider` tests. Report status `PASS WITH LIMITATIONS`. | `LIVE_PROVIDER_VERIFICATION = NOT VERIFIED` |
-| `INVALID` | Skip live tests. Report credential error safely. | `LIVE_PROVIDER_VERIFICATION = NOT VERIFIED` |
-| `API_UNREACHABLE` | Skip live tests. Report network/connectivity probe failure. | `LIVE_PROVIDER_VERIFICATION = NOT VERIFIED` |
+| `REAL_PROVIDER` | Direct network response from authenticated provider API. | Live network API ingestions ONLY. |
+| `LOCAL_PRODUCTION_VERIFICATION_DATA` | Verified production historical dataset stored locally in Parquet. | Local production pipeline verification. |
+| `GOLDEN_DATASET` | Benchmark golden fixture. | Multi-factor experiment reference testing. |
+| `SYNTHETIC_DATA` | Unit test mock fixture. | Isolated component unit tests. |
 
-## 4. Real Data Origin Tagging
-Datasets, manifests, and canonical contracts explicitly record `data_origin`:
-- `REAL_PROVIDER`: Real network API responses.
-- `LOCAL_PRODUCTION_VERIFICATION_DATA`: Local production verification datasets.
-- `GOLDEN_DATASET`: Immutable golden dataset fixtures.
-- `SYNTHETIC_DATA`: Synthetic unit test data.
+Adversarial assertion: `LOCAL_PRODUCTION_VERIFICATION_DATA != REAL_PROVIDER`.
+
+## 4. Cross-Provider Reconciliation Layer
+Reconciles TuShare Pro (`tushare_pro_primary`) against AkShare (`akshare_secondary`):
+- `MATCH`: Relative difference $\le 0.1\%$.
+- `ACCEPTABLE_DIFFERENCE`: Relative difference $\le 1.0\%$.
+- `MATERIAL_DIFFERENCE`: Relative difference $> 1.0\%$ (flagged for review, zero silent overwrites).
+- `PROVIDER_UNAVAILABLE`: One or both providers unavailable.
