@@ -164,3 +164,34 @@ def test_empty_directory_cannot_be_certified(tmp_path):
     empty_dir.mkdir()
     with pytest.raises(FileNotFoundError, match="FAIL CLOSED"):
         PersistentDatasetManifestManager.build_manifest("ds_empty", "v1", empty_dir, "2026-08-01T00:00:00")
+
+
+# --- Phase 7J: manifest store immutability must survive a fresh process/instance ------------
+
+def test_manifest_store_with_base_dir_persists_across_fresh_instances(tmp_path):
+    """A plain PersistentDatasetManifestStore() forgets everything when the object is garbage
+    collected — a fresh instance has no memory of prior certifications. With base_dir set,
+    the immutability guarantee must hold even for a brand-new store instance pointed at the
+    same directory (simulating a new process)."""
+    manifest_dir = tmp_path / "manifests"
+    store_1 = PersistentDatasetManifestStore(base_dir=str(manifest_dir))
+    directory, manifest = _certify(tmp_path, "ds_cross_process", "v1", [100.0, 101.0], store_1)
+
+    # A brand-new store instance, same base_dir, simulating a fresh process.
+    store_2 = PersistentDatasetManifestStore(base_dir=str(manifest_dir))
+    retrieved = store_2.get("ds_cross_process", "v1")
+    assert retrieved is not None
+    assert retrieved.content_sha256 == manifest.content_sha256
+
+    # And it still enforces immutability against different content under the same version.
+    with pytest.raises(ValueError, match="FAIL CLOSED"):
+        _certify(tmp_path, "ds_cross_process", "v1", [999.0, 998.0], store_2)
+
+
+def test_manifest_store_without_base_dir_is_process_local_only(tmp_path):
+    """Documents the limitation explicitly: with no base_dir, a fresh instance has no memory
+    of prior certifications — this is NOT a cross-process immutability guarantee."""
+    directory, manifest = _certify(tmp_path, "ds_local_only", "v1", [100.0, 101.0], PersistentDatasetManifestStore())
+
+    fresh_store = PersistentDatasetManifestStore()
+    assert fresh_store.get("ds_local_only", "v1") is None

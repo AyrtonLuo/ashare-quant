@@ -13,9 +13,13 @@ persistent artifact rather than just a label.
 """
 
 import hashlib
-from dataclasses import dataclass
+import json
+import os
+from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple
+
+from src.quant.reproducibility.canonical import to_canonical_json
 
 
 @dataclass(frozen=True)
@@ -141,16 +145,40 @@ class PersistentDatasetManifestManager:
 
 class PersistentDatasetManifestStore:
     """Immutable registry: a (dataset_id, dataset_version) pair identifies exactly one content
-    hash for the lifetime of the store. Certifying different content under an already-used
-    version string fails closed instead of silently overwriting the prior identity."""
+    hash. Certifying different content under an already-used version string fails closed
+    instead of silently overwriting the prior identity.
 
-    def __init__(self):
+    With no `base_dir`, this immutability guarantee holds only for the lifetime of the Python
+    object — a fresh instance has no memory of prior certifications. Pass `base_dir` to persist
+    each certified manifest as a small JSON record on disk (mirroring ResearchRunStore's
+    existing on-disk persistence pattern), so the guarantee holds across process restarts too.
+    This never writes the dataset's Parquet bytes themselves — only the small manifest record."""
+
+    def __init__(self, base_dir: Optional[str] = None):
         self._store: Dict[Tuple[str, str], PersistentDatasetManifest] = {}
+        self.base_dir = base_dir
+        if self.base_dir:
+            os.makedirs(self.base_dir, exist_ok=True)
+
+    def _disk_path(self, dataset_id: str, dataset_version: str) -> Optional[Path]:
+        if not self.base_dir:
+            return None
+        safe_id = dataset_id.replace("/", "_")
+        safe_version = dataset_version.replace("/", "_")
+        return Path(self.base_dir) / f"{safe_id}__{safe_version}.json"
+
+    def _load_from_disk(self, dataset_id: str, dataset_version: str) -> Optional[PersistentDatasetManifest]:
+        path = self._disk_path(dataset_id, dataset_version)
+        if not path or not path.exists():
+            return None
+        with open(path, "r") as f:
+            data = json.load(f)
+        return PersistentDatasetManifest(**data)
 
     def certify(self, manifest: PersistentDatasetManifest) -> None:
         key = (manifest.dataset_id, manifest.dataset_version)
-        if key in self._store:
-            existing = self._store[key]
+        existing = self._store.get(key) or self._load_from_disk(manifest.dataset_id, manifest.dataset_version)
+        if existing is not None:
             if existing.content_sha256 != manifest.content_sha256:
                 raise ValueError(
                     f"FAIL CLOSED: dataset_version '{manifest.dataset_version}' for dataset "
@@ -159,8 +187,19 @@ class PersistentDatasetManifestStore:
                     f"'{manifest.content_sha256}'. A dataset_version identifies immutable "
                     "content; re-certifying different content under the same version is prohibited."
                 )
+            self._store[key] = existing
             return  # identical re-certification is a harmless no-op
         self._store[key] = manifest
+        path = self._disk_path(manifest.dataset_id, manifest.dataset_version)
+        if path:
+            with open(path, "w") as f:
+                f.write(to_canonical_json(asdict(manifest)))
 
     def get(self, dataset_id: str, dataset_version: str) -> Optional[PersistentDatasetManifest]:
-        return self._store.get((dataset_id, dataset_version))
+        key = (dataset_id, dataset_version)
+        if key in self._store:
+            return self._store[key]
+        loaded = self._load_from_disk(dataset_id, dataset_version)
+        if loaded:
+            self._store[key] = loaded
+        return loaded
