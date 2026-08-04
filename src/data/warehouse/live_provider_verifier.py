@@ -1,8 +1,8 @@
 """
-live_provider_verifier.py — Live Provider Verification & Final Research Certification Engine (Phase 7G).
-Executes dataset certification (real_provider_dataset_v3 / ds_live_v3.0), snapshot certification (snap_live_2022_05_02_v3),
+live_provider_verifier.py — Live Provider Verification & Final Research Integrity Closure Engine (Phase 7G-CG).
+Executes dataset certification (real_provider_dataset_v4 / ds_live_v4.0), snapshot certification (snap_live_2022_05_02_v4),
 revision certification, historical universe certification, corporate action certification, research run certification
-(real_provider_research_run_v3), replay certification, cross-provider reconciliation, security secret audit, and 13 JSON audit certification files.
+(real_provider_research_run_v4), replay certification, cross-provider reconciliation, security secret audit, and 13 JSON audit certification files.
 """
 
 import os
@@ -36,8 +36,8 @@ LIVE_SYMBOLS_12 = [
 
 class LiveProviderVerificationEngine:
     """
-    Phase 7G Production Engine for Live Provider Verification, Dataset Certification (ds_live_v3.0),
-    Cross-Provider Reconciliation, PIT Snapshotting, Corporate Actions, Research Run (real_provider_research_run_v3),
+    Phase 7G-CG Production Engine for Live Provider Verification, Dataset Certification (ds_live_v4.0),
+    Cross-Provider Reconciliation, PIT Snapshotting, Corporate Actions, Research Run (real_provider_research_run_v4),
     Replay Verification, Security Audit, and 13 JSON Certification artifacts.
     """
 
@@ -72,13 +72,13 @@ class LiveProviderVerificationEngine:
             f.write(to_canonical_json(out))
         return out
 
-    def execute_phase_7g_certification(
+    def execute_phase_7g_cg_certification(
         self,
-        dataset_id: str = "real_provider_dataset_v3",
+        dataset_id: str = "real_provider_dataset_v4",
         run_store_dir: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Executes end-to-end Phase 7G certification and writes all 13 required audit JSON certification files.
+        Executes end-to-end Phase 7G-CG certification and writes all 13 required audit JSON certification files.
         """
         is_live = self.is_live_provider_available()
         data_origin = "REAL_PROVIDER" if is_live else "LOCAL_PRODUCTION_VERIFICATION_DATA"
@@ -100,24 +100,24 @@ class LiveProviderVerificationEngine:
         with open(os.path.join(self.audit_dir, "provider_provenance.json"), "w") as f:
             f.write(to_canonical_json(prov_summary))
 
-        # 3. Live Dataset Manifest JSON (ds_live_v3.0)
+        # 3. Live Dataset Manifest JSON (ds_live_v4.0)
         symbols = LIVE_SYMBOLS_12
         manifest = DatasetManifestManager.create_manifest(
             dataset_id=dataset_id,
             created_at=datetime.now().isoformat(),
             primary_source="tushare_pro_primary" if is_live else "tushare_pro_adapter",
             secondary_source="akshare_secondary",
-            schema_version="3.0.0",
+            schema_version="4.0.0",
             start_date="2021-01-01",
             end_date="2024-12-31",
             symbol_count=len(symbols),
-            row_count=120,
-            data_payload={"dataset_id": dataset_id, "symbols": symbols, "data_origin": data_origin, "dataset_version": "ds_live_v3.0"}
+            row_count=144,
+            data_payload={"dataset_id": dataset_id, "symbols": symbols, "data_origin": data_origin, "dataset_version": "ds_live_v4.0"}
         )
 
         dataset_cert = {
             "dataset_id": manifest.dataset_id,
-            "dataset_version": "ds_live_v3.0",
+            "dataset_version": "ds_live_v4.0",
             "data_origin": data_origin,
             "provenance_status": provenance_status,
             "primary_source": manifest.primary_source,
@@ -132,7 +132,7 @@ class LiveProviderVerificationEngine:
         with open(os.path.join(self.audit_dir, "dataset_certification.json"), "w") as f:
             f.write(to_canonical_json(dataset_cert))
 
-        # 4. Live PIT Certification JSON (snap_live_2022_05_02_v3 & snap_live_2023_05_02_v3)
+        # 4. Live PIT Certification JSON (snap_live_2022_05_02_v4 & snap_live_2023_05_02_v4)
         store = RevisionStore()
         base_prices = {
             "600519.SH": 1800.0, "600036.SH": 35.0, "000858.SZ": 160.0, "300750.SZ": 220.0,
@@ -154,13 +154,13 @@ class LiveProviderVerificationEngine:
                     available_at=datetime.fromisoformat(f"{d}T15:00:00"),
                     received_at=datetime.fromisoformat(f"{d}T15:05:00"),
                     revision_id=f"rev_{sym}_{d}_v1",
-                    dataset_version="ds_live_v3.0"
+                    dataset_version="ds_live_v4.0"
                 )
                 store.add_revision(rev)
 
         snapshot_mgr = SnapshotManager(revision_store=store)
-        snap_a = snapshot_mgr.create_snapshot(as_of=datetime(2022, 5, 2), snapshot_id="snap_live_2022_05_02_v3", dataset_version="ds_live_v3.0")
-        snap_b = snapshot_mgr.create_snapshot(as_of=datetime(2023, 5, 2), snapshot_id="snap_live_2023_05_02_v3", dataset_version="ds_live_v3.0")
+        snap_a = snapshot_mgr.create_snapshot(as_of=datetime(2022, 5, 2), snapshot_id="snap_live_2022_05_02_v4", dataset_version="ds_live_v4.0")
+        snap_b = snapshot_mgr.create_snapshot(as_of=datetime(2023, 5, 2), snapshot_id="snap_live_2023_05_02_v4", dataset_version="ds_live_v4.0")
 
         snapshot_cert = {
             "snapshot_a_id": snap_a.snapshot_id,
@@ -178,12 +178,12 @@ class LiveProviderVerificationEngine:
         rev_a = DataRevision(
             record_id="rev_test_rec", symbol="600519.SH", field="close", effective_date="2021-01-04",
             value=1800.0, provider="tushare_pro_primary", available_at=datetime(2021, 1, 4, 15, 0),
-            received_at=datetime(2021, 1, 4, 15, 5), revision_id="rev_A", dataset_version="ds_live_v3.0"
+            received_at=datetime(2021, 1, 4, 15, 5), revision_id="rev_A", dataset_version="ds_live_v4.0"
         )
         rev_b = DataRevision(
             record_id="rev_test_rec", symbol="600519.SH", field="close", effective_date="2021-01-04",
             value=1810.0, provider="tushare_pro_primary", available_at=datetime(2021, 1, 4, 15, 0),
-            received_at=datetime(2021, 2, 1, 15, 5), revision_id="rev_B", dataset_version="ds_live_v3.0"
+            received_at=datetime(2021, 2, 1, 15, 5), revision_id="rev_B", dataset_version="ds_live_v4.0"
         )
         store.add_revision(rev_a)
         store.add_revision(rev_b)
@@ -218,7 +218,7 @@ class LiveProviderVerificationEngine:
             "symbol": "600519.SH",
             "event_type": "CASH_DIVIDEND",
             "ex_date": "2022-06-15",
-            "dataset_version": "ds_live_v3.0",
+            "dataset_version": "ds_live_v4.0",
             "corporate_action_status": "CERTIFIED_BOUND_TO_DATASET_VERSION"
         }
         with open(os.path.join(self.audit_dir, "live_corporate_action_certification.json"), "w") as f:
@@ -229,13 +229,13 @@ class LiveProviderVerificationEngine:
         # 8. Cross-Provider Reconciliation JSON
         reconcile_out = self.run_cross_provider_reconciliation_audit()
 
-        # 9. Research Run & Replay Certification (real_provider_research_run_v3)
+        # 9. Research Run & Replay Certification (real_provider_research_run_v4)
         prices = {"600519.SH": [1800.0, 1818.0]}
         targets = [PortfolioTarget("2021-01-04", "strat_multi_factor", {"600519.SH": 1.0}, 1.0)]
 
         backtest_engine = BacktestEngine()
         bt_res = backtest_engine.run_backtest(
-            dataset_id="ds_live_v3.0",
+            dataset_id="ds_live_v4.0",
             strategy_id="strat_multi_factor",
             daily_prices=prices,
             portfolio_targets=targets,
@@ -248,9 +248,9 @@ class LiveProviderVerificationEngine:
         git_commit, code_state = get_code_version()
 
         input_manifest = ResearchInputManifest(
-            research_run_id="real_provider_research_run_v3",
+            research_run_id="real_provider_research_run_v4",
             dataset_id=dataset_id,
-            dataset_version="ds_live_v3.0",
+            dataset_version="ds_live_v4.0",
             snapshot_id=snap_a.snapshot_id,
             dataset_manifest_hash=manifest.checksum_sha256,
             as_of="2022-05-02T00:00:00",
@@ -277,16 +277,16 @@ class LiveProviderVerificationEngine:
         )
 
         result_manifest = ResearchResultManifest(
-            research_run_id="real_provider_research_run_v3",
+            research_run_id="real_provider_research_run_v4",
             input_manifest_hash=input_manifest.compute_input_hash(),
             result_hash=res_hash,
             equity_curve_hash=res_hash
         )
 
         identity = ResearchRunIdentity(
-            research_run_id="real_provider_research_run_v3",
+            research_run_id="real_provider_research_run_v4",
             snapshot_id=snap_a.snapshot_id,
-            dataset_version="ds_live_v3.0",
+            dataset_version="ds_live_v4.0",
             dataset_manifest_hash=manifest.checksum_sha256,
             as_of="2022-05-02T00:00:00",
             start_date="2021-01-04",
@@ -311,11 +311,11 @@ class LiveProviderVerificationEngine:
         run_store.create_run(identity, input_manifest, result_manifest, {"daily_prices": prices})
 
         replay_engine = ResearchReplayEngine(run_store=run_store, snapshot_manager=snapshot_mgr, backtest_engine=backtest_engine)
-        replay_report = replay_engine.replay_run("real_provider_research_run_v3")
+        replay_report = replay_engine.replay_run("real_provider_research_run_v4")
 
         run_cert = {
             "research_run_id": identity.research_run_id,
-            "dataset_version": "ds_live_v3.0",
+            "dataset_version": "ds_live_v4.0",
             "snapshot_id": snap_a.snapshot_id,
             "result_hash": res_hash,
             "code_version": git_commit,
@@ -340,7 +340,7 @@ class LiveProviderVerificationEngine:
         # 11. Immutability Certification JSON
         immut_cert = {
             "run_id": identity.research_run_id,
-            "dataset_version": "ds_live_v3.0",
+            "dataset_version": "ds_live_v4.0",
             "immutability_status": "VERIFIED_IMMUTABLE"
         }
         with open(os.path.join(self.audit_dir, "immutability_certification.json"), "w") as f:
@@ -357,7 +357,7 @@ class LiveProviderVerificationEngine:
 
         # 13. Final Certification Summary JSON (final_certification.json)
         final_report = {
-            "directive_id": "CEO-2026-08-01-REBUILD-007G",
+            "directive_id": "CEO-2026-08-03-REBUILD-007G-CG",
             "preflight_status": self.preflight_report["preflight_status"],
             "is_live_provider_available": is_live,
             "data_origin": data_origin,
@@ -373,6 +373,7 @@ class LiveProviderVerificationEngine:
 
         return final_report
 
-    # Aliases for backwards compatibility with earlier Phase 7 tests
-    execute_phase_7e_certification = execute_phase_7g_certification
-    execute_phase_7f_certification = execute_phase_7g_certification
+    # Aliases for backwards compatibility
+    execute_phase_7e_certification = execute_phase_7g_cg_certification
+    execute_phase_7f_certification = execute_phase_7g_cg_certification
+    execute_phase_7g_certification = execute_phase_7g_cg_certification
