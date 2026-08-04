@@ -1,0 +1,11 @@
+# Core dependencies (already present in the environment prior to Phase 8R).
+duckdb==1.4.5
+numpy==2.0.2
+pandas==2.3.3
+pyarrow==21.0.0
+scipy==1.13.1
+pytest==8.4.2
+
+# Phase 8R — Research Workbench UI (CEO directive 8R-IMPLEMENT §2: Streamlit only,
+# no FastAPI/Jinja2/JS build tooling in this phase).
+streamlit==1.50.0
