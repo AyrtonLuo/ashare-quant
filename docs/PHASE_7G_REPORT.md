@@ -3,7 +3,7 @@
 **Directive ID**: CEO-2026-08-01-REBUILD-007G
 **Target Repository**: `/Users/yuhanluo/ashare-quant`
 **Git Branch**: `main`
-**Previous Verified Commit**: `bc3b99f`
+**Git Commit**: `d5b6dd3` ([`d5b6dd33aa1ed3aa16ecdf555fbbcead13eefeb7`](file:///Users/yuhanluo/ashare-quant/docs/PHASE_7G_REPORT.md))
 **Status / Verdict**: **PASS WITH LIMITATIONS (LIVE PROVIDER CREDENTIALS UNAVAILABLE)**
 
 ---
