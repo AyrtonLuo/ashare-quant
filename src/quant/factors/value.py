@@ -1,5 +1,5 @@
 """
-value.py — Valuation Factor Adapter (PE / PB / Dividend Yield) with MetricProvenance tracking.
+value.py — Valuation Factor Adapter (PE / PB / Dividend Yield) with MetricProvenance tracking & PIT enforcement.
 """
 
 from datetime import datetime
@@ -23,6 +23,15 @@ class ValuationFactorAdapter(BaseFactor):
     def compute_from_fundamental(
         self, symbol: str, val: Optional[float], provenance: MetricProvenance, effective_date: str, as_of: datetime
     ) -> FactorValue:
+        # Enforce temporal provenance check: CURRENT_ONLY / NOT_PIT_VERIFIED / UNAVAILABLE cannot produce a valid factor score
+        if provenance in [MetricProvenance.CURRENT_ONLY, MetricProvenance.NOT_PIT_VERIFIED, MetricProvenance.UNAVAILABLE]:
+            return FactorValue(
+                symbol=symbol, factor_name=self.name, factor_version=self.version,
+                raw_value=None, effective_date=effective_date, as_of=as_of,
+                status=FactorStatus.NOT_APPLICABLE,
+                quality_notes=f"Unverified PIT Provenance: {provenance.value}"
+            )
+
         if val is None or val <= 0:
             return FactorValue(
                 symbol=symbol, factor_name=self.name, factor_version=self.version,

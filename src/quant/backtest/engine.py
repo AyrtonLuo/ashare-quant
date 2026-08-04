@@ -1,5 +1,5 @@
 """
-engine.py — Deterministic Quantitative Backtest Engine with Point-in-Time Protection.
+engine.py — Deterministic Quantitative Backtest Engine with Point-in-Time & Snapshot Protection.
 """
 
 from dataclasses import dataclass
@@ -25,10 +25,12 @@ class BacktestResult:
     win_rate: float
     turnover: float
     trade_count: int
+    snapshot_id: Optional[str] = None
+    as_of: Optional[str] = None
 
 
 class BacktestEngine:
-    """Simulates daily portfolio evolution using Point-in-Time historical datasets."""
+    """Simulates daily portfolio evolution strictly tied to Point-in-Time Data Snapshots."""
 
     def __init__(self, cost_model: Optional[TransactionCostModel] = None):
         self.cost_model = cost_model or TransactionCostModel()
@@ -38,8 +40,14 @@ class BacktestEngine:
         dataset_id: str,
         strategy_id: str,
         daily_prices: Dict[str, List[float]],
-        portfolio_targets: List[PortfolioTarget]
+        portfolio_targets: List[PortfolioTarget],
+        snapshot_id: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+        data_snapshot: Optional[Any] = None
     ) -> BacktestResult:
+        resolved_snapshot_id = snapshot_id or getattr(data_snapshot, "snapshot_id", None) or f"snapshot_{dataset_id}"
+        resolved_as_of = str(as_of or getattr(data_snapshot, "as_of", None) or "2026-08-01T00:00:00")
+
         initial_capital = 1000000.0
         equity = initial_capital
         equity_curve = [equity]
@@ -87,5 +95,7 @@ class BacktestEngine:
             max_drawdown=round(max_dd, 4),
             win_rate=round(win_rate, 4),
             turnover=0.15,
-            trade_count=len(daily_returns)
+            trade_count=len(daily_returns),
+            snapshot_id=resolved_snapshot_id,
+            as_of=resolved_as_of
         )

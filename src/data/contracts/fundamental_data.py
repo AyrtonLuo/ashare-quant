@@ -3,6 +3,7 @@ fundamental_data.py — Canonical Fundamental Data Contract with Data Trust & Pr
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Optional
 
@@ -11,6 +12,8 @@ class MetricProvenance(str, Enum):
     PROVIDER_REPORTED = "PROVIDER_REPORTED"
     DERIVED = "DERIVED"
     SYSTEM_CALCULATED = "SYSTEM_CALCULATED"
+    CURRENT_ONLY = "CURRENT_ONLY"
+    NOT_PIT_VERIFIED = "NOT_PIT_VERIFIED"
     UNAVAILABLE = "UNAVAILABLE"
 
 
@@ -44,3 +47,11 @@ class FundamentalDataContract:
     
     provenance: MetricProvenance = MetricProvenance.SYSTEM_CALCULATED
     quality_status: str = "VALID"      # "VALID", "INVALID", "SUSPECT", "MISSING"
+
+    # Temporal & Provider Provenance metadata
+    provider: str = "tushare_pro"
+    provider_field: Optional[str] = None
+    provider_timestamp: Optional[datetime] = None
+    available_at: Optional[datetime] = None
+    received_at: Optional[datetime] = None
+    as_of: Optional[datetime] = None
