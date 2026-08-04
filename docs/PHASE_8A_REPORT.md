@@ -3,7 +3,7 @@
 **Directive IDs**: CEO-2026-08-03-RESEARCH-008A, -STEP2, -IMPLEMENT, -HARDEN-BACKTEST, -HARDEN-BACKTEST-REVIEW
 **Target Repository**: `/Users/yuhanluo/ashare-quant`
 **Git Branch**: `main`
-**Base Commit**: `cd6d312` (Phase 8A architecture proposal). **This work**: uncommitted at time of writing, per CEO directive §13 ("不要立即commit... CEO review后再决定commit") — update this line once committed.
+**Base Commit**: `cd6d312` (Phase 8A architecture proposal). **This commit**: `a3e4281` (local — not pushed).
 
 ---
 
