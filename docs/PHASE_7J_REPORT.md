@@ -3,7 +3,7 @@
 **Directive ID**: CEO-2026-08-03-REBUILD-007J
 **Target Repository**: `/Users/yuhanluo/ashare-quant`
 **Git Branch**: `main`
-**Base Commit**: `73bdd06` (Phase 7I). **This commit**: uncommitted at time of writing — update once committed.
+**Base Commit**: `73bdd06` (Phase 7I). **This commit**: `fa7e383` (local — not pushed).
 
 ---
 
