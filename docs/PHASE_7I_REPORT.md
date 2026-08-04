@@ -3,7 +3,7 @@
 **Directive ID**: CEO-2026-08-03-REBUILD-007I
 **Target Repository**: `/Users/yuhanluo/ashare-quant`
 **Git Branch**: `main`
-**Base Commit**: `22f19ab` (Phase 7H). **This commit**: uncommitted at time of writing — update this line with the real hash once committed, per the project's existing convention of never fabricating a commit hash for work not yet committed.
+**Base Commit**: `22f19ab` (Phase 7H). **This commit**: `a001a49` (local — not pushed).
 
 ---
 
