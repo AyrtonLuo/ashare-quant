@@ -361,6 +361,18 @@ class CertifiedResearchRunExecutor:
             input_manifest_hash=input_hash,
             result_hash=result_hash,
             equity_curve_hash=equity_curve_hash,
+            # Phase 9: the actual certified numbers, not just their hash — result_hash's
+            # definition/computation above is unchanged; these are the durable record of the
+            # exact same values it was computed from, readable back in a fresh process.
+            schema_version="2.0",
+            total_return=backtest_result.total_return,
+            annualized_return=backtest_result.annualized_return,
+            annualized_volatility=backtest_result.annualized_volatility,
+            sharpe_ratio=backtest_result.sharpe_ratio,
+            max_drawdown=backtest_result.max_drawdown,
+            win_rate=backtest_result.win_rate,
+            turnover=backtest_result.turnover,
+            trade_count=backtest_result.trade_count,
         )
 
         identity = ResearchRunIdentity(

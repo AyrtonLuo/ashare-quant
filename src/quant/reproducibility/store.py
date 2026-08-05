@@ -4,6 +4,8 @@ store.py — Immutable ResearchRunStore for persistent research artifacts & mani
 
 import os
 import json
+import shutil
+import uuid
 from dataclasses import asdict
 from typing import Dict, List, Optional, Any
 from src.quant.reproducibility.identity import ResearchRunIdentity
@@ -45,22 +47,55 @@ class ResearchRunStore:
             "result_manifest": result_manifest,
             "artifacts": artifacts or {}
         }
+
+        # Phase 9 hardening: write to a uniquely-named temp directory, then atomically rename
+        # into place. A crash or exception mid-write leaves only a harmless orphaned
+        # .tmp-<uuid> directory — never a partially-written directory visible under the final
+        # run_id name that get_run() could mistake for a complete run. The unique per-attempt
+        # temp name also means two processes racing to create the SAME run_id never corrupt
+        # each other's files: each writes its own temp directory independently, and os.rename
+        # to the shared final path is atomic — exactly one attempt wins.
+        tmp_path = f"{run_path}.tmp-{uuid.uuid4().hex}"
+        try:
+            os.makedirs(tmp_path, exist_ok=False)
+            with open(os.path.join(tmp_path, "run_metadata.json"), "w") as f:
+                f.write(to_canonical_json(asdict(identity)))
+            with open(os.path.join(tmp_path, "input_manifest.json"), "w") as f:
+                f.write(to_canonical_json(asdict(input_manifest)))
+            with open(os.path.join(tmp_path, "result_manifest.json"), "w") as f:
+                f.write(to_canonical_json(asdict(result_manifest)))
+            if artifacts:
+                with open(os.path.join(tmp_path, "artifacts.json"), "w") as f:
+                    f.write(to_canonical_json(artifacts))
+
+            os.rename(tmp_path, run_path)
+        except Exception as e:
+            shutil.rmtree(tmp_path, ignore_errors=True)
+            if os.path.exists(run_path):
+                # Another attempt won the race and completed first — report the same
+                # immutability error a caller would have seen from the check above.
+                raise ValueError(
+                    f"FAIL CLOSED: Research Run ID '{run_id}' already exists and is IMMUTABLE. "
+                    "Mutating or overwriting past research runs is strictly prohibited."
+                ) from e
+            raise
+
         self._memory_store[run_id] = run_data
-
-        # Persist to disk
-        os.makedirs(run_path, exist_ok=True)
-        with open(os.path.join(run_path, "run_metadata.json"), "w") as f:
-            f.write(to_canonical_json(asdict(identity)))
-        with open(os.path.join(run_path, "input_manifest.json"), "w") as f:
-            f.write(to_canonical_json(asdict(input_manifest)))
-        with open(os.path.join(run_path, "result_manifest.json"), "w") as f:
-            f.write(to_canonical_json(asdict(result_manifest)))
-
-        if artifacts:
-            with open(os.path.join(run_path, "artifacts.json"), "w") as f:
-                f.write(to_canonical_json(artifacts))
-
         return run_id
+
+    def _load_json(self, run_id: str, run_path: str, filename: str) -> Dict[str, Any]:
+        """Phase 9 hardening: a corrupted persisted file previously raised an opaque
+        json.JSONDecodeError from deep inside get_run(); this wraps it in a clear, FAIL
+        CLOSED-prefixed message consistent with this project's error convention, without
+        changing when it fails or attempting to recover/guess at the missing content."""
+        path = os.path.join(run_path, filename)
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(
+                f"FAIL CLOSED: corrupted persisted file for run '{run_id}': {path} ({e})"
+            ) from e
 
     def get_run(self, run_id: str) -> Optional[Dict[str, Any]]:
         if run_id in self._memory_store:
@@ -71,23 +106,14 @@ class ResearchRunStore:
             return None
 
         # Load from disk
-        with open(os.path.join(run_path, "run_metadata.json"), "r") as f:
-            identity_dict = json.load(f)
-            identity = ResearchRunIdentity(**identity_dict)
-
-        with open(os.path.join(run_path, "input_manifest.json"), "r") as f:
-            input_dict = json.load(f)
-            input_manifest = ResearchInputManifest(**input_dict)
-
-        with open(os.path.join(run_path, "result_manifest.json"), "r") as f:
-            result_dict = json.load(f)
-            result_manifest = ResearchResultManifest(**result_dict)
+        identity = ResearchRunIdentity(**self._load_json(run_id, run_path, "run_metadata.json"))
+        input_manifest = ResearchInputManifest(**self._load_json(run_id, run_path, "input_manifest.json"))
+        result_manifest = ResearchResultManifest(**self._load_json(run_id, run_path, "result_manifest.json"))
 
         artifacts = {}
         art_path = os.path.join(run_path, "artifacts.json")
         if os.path.exists(art_path):
-            with open(art_path, "r") as f:
-                artifacts = json.load(f)
+            artifacts = self._load_json(run_id, run_path, "artifacts.json")
 
         run_data = {
             "identity": identity,

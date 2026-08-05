@@ -70,6 +70,30 @@ class ResearchResultManifest:
     drawdown_hash: str = "UNAVAILABLE"
     benchmark_result_hash: str = "UNAVAILABLE"
 
+    # Phase 9 (Research Result Persistence Hardening): the actual BacktestResult scalar
+    # metrics, not just their hashes — closes the gap where result_hash proved a result was
+    # certified but no process could read the certified NUMBERS back after the fact (see
+    # PHASE_9_RESEARCH_RESULT_PERSISTENCE_ARCHITECTURE_PROPOSAL.md §3/§10). Trailing-defaulted
+    # (None / "1.0") so every existing constructor call site (store.py, real_data_verifier.py,
+    # live_provider_verifier.py, and existing tests) remains valid unmodified. A run persisted
+    # under schema_version "1.0" genuinely has no canonical metrics on record — readers MUST
+    # treat None as "not available for this legacy run," never coerce it to 0.0.
+    #
+    # result_hash's own definition and computation point are UNCHANGED by these fields — it is
+    # still computed once, at certification time, over the small {"sharpe","return","mdd"}
+    # payload exactly as before. These fields do not participate in that hash; they are the
+    # durable record of the same numbers, verifiable against result_hash on read via
+    # verify_result_manifest_integrity() (identity.py) rather than by redefining the hash.
+    schema_version: str = "1.0"
+    total_return: Optional[float] = None
+    annualized_return: Optional[float] = None
+    annualized_volatility: Optional[float] = None
+    sharpe_ratio: Optional[float] = None
+    max_drawdown: Optional[float] = None
+    win_rate: Optional[float] = None
+    turnover: Optional[float] = None
+    trade_count: Optional[int] = None
+
     def compute_manifest_hash(self) -> str:
         return compute_canonical_sha256(asdict(self))
 
