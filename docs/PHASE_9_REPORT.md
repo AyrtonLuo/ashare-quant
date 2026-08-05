@@ -136,20 +136,45 @@ a documented, tested fact rather than a silent gap.
 
 ---
 
-## 6. Explicitly Deferred (per proposal §9 item 9 / §15 — not decided in this phase)
+## 6. Application Layer Follow-Up — RESOLVED (addendum)
 
 The proposal's own implementation plan (§19 step 9) identified a follow-up decision and
-explicitly left it to CEO review rather than resolving it here: whether the Phase 8R Application
-Layer (`src/app/research_application.py::get_research_run`) should be updated in this same
-directive to read the new canonical `result_manifest` fields (falling back to the
-`workbench_metrics/` side cache only for legacy `schema_version == "1.0"` runs), or treated as a
-separate follow-up. **Not implemented in this phase** — `research_application.py` is unmodified;
-`get_research_run()` still reads exclusively from `workbench_metrics/` via `_load_metrics()`,
-including its existing `metrics.get(key, 0.0)` fallback pattern for a missing cache file. This is
-pre-existing Phase 8R behavior, not a Phase 9 regression, and is called out here rather than
-silently left for a future session to rediscover. Recommend a small, separate follow-up directive
-to switch `get_research_run()` to prefer the canonical fields (using `None`, never `0.0`, for
-genuinely legacy runs) and retire `workbench_metrics/` once that lands.
+originally left it to CEO review rather than resolving it in the initial Phase 9 commit
+(`4267912`): whether the Phase 8R Application Layer
+(`src/app/research_application.py::get_research_run`) should be updated to read the new
+canonical `result_manifest` fields, falling back to the `workbench_metrics/` side cache only for
+legacy `schema_version == "1.0"` runs.
+
+**Now implemented**, under explicit directive, as a minimal, scoped follow-up (this addendum's
+commit): `get_research_run()` calls a new helper, `_resolve_metrics(run_id, result_manifest)` —
+if `result_manifest.schema_version != "1.0"` and `result_manifest.total_return is not None`, it
+reads the six display metrics directly off `result_manifest`; otherwise it falls back to the
+existing `_load_metrics()` / `workbench_metrics/` path, byte-for-byte unchanged from before this
+addendum (including its pre-existing `metrics.get(key, 0.0)` default for a genuinely missing
+cache file on an old run — that fallback behavior is untouched, only now reached less often).
+
+**Explicitly not done** (kept minimal, matching directive scope): `_save_metrics()` still writes
+`workbench_metrics/<run_id>.json` on every run creation — the cache is not retired, only
+demoted to a fallback, since retiring the write path was not requested and isn't required for
+the read-path migration to be correct. `ResearchRunDetailView`'s field types are unchanged
+(`float`, not `Optional[float]`) — the new preference logic only ever returns the cache's
+legacy `0.0`-default numbers for a true `schema_version == "1.0"` run, never `None`, so no
+downstream formatting code (`generate_research_report`'s `:.4%`/`:.4f` f-strings,
+`list_research_runs`) needed to change. `CertifiedReplayEngine`, `BacktestEngine`, and
+`ResearchRunIdentity`/hash logic were not touched, per directive.
+
+**Verification**: `test_get_research_run_reads_canonical_metrics_without_workbench_metrics_cache`
+(`tests/test_research_application_layer.py`) deletes the side-cache file after run creation and
+confirms `get_research_run()` still returns correct metrics — proving the read no longer depends
+on the cache. `test_get_research_run_falls_back_to_workbench_metrics_for_legacy_schema_version`
+and `test_get_research_run_prefers_canonical_fields_over_stale_workbench_metrics_cache`
+(`tests/test_phase9_research_result_persistence.py`) prove the fallback still works for a
+genuinely legacy run and that canonical fields win over a stale cache when both exist. 3 new
+tests, 0 existing tests modified: **322 passed, 11 skipped, 0 failed** (up from 319/11/0).
+
+Files touched by this addendum: `src/app/research_application.py`,
+`tests/test_research_application_layer.py`, `tests/test_phase9_research_result_persistence.py`,
+this report.
 
 ---
 
@@ -165,27 +190,27 @@ This phase persists these fields faithfully; it does not change what they mean.
 ## 8. Test Summary
 
 ```
-319 passed, 11 skipped, 0 failed
+322 passed, 11 skipped, 0 failed  (post-addendum; 319/11/0 before §6's follow-up)
 Test Command: PYTHONPATH=. ./venv/bin/pytest
 ```
 
-15 new tests in `tests/test_phase9_research_result_persistence.py`; zero existing test assertions
-modified. The 11 skips are the pre-existing live-provider network tests (`TUSHARE_TOKEN` absent),
-unrelated to this phase.
+18 new tests total (15 core Phase 9 + 3 from §6's Application Layer addendum); zero existing test
+assertions modified. The 11 skips are the pre-existing live-provider network tests
+(`TUSHARE_TOKEN` absent), unrelated to this phase.
 
 ---
 
 ## 9. Production Impact
 
 ```
-Production Code Modified: YES — 4 files, additive/trailing-defaulted only (§2/§3)
-Tests Modified: NO (15 new tests added; 0 existing tests changed)
+Production Code Modified: YES — 4 core files (§2/§3) + 1 Application Layer file (§6 addendum),
+                           additive/trailing-defaulted only
+Tests Modified: NO (18 new tests added total; 0 existing tests changed)
 Dependencies Modified: NO
 Trading / Broker / Execution Code: NONE
-Commit Created: YES — `4267912`
+Commit Created: YES — `4267912` (core), addendum commit for §6 (see git log)
 Push Performed: NO
 ```
 
-**Recommendation: READY FOR CEO REVIEW.** Open item for a future directive: §6's Application
-Layer follow-up (`research_application.py` canonical-field preference), not authorized or
-implemented here.
+**Recommendation: READY FOR CEO REVIEW.** §6's Application Layer follow-up is now implemented
+under explicit directive; no further open items from this phase.

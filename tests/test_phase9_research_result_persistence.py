@@ -339,6 +339,56 @@ def test_legacy_run_directory_without_schema_version_loads_with_none_metrics(tmp
 
 
 # =================================================================================================
+# 9b. Application Layer migration (deferred item resolved: get_research_run() prefers canonical
+#     result_manifest fields; workbench_metrics/ remains a fallback for legacy runs only)
+# =================================================================================================
+
+def test_get_research_run_falls_back_to_workbench_metrics_for_legacy_schema_version(tmp_path):
+    """A run persisted before Phase 9 (schema_version == "1.0", no canonical scalar fields) has
+    no canonical metrics to read — get_research_run() must fall back to the legacy
+    workbench_metrics/ side cache for it, exactly as it did before this migration, rather than
+    fabricating 0.0 or erroring."""
+    ctx = app.get_workbench_context()
+    identity = ResearchRunIdentity(**_identity_kwargs(research_run_id="run_legacy_app"))
+    input_manifest = ResearchInputManifest(**_input_manifest_kwargs(research_run_id="run_legacy_app"))
+    legacy_result_manifest = ResearchResultManifest(
+        research_run_id="run_legacy_app", input_manifest_hash="ih", result_hash="rh", equity_curve_hash="eh",
+    )
+    ctx.run_store.create_run(identity, input_manifest, legacy_result_manifest)
+
+    os.makedirs(app._WORKBENCH_METRICS_DIR, exist_ok=True)
+    with open(os.path.join(app._WORKBENCH_METRICS_DIR, "run_legacy_app.json"), "w") as f:
+        json.dump({
+            "total_return": 0.0777, "annualized_return": 0.1111, "annualized_volatility": 0.2222,
+            "sharpe_ratio": 0.9999, "max_drawdown": 0.0333, "win_rate": 0.5,
+        }, f)
+
+    detail = app.get_research_run("run_legacy_app")
+    assert detail.total_return == 0.0777
+    assert detail.sharpe_ratio == 0.9999
+    assert detail.max_drawdown == 0.0333
+
+
+def test_get_research_run_prefers_canonical_fields_over_stale_workbench_metrics_cache():
+    """If both a canonical (schema_version 2.0) result_manifest and a workbench_metrics/ cache
+    exist for the same run (e.g. a stale cache left over from a re-run), the canonical fields
+    must win — proves this isn't merely 'read whichever is present' but a real preference order."""
+    detail = app.create_research_run(_default_params())
+    ctx = app.get_workbench_context()
+
+    stale_path = os.path.join(app._WORKBENCH_METRICS_DIR, f"{detail.run_id}.json")
+    with open(stale_path, "w") as f:
+        json.dump({
+            "total_return": -99.0, "annualized_return": -99.0, "annualized_volatility": -99.0,
+            "sharpe_ratio": -99.0, "max_drawdown": -99.0, "win_rate": -99.0,
+        }, f)
+
+    reread = app.get_research_run(detail.run_id)
+    assert reread.total_return == detail.total_return
+    assert reread.total_return != -99.0
+
+
+# =================================================================================================
 # 9. Concurrency
 # =================================================================================================
 

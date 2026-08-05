@@ -17,21 +17,23 @@ Context System hardened with Context Budget Protocol, State Machine (`NORMAL` ->
 - **Phase 8A**: Factor engine orchestration, certified replay integration, and backtest portfolio weight hardening.
 - **Phase 7A–7J**: Historical PIT temporal architecture, snapshot immutability, revision non-destructiveness, survivorship-bias-free historical universe, corporate action binding, cross-provider reconciliation, and persistent dataset certification.
 
+## Recently Completed (continued)
+- **Phase 9 Application Layer follow-up (addendum)**: `research_application.py::get_research_run` now reads display metrics from the canonical `result_manifest` fields (`schema_version >= "2.0"`) via a new `_resolve_metrics()` helper, falling back to the `workbench_metrics/` side cache only for legacy (`schema_version == "1.0"`) runs. `_save_metrics()`/the cache write path is untouched (not retired). No changes to `CertifiedReplayEngine`, `BacktestEngine`, or identity/hash logic. 3 new tests, 0 existing tests modified. See `docs/PHASE_9_REPORT.md` §6 (addendum).
+
 ## Currently In Progress
-- Awaiting CEO Review of Phase 9.
-- **Deferred, not yet authorized**: Phase 8R's Application Layer (`src/app/research_application.py::get_research_run`) still reads display metrics exclusively from the `workbench_metrics/` side cache (with a `metrics.get(key, 0.0)` fallback), not from Phase 9's new canonical `result_manifest` fields. The Phase 9 proposal (§9 item 9) explicitly left switching this over to a future directive. See `docs/PHASE_9_REPORT.md` §6.
+- Awaiting CEO Review of Phase 9 (core + Application Layer addendum).
 
 ## Tests
-- **Total Tests Collected**: 330
-- **Passed**: 319
+- **Total Tests Collected**: 333
+- **Passed**: 322
 - **Skipped**: 11 (Live provider network tests safely skipped when `TUSHARE_TOKEN` is absent in execution environment)
 - **Failures**: 0
 - **Test Command**: `PYTHONPATH=. ./venv/bin/pytest`
 
 ## Git Status
 - **Branch**: `main`
-- **Working Tree**: Phase 9 changes present (4 modified files, 3 new files) — commit pending.
-- **Last Commit**: `29372bf` (`docs: update phase 8r report with final commit hash`)
+- **Working Tree**: Application Layer addendum present (`src/app/research_application.py` + 2 test files modified) — commit pending.
+- **Last Commit**: `723d2a3` (`docs: update phase 9 report with final commit hash`)
 
 ## Known Issues
 - **Live Provider Network Credential Access**: Live network API calls to TuShare Pro require `TUSHARE_TOKEN` in environment. When absent, preflight safely skips live tests (`LIVE_PROVIDER_CREDENTIALS_UNAVAILABLE`), maintaining 100% pass rate on local production pipelines without fabricating data.

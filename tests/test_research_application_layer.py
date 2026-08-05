@@ -114,6 +114,24 @@ def test_list_research_runs_includes_created_run():
     assert created.run_id in ids
 
 
+def test_get_research_run_reads_canonical_metrics_without_workbench_metrics_cache():
+    """Phase 9: get_research_run() must read its display metrics from the canonical
+    ResearchResultManifest fields, not the workbench_metrics/ side cache — proven by deleting
+    the cache file entirely and confirming the metrics are still correct and complete."""
+    created = app.create_research_run(_default_params())
+    cache_path = os.path.join(app._WORKBENCH_METRICS_DIR, f"{created.run_id}.json")
+    assert os.path.exists(cache_path)  # _save_metrics() still writes it (unchanged behavior)
+    os.remove(cache_path)
+
+    reread = app.get_research_run(created.run_id)
+    assert reread.total_return == created.total_return
+    assert reread.sharpe_ratio == created.sharpe_ratio
+    assert reread.max_drawdown == created.max_drawdown
+    assert reread.annualized_return == created.annualized_return
+    assert reread.annualized_volatility == created.annualized_volatility
+    assert reread.win_rate == created.win_rate
+
+
 # --- 8: replay --------------------------------------------------------------------------------
 
 def test_replay_research_run_is_reproducible_when_untampered():

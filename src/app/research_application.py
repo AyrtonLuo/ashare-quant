@@ -15,17 +15,21 @@ PortfolioConstructor/CorporateActionAdjuster call sites in this file: the only o
 CertifiedResearchRunExecutor.execute() and CertifiedReplayEngine.replay(), which this module
 calls, never reimplements.
 
-NOTE on _WORKBENCH_METRICS_DIR: CertifiedResearchRunExecutor.execute() returns the numeric
-BacktestResult (total_return, sharpe_ratio, etc.) to its immediate caller, but ResearchRunStore
-only persists that result's HASH (result_hash), not the numbers themselves — Phase 8A never
-needed to look up a past run's raw metrics again, only to verify its hash on replay. Phase 8R's
-"view an old research run" requirement needs those numbers back later, in a fresh process. Since
-touching integrity_gate.py to add a metrics artifact would be a Phase 8A modification (requires
-its own directive per CEO instruction), this module instead writes a small, clearly Phase-8R-
-owned side-cache (data/research/workbench_metrics/<run_id>.json, gitignored under the existing
-data/research/ rule) at creation time, purely for display. It carries no certification weight —
-Replay always independently recomputes and compares the real result_hash via Phase 8A's own
-logic; this cache is read-only display convenience, never a comparison target.
+NOTE on _WORKBENCH_METRICS_DIR: prior to Phase 9, CertifiedResearchRunExecutor.execute() returned
+the numeric BacktestResult (total_return, sharpe_ratio, etc.) to its immediate caller, but
+ResearchRunStore only persisted that result's HASH (result_hash), not the numbers themselves. This
+module worked around that by writing a small, Phase-8R-owned side-cache
+(data/research/workbench_metrics/<run_id>.json, gitignored under the existing data/research/
+rule) at creation time, purely for display.
+
+Phase 9 closed that gap at the source: ResearchResultManifest now carries the real scalar metrics
+directly (schema_version >= "2.0"), persisted and reloaded through ResearchRunStore itself. This
+module now reads display metrics from result_manifest first (see _resolve_metrics below) and
+falls back to this side-cache only for runs persisted before Phase 9 (schema_version == "1.0",
+no canonical fields on record). The side-cache carries no certification weight either way — Replay
+always independently recomputes and compares the real result_hash via Phase 8A's own logic; this
+cache (and now the canonical manifest fields) are read-only display convenience, never a
+comparison target.
 """
 
 import json
@@ -394,6 +398,24 @@ def _load_metrics(run_id: str) -> Dict[str, float]:
         return json.load(f)
 
 
+def _resolve_metrics(run_id: str, result_manifest: Any) -> Dict[str, float]:
+    """Phase 9: prefer the canonical, certified scalar fields now persisted directly on
+    ResearchResultManifest (schema_version >= "2.0"); fall back to the legacy
+    workbench_metrics/ side cache only for runs persisted before Phase 9
+    (schema_version == "1.0", no canonical fields on record) — see
+    PHASE_9_RESEARCH_RESULT_PERSISTENCE_ARCHITECTURE_PROPOSAL.md §15."""
+    if result_manifest.schema_version != "1.0" and result_manifest.total_return is not None:
+        return {
+            "total_return": result_manifest.total_return,
+            "annualized_return": result_manifest.annualized_return,
+            "annualized_volatility": result_manifest.annualized_volatility,
+            "sharpe_ratio": result_manifest.sharpe_ratio,
+            "max_drawdown": result_manifest.max_drawdown,
+            "win_rate": result_manifest.win_rate,
+        }
+    return _load_metrics(run_id)
+
+
 # --- 7/9: query a research run + its result ----------------------------------------------------
 
 def get_research_run(run_id: str) -> ResearchRunDetailView:
@@ -407,10 +429,13 @@ def get_research_run(run_id: str) -> ResearchRunDetailView:
     result_manifest = run_data["result_manifest"]
     artifacts = run_data.get("artifacts", {})
 
-    # Display metrics come from the Phase-8R-owned side cache (see module docstring) — the
-    # certification-relevant fields below (hashes, identity, universe, factor config, weights)
-    # all come directly from Phase 8A's own stored identity/input_manifest/artifacts.
-    metrics = _load_metrics(run_id)
+    # Phase 9: display metrics now come from the canonical result_manifest fields for any run
+    # certified under schema_version >= "2.0"; the Phase-8R-owned workbench_metrics/ side cache
+    # remains a fallback for legacy (schema_version == "1.0") runs only (see _resolve_metrics).
+    # The certification-relevant fields below (hashes, identity, universe, factor config,
+    # weights) all come directly from Phase 8A's own stored identity/input_manifest/artifacts,
+    # unchanged.
+    metrics = _resolve_metrics(run_id, result_manifest)
 
     return ResearchRunDetailView(
         run_id=run_id, dataset_id=input_manifest.dataset_id, dataset_version=input_manifest.dataset_version,
