@@ -112,6 +112,11 @@ To prevent context bloat and maintain high agent reliability:
 5. **Rule 5**: Do NOT copy raw terminal output into context files.
 6. **Rule 6**: Do NOT copy source code into context files.
 7. **Rule 7**: Record conclusions and verified facts, not raw processes or temporary debug steps.
+8. **Rule 8**: Reports must be concise and context-efficient: state the outcome first, include only
+   material changes, test status, risks/blockers, and the exact next action. Avoid repeating known
+   background, narrating routine tool steps, or pasting large logs.
+9. **Rule 9**: After a requested change is complete and verified, create a local Git commit by
+   default. Never push to a remote unless the Product Owner explicitly approves it.
 
 ---
 
