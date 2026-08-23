@@ -160,7 +160,12 @@ class CertifiedResearchRunExecutor:
             visible_actions = request.corporate_action_store.query_pit_range(
                 symbol, dates[0], dates[-1], request.as_of
             )
-            adj_result = CorporateActionAdjuster.adjust(dates, raw_prices, visible_actions, request.as_of)
+            # Every new certified run uses the canonical unified formula (CORPORATE_ACTION_
+            # UNIFIED_FORMULA_ARCHITECTURE_PROPOSAL.md, CEO-approved) — explicit, never the
+            # function's legacy default, so this call site can never silently drift versions.
+            adj_result = CorporateActionAdjuster.adjust(
+                dates, raw_prices, visible_actions, request.as_of, algorithm_version="2.0"
+            )
             adjusted_prices[symbol] = adj_result.adjusted_prices
             adjustment_trace[symbol] = adj_result.actions_applied
             raw_prices_used[symbol] = raw_prices
@@ -345,6 +350,7 @@ class CertifiedResearchRunExecutor:
             created_at=created_at,
             signal_config=signal_config_dicts,
             signal_configuration_hash=signal_configuration_hash,
+            adjustment_algorithm_version="2.0",
         )
         input_hash = input_manifest.compute_input_hash()
 

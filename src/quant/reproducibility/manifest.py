@@ -48,6 +48,22 @@ class ResearchInputManifest:
     signal_config: List[Dict[str, Any]] = field(default_factory=list)
     signal_configuration_hash: str = "NOT_APPLICABLE"
 
+    # CORPORATE_ACTION_UNIFIED_FORMULA_ARCHITECTURE_PROPOSAL.md (CEO-approved): which
+    # CorporateActionAdjuster algorithm this run was certified under — "1.0" (legacy,
+    # independent-factor-then-multiply) or "2.0" (unified D/B/R formula for RIGHTS_OFFERING
+    # combinations; STOCK_SPLIT unaffected either way). Trailing-defaulted to "1.0" so every
+    # existing constructor call site remains valid unmodified, and so a manifest predating this
+    # field (or any dict reconstructed without the key) is honestly described as legacy rather
+    # than silently assumed to be "2.0". CertifiedResearchRunExecutor.execute() always sets this
+    # explicitly to "2.0" for new runs; it participates in compute_input_hash() like every other
+    # field here, so changing it changes input_hash — a run's certified algorithm choice is
+    # itself part of what's certified, not a side channel. CertifiedReplayEngine.replay() reads
+    # this field back and passes it to CorporateActionAdjuster.adjust() so replay always
+    # recomputes under the algorithm the run was ACTUALLY certified with, never "whatever is
+    # current" — see corporate_action_adjuster.py's module docstring for the full algorithm
+    # description.
+    adjustment_algorithm_version: str = "1.0"
+
     def compute_input_hash(self) -> str:
         return compute_canonical_sha256(asdict(self))
 

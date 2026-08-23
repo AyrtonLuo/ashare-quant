@@ -8,6 +8,8 @@ Not "does the correct path work" — "is every incorrect path rejected." Each of
 scenarios enumerated in the directive gets its own test proving FAIL CLOSED.
 """
 
+import json
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -424,7 +426,11 @@ def test_rights_offering_consumed_by_certified_run(setup):
         _make_request(setup, run_id="run_rights", raw_price_series={SYMBOL: (DATES, raw)})
     )
     stored = setup["run_store"].get_run("run_rights")
-    expected_factor = (90.0 + 0.3 * 6.0) / (90.0 * 1.3)
+    # CORPORATE_ACTION_UNIFIED_FORMULA_ARCHITECTURE_PROPOSAL.md (CEO-approved): the certified
+    # path now always uses algorithm_version="2.0", so the expected factor uses P_pre (raw[1],
+    # the price the day before ex_date), not the legacy reference_price (raw[2]).
+    p_pre = raw[1]
+    expected_factor = (p_pre + 0.3 * 6.0) / (p_pre * 1.3)
     adjusted = stored["artifacts"]["daily_prices"][SYMBOL]
     assert adjusted[0] == pytest.approx(round(raw[0] * expected_factor, 6))
     assert adjusted != raw, "adjustment must have been applied, not skipped"
@@ -480,3 +486,92 @@ def test_rights_offering_replay_reproducible(setup):
     )
     report = replay_engine.replay("run_rights_replay")
     assert report.status.value == "REPRODUCIBLE"
+
+
+# --- Corporate Action Unified Formula — versioning / Replay --------------------------------
+# CORPORATE_ACTION_UNIFIED_FORMULA_ARCHITECTURE_PROPOSAL.md (CEO-approved implementation).
+
+def test_certified_run_stamps_2_0_and_combined_rights_dividend_replays_reproducible(setup):
+    dividend = CorporateActionContract(
+        symbol=SYMBOL, ex_date="2026-08-04", action_type="CASH_DIVIDEND",
+        cash_amount_per_share=10.0, bonus_ratio=0.0, split_ratio=1.0,
+        announcement_date="2026-07-20",
+        available_at=datetime(2026, 7, 20), received_at=datetime(2026, 7, 20),
+        quality_status="VALID",
+    )
+    rights = CorporateActionContract(
+        symbol=SYMBOL, ex_date="2026-08-04", action_type="RIGHTS_OFFERING",
+        cash_amount_per_share=0.0, bonus_ratio=0.0, split_ratio=1.0,
+        announcement_date="2026-07-20",
+        available_at=datetime(2026, 7, 20), received_at=datetime(2026, 7, 20),
+        quality_status="VALID", rights_ratio=0.3, subscription_price=6.0,
+    )
+    setup["corporate_action_store"].add_action(dividend)
+    setup["corporate_action_store"].add_action(rights)
+
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    _, identity = CertifiedResearchRunExecutor.execute(
+        _make_request(setup, run_id="run_combo_2_0", raw_price_series={SYMBOL: (DATES, raw)})
+    )
+    stored = setup["run_store"].get_run("run_combo_2_0")
+    assert stored["input_manifest"].adjustment_algorithm_version == "2.0"
+
+    p_pre = raw[1]
+    expected_factor = (p_pre - 10.0 + 6.0 * 0.3) / (1.0 + 0.3) / p_pre
+    adjusted = stored["artifacts"]["daily_prices"][SYMBOL]
+    assert adjusted[0] == pytest.approx(round(raw[0] * expected_factor, 6))
+    assert set(stored["artifacts"]["corporate_actions_applied"][SYMBOL]) == {
+        "CASH_DIVIDEND:2026-08-04", "RIGHTS_OFFERING:2026-08-04",
+    }
+
+    replay_engine = CertifiedReplayEngine(
+        setup["run_store"], setup["snapshot_manager"], setup["manifest_store"],
+        setup["corporate_action_store"], setup["security_master"], {},
+    )
+    report = replay_engine.replay("run_combo_2_0")
+    assert report.status.value == "REPRODUCIBLE"
+
+
+def test_replay_uses_runs_own_stored_algorithm_version_not_hardcoded_latest(setup):
+    """Differential proof that CertifiedReplayEngine reads adjustment_algorithm_version from the
+    run's own stored input_manifest rather than always using "2.0" (today's latest): a genuine
+    "2.0" run replays REPRODUCIBLE; the SAME run, with only its stored adjustment_algorithm_version
+    tampered to "1.0" (nothing else changed), must fail replay with an artifact mismatch — because
+    "1.0" recomputes a DIFFERENT adjusted price series (reference_price, not P_pre) than what was
+    actually certified. If Replay ignored the stored version and always used "2.0", this tamper
+    would have no effect and replay would still incorrectly report REPRODUCIBLE."""
+    dividend = CorporateActionContract(
+        symbol=SYMBOL, ex_date="2026-08-04", action_type="CASH_DIVIDEND",
+        cash_amount_per_share=10.0, bonus_ratio=0.0, split_ratio=1.0,
+        announcement_date="2026-07-20",
+        available_at=datetime(2026, 7, 20), received_at=datetime(2026, 7, 20),
+        quality_status="VALID",
+    )
+    setup["corporate_action_store"].add_action(dividend)
+
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    CertifiedResearchRunExecutor.execute(
+        _make_request(setup, run_id="run_version_tamper", raw_price_series={SYMBOL: (DATES, raw)})
+    )
+
+    replay_engine = CertifiedReplayEngine(
+        setup["run_store"], setup["snapshot_manager"], setup["manifest_store"],
+        setup["corporate_action_store"], setup["security_master"], {},
+    )
+    assert replay_engine.replay("run_version_tamper").status.value == "REPRODUCIBLE"
+
+    manifest_path = os.path.join(setup["run_store"].base_dir, "run_version_tamper", "input_manifest.json")
+    with open(manifest_path, "r") as f:
+        data = json.load(f)
+    assert data["adjustment_algorithm_version"] == "2.0"
+    data["adjustment_algorithm_version"] = "1.0"
+    with open(manifest_path, "w") as f:
+        json.dump(data, f)
+
+    fresh_store = type(setup["run_store"])(base_dir=setup["run_store"].base_dir)
+    fresh_replay_engine = CertifiedReplayEngine(
+        fresh_store, setup["snapshot_manager"], setup["manifest_store"],
+        setup["corporate_action_store"], setup["security_master"], {},
+    )
+    with pytest.raises(ValueError, match="FAIL CLOSED"):
+        fresh_replay_engine.replay("run_version_tamper")

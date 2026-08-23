@@ -192,10 +192,15 @@ def test_numerical_truth_certified_run_matches_direct_result_object():
 
 def test_identity_result_hash_definition_is_unchanged():
     """result_hash must still be computed over exactly {"sharpe","return","mdd"} — proves this
-    proposal did not redefine what the hash covers."""
-    payload = {"sharpe": 6.4029, "return": 0.0519, "mdd": 0.0063}
-    expected = compute_canonical_sha256(payload)
+    proposal did not redefine what the hash covers. Derives the expected payload from the run's
+    own detail object (not hardcoded literals) so this test stays valid across any legitimate
+    change to the certified numeric output — e.g. CORPORATE_ACTION_UNIFIED_FORMULA_ARCHITECTURE_
+    PROPOSAL.md's "2.0" formula, which changed golden-dataset numbers versus the "1.0"-era
+    literals this test used to hardcode — without weakening what it actually proves."""
     detail = app.create_research_run(_default_params())
+    expected = compute_canonical_sha256({
+        "sharpe": detail.sharpe_ratio, "return": detail.total_return, "mdd": detail.max_drawdown,
+    })
     assert detail.result_hash == expected
 
 
@@ -430,3 +435,26 @@ def test_concurrent_create_run_same_id_exactly_one_wins(tmp_path):
     loaded = fresh_store.get_run("run_race")
     assert loaded is not None
     assert loaded["result_manifest"].research_run_id == "run_race"
+
+
+# =================================================================================================
+# 10. Corporate Action Unified Formula — adjustment_algorithm_version (CEO-approved implementation)
+# =================================================================================================
+
+def test_input_manifest_adjustment_algorithm_version_defaults_to_legacy():
+    """An old-style construction call (predating this field, exactly _input_manifest_kwargs()'s
+    shape) must still work and default to "1.0" — never silently assumed to be "2.0"."""
+    manifest = ResearchInputManifest(**_input_manifest_kwargs(research_run_id="run_legacy_algo"))
+    assert manifest.adjustment_algorithm_version == "1.0"
+
+
+def test_input_hash_changes_when_adjustment_algorithm_version_differs():
+    """adjustment_algorithm_version must participate in compute_input_hash() like every other
+    input field — a run's certified algorithm choice is itself part of what's certified."""
+    manifest_1_0 = ResearchInputManifest(
+        **_input_manifest_kwargs(research_run_id="run_algo_cmp", adjustment_algorithm_version="1.0")
+    )
+    manifest_2_0 = ResearchInputManifest(
+        **_input_manifest_kwargs(research_run_id="run_algo_cmp", adjustment_algorithm_version="2.0")
+    )
+    assert manifest_1_0.compute_input_hash() != manifest_2_0.compute_input_hash()

@@ -166,7 +166,15 @@ class CertifiedReplayEngine:
             visible_actions = self.corporate_action_store.query_pit_range(
                 symbol, symbol_dates[0], symbol_dates[-1], as_of
             )
-            recomputed_adj = CorporateActionAdjuster.adjust(symbol_dates, symbol_raw, visible_actions, as_of)
+            # Replay must recompute under the algorithm THIS run was actually certified with,
+            # never "whatever is current" (CORPORATE_ACTION_UNIFIED_FORMULA_ARCHITECTURE_
+            # PROPOSAL.md, CEO-approved) — read from the run's own stored input_manifest, not
+            # the function's legacy default, so a future algorithm change can never silently
+            # alter a past run's replay behavior.
+            recomputed_adj = CorporateActionAdjuster.adjust(
+                symbol_dates, symbol_raw, visible_actions, as_of,
+                algorithm_version=input_manifest.adjustment_algorithm_version,
+            )
             if recomputed_adj.adjusted_prices != original_adjusted.get(symbol):
                 raise IntermediateArtifactMismatchError(
                     f"FAIL CLOSED (INTERMEDIATE_ARTIFACT_MISMATCH): corporate-action-adjusted "

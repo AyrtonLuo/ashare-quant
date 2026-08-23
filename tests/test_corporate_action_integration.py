@@ -449,3 +449,153 @@ def test_adjust_excludes_action_with_late_received_at():
     result = CorporateActionAdjuster.adjust(DATES, raw, [late_received], PIT_CUTOFF)
     assert result.adjusted_prices == raw
     assert result.actions_applied == []
+
+
+# --- TEST K: Corporate Action Unified Formula (algorithm_version 1.0/2.0) ----------------------
+#
+# CORPORATE_ACTION_UNIFIED_FORMULA_ARCHITECTURE_PROPOSAL.md (CEO-approved). All expected values
+# below are P_ex/P_pre computed independently from docs/CORPORATE_ACTION_SPECIFICATION.md's
+# formula: P_ex = (P_pre - D + Pr*R) / (1 + B + R). Fixture: raw = [100.0, 100.0, 90.0, 90.0,
+# 90.0], so P_pre = raw[1] = 100.0 and the legacy reference_price = raw[2] = 90.0 — deliberately
+# different, so a "1.0" vs "2.0" test using the wrong price basis would fail, not accidentally pass.
+
+RAW_UNIFIED = [100.0, 100.0, 90.0, 90.0, 90.0]
+P_PRE = RAW_UNIFIED[1]
+
+
+def _bonus_action(bonus_ratio=0.2, available_at=datetime(2026, 7, 20, 15, 0)):
+    return CorporateActionContract(
+        symbol="600519.SH", ex_date="2026-08-04", action_type="BONUS_ISSUE",
+        cash_amount_per_share=0.0, bonus_ratio=bonus_ratio, split_ratio=1.0,
+        announcement_date="2026-07-20", available_at=available_at, received_at=available_at,
+        quality_status="VALID",
+    )
+
+
+def test_unified_dividend_only_uses_p_pre():
+    result = CorporateActionAdjuster.adjust(
+        DATES, RAW_UNIFIED, [_dividend_action()], AS_OF_LATE, algorithm_version="2.0"
+    )
+    expected = (P_PRE - 10.0) / P_PRE
+    assert result.adj_factors[0] == pytest.approx(expected)
+
+
+def test_unified_bonus_only_byte_identical_both_versions():
+    """BONUS_ISSUE has no price dependency — must be identical under "1.0" and "2.0"."""
+    f1 = CorporateActionAdjuster.adjust(DATES, RAW_UNIFIED, [_bonus_action()], AS_OF_LATE, algorithm_version="1.0").adj_factors[0]
+    f2 = CorporateActionAdjuster.adjust(DATES, RAW_UNIFIED, [_bonus_action()], AS_OF_LATE, algorithm_version="2.0").adj_factors[0]
+    assert f1 == f2 == pytest.approx(1.0 / 1.2)
+
+
+def test_unified_rights_only_uses_p_pre():
+    result = CorporateActionAdjuster.adjust(
+        DATES, RAW_UNIFIED, [_rights_action(rights_ratio=0.3, subscription_price=6.0)],
+        AS_OF_LATE, algorithm_version="2.0",
+    )
+    expected = (P_PRE + 0.3 * 6.0) / (P_PRE * 1.3)
+    assert result.adj_factors[0] == pytest.approx(expected)
+
+
+def test_unified_dividend_plus_bonus_matches_unified_formula():
+    result = CorporateActionAdjuster.adjust(
+        DATES, RAW_UNIFIED, [_dividend_action(), _bonus_action()], AS_OF_LATE, algorithm_version="2.0",
+    )
+    expected = (P_PRE - 10.0) / (1.0 + 0.2) / P_PRE
+    assert result.adj_factors[0] == pytest.approx(expected)
+
+
+def test_unified_dividend_plus_rights_matches_unified_formula():
+    result = CorporateActionAdjuster.adjust(
+        DATES, RAW_UNIFIED, [_dividend_action(), _rights_action(rights_ratio=0.3, subscription_price=6.0)],
+        AS_OF_LATE, algorithm_version="2.0",
+    )
+    expected = (P_PRE - 10.0 + 6.0 * 0.3) / (1.0 + 0.3) / P_PRE
+    assert result.adj_factors[0] == pytest.approx(expected)
+
+
+def test_unified_bonus_plus_rights_matches_unified_formula():
+    result = CorporateActionAdjuster.adjust(
+        DATES, RAW_UNIFIED, [_bonus_action(), _rights_action(rights_ratio=0.3, subscription_price=6.0)],
+        AS_OF_LATE, algorithm_version="2.0",
+    )
+    expected = (P_PRE + 6.0 * 0.3) / (1.0 + 0.2 + 0.3) / P_PRE
+    assert result.adj_factors[0] == pytest.approx(expected)
+
+
+def test_unified_dividend_plus_bonus_plus_rights_matches_unified_formula():
+    result = CorporateActionAdjuster.adjust(
+        DATES, RAW_UNIFIED,
+        [_dividend_action(), _bonus_action(), _rights_action(rights_ratio=0.3, subscription_price=6.0)],
+        AS_OF_LATE, algorithm_version="2.0",
+    )
+    expected = (P_PRE - 10.0 + 6.0 * 0.3) / (1.0 + 0.2 + 0.3) / P_PRE
+    assert result.adj_factors[0] == pytest.approx(expected)
+
+
+def test_unified_combined_factor_fails_closed_on_non_positive_ex_price():
+    """A dividend large enough (relative to P_pre and the rights term) to drive the unified
+    numerator non-positive must fail closed, mirroring CASH_DIVIDEND's existing D >= P rule."""
+    huge_dividend = CorporateActionContract(
+        symbol="600519.SH", ex_date="2026-08-04", action_type="CASH_DIVIDEND",
+        cash_amount_per_share=200.0, bonus_ratio=0.0, split_ratio=1.0,
+        announcement_date="2026-07-20", available_at=datetime(2026, 7, 20), received_at=datetime(2026, 7, 20),
+        quality_status="VALID",
+    )
+    with pytest.raises(ValueError, match="FAIL CLOSED"):
+        CorporateActionAdjuster.adjust(
+            DATES, RAW_UNIFIED, [huge_dividend, _rights_action(rights_ratio=0.3, subscription_price=6.0)],
+            AS_OF_LATE, algorithm_version="2.0",
+        )
+
+
+# -- STOCK_SPLIT scope boundary: never folded into the unified D/B/R computation ---------------
+
+def test_unified_stock_split_only_byte_identical_both_versions():
+    raw = [100.0, 100.0, 50.0, 50.0, 50.0]
+    f1 = CorporateActionAdjuster.adjust(DATES, raw, [_split_action()], AS_OF_LATE, algorithm_version="1.0").adj_factors[0]
+    f2 = CorporateActionAdjuster.adjust(DATES, raw, [_split_action()], AS_OF_LATE, algorithm_version="2.0").adj_factors[0]
+    assert f1 == f2 == pytest.approx(0.5)
+
+
+def test_unified_rights_plus_split_applies_split_independently_not_in_unified_formula():
+    """rights+split must equal unified_D0_B0_R(P_pre) * (1/split_ratio) — proving STOCK_SPLIT's
+    factor is multiplied on top, never passed into _combined_dbr_factor (§3.2 of the proposal)."""
+    result = CorporateActionAdjuster.adjust(
+        DATES, RAW_UNIFIED, [_rights_action(rights_ratio=0.3, subscription_price=6.0), _split_action()],
+        AS_OF_LATE, algorithm_version="2.0",
+    )
+    rights_only_factor = (P_PRE + 6.0 * 0.3) / (P_PRE * 1.3)
+    expected = rights_only_factor * (1.0 / 2.0)
+    assert result.adj_factors[0] == pytest.approx(expected)
+    assert set(result.actions_applied) == {"RIGHTS_OFFERING:2026-08-04", "STOCK_SPLIT:2026-08-04"}
+
+
+def test_unified_dividend_bonus_rights_split_all_four_scope_boundary():
+    result = CorporateActionAdjuster.adjust(
+        DATES, RAW_UNIFIED,
+        [_dividend_action(), _bonus_action(), _rights_action(rights_ratio=0.3, subscription_price=6.0), _split_action()],
+        AS_OF_LATE, algorithm_version="2.0",
+    )
+    dbr_factor = (P_PRE - 10.0 + 6.0 * 0.3) / (1.0 + 0.2 + 0.3) / P_PRE
+    expected = dbr_factor * (1.0 / 2.0)
+    assert result.adj_factors[0] == pytest.approx(expected)
+
+
+# -- algorithm_version handling ------------------------------------------------------------------
+
+def test_adjust_defaults_to_legacy_algorithm_version():
+    """No algorithm_version supplied must behave exactly like an explicit "1.0" — proves the
+    default preserves pre-existing behavior for call sites that predate versioning."""
+    explicit = CorporateActionAdjuster.adjust(
+        DATES, RAW_UNIFIED, [_dividend_action()], AS_OF_LATE, algorithm_version="1.0"
+    )
+    implicit = CorporateActionAdjuster.adjust(DATES, RAW_UNIFIED, [_dividend_action()], AS_OF_LATE)
+    assert implicit.adj_factors == explicit.adj_factors
+    assert implicit.adjusted_prices == explicit.adjusted_prices
+
+
+def test_adjust_invalid_algorithm_version_fails_closed():
+    with pytest.raises(ValueError, match="FAIL CLOSED"):
+        CorporateActionAdjuster.adjust(
+            DATES, RAW_UNIFIED, [_dividend_action()], AS_OF_LATE, algorithm_version="3.0"
+        )
