@@ -402,3 +402,55 @@ def test_20_secret_audit_rejects_actual_leak(tmp_path):
     res = SecurityAuditManager.audit_directory_for_secrets(str(tmp_path))
     assert res["status"] == "FAILED_LEAK_DETECTED"
     assert res["security_certification"] == "FAIL_SECRET_LEAK"
+
+
+# --- RIGHTS_OFFERING (配股) — RIGHTS_OFFERING_ADJUSTMENT_ARCHITECTURE_PROPOSAL.md end-to-end ----
+
+def test_rights_offering_consumed_by_certified_run(setup):
+    """Same proof shape as test_7_cannot_bypass_corporate_action_step above, for the newly
+    implemented RIGHTS_OFFERING type: a registered rights offering is routed through
+    CorporateActionAdjuster unconditionally by the certified path."""
+    rights = CorporateActionContract(
+        symbol=SYMBOL, ex_date="2026-08-04", action_type="RIGHTS_OFFERING",
+        cash_amount_per_share=0.0, bonus_ratio=0.0, split_ratio=1.0,
+        announcement_date="2026-07-20",
+        available_at=datetime(2026, 7, 20), received_at=datetime(2026, 7, 20),
+        quality_status="VALID", rights_ratio=0.3, subscription_price=6.0,
+    )
+    setup["corporate_action_store"].add_action(rights)
+
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    _, identity = CertifiedResearchRunExecutor.execute(
+        _make_request(setup, run_id="run_rights", raw_price_series={SYMBOL: (DATES, raw)})
+    )
+    stored = setup["run_store"].get_run("run_rights")
+    expected_factor = (90.0 + 0.3 * 6.0) / (90.0 * 1.3)
+    adjusted = stored["artifacts"]["daily_prices"][SYMBOL]
+    assert adjusted[0] == pytest.approx(round(raw[0] * expected_factor, 6))
+    assert adjusted != raw, "adjustment must have been applied, not skipped"
+    assert stored["artifacts"]["corporate_actions_applied"][SYMBOL] != []
+
+
+def test_rights_offering_replay_reproducible(setup):
+    """RIGHTS_OFFERING_ADJUSTMENT_ARCHITECTURE_PROPOSAL.md §7: CertifiedReplayEngine needs zero
+    code changes since it already calls the same CorporateActionAdjuster.adjust() the certified
+    path uses — proven behaviorally here, not just by code-path inspection."""
+    rights = CorporateActionContract(
+        symbol=SYMBOL, ex_date="2026-08-04", action_type="RIGHTS_OFFERING",
+        cash_amount_per_share=0.0, bonus_ratio=0.0, split_ratio=1.0,
+        announcement_date="2026-07-20",
+        available_at=datetime(2026, 7, 20), received_at=datetime(2026, 7, 20),
+        quality_status="VALID", rights_ratio=0.3, subscription_price=6.0,
+    )
+    setup["corporate_action_store"].add_action(rights)
+
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    CertifiedResearchRunExecutor.execute(
+        _make_request(setup, run_id="run_rights_replay", raw_price_series={SYMBOL: (DATES, raw)})
+    )
+    replay_engine = CertifiedReplayEngine(
+        setup["run_store"], setup["snapshot_manager"], setup["manifest_store"],
+        setup["corporate_action_store"], setup["security_master"], {},
+    )
+    report = replay_engine.replay("run_rights_replay")
+    assert report.status.value == "REPRODUCIBLE"

@@ -30,3 +30,11 @@ class CorporateActionContract:
     # Defaults to SYNTHETIC_DATA (fail-closed). Only a code path that actually parsed a live
     # network provider response may set REAL_PROVIDER.
     data_origin: str = "SYNTHETIC_DATA"
+
+    # RIGHTS_OFFERING (配股) economic parameters. Trailing-defaulted so all existing construction
+    # call sites remain valid unmodified; only meaningful when action_type == "RIGHTS_OFFERING".
+    # A RIGHTS_OFFERING action with either field left None fails closed in
+    # CorporateActionAdjuster rather than being treated as ratio 0.0 (see
+    # RIGHTS_OFFERING_ADJUSTMENT_ARCHITECTURE_PROPOSAL.md §4).
+    rights_ratio: Optional[float] = None        # new shares per share held, e.g. 0.3 for "10配3"
+    subscription_price: Optional[float] = None  # RMB price paid per new share

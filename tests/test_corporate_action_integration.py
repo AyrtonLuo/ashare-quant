@@ -36,6 +36,15 @@ def _dividend_action(available_at=datetime(2026, 7, 20, 15, 0)):
     )
 
 
+def _rights_action(rights_ratio=0.3, subscription_price=6.0, available_at=datetime(2026, 7, 20, 15, 0)):
+    return CorporateActionContract(
+        symbol="600519.SH", ex_date="2026-08-04", action_type="RIGHTS_OFFERING",
+        cash_amount_per_share=0.0, bonus_ratio=0.0, split_ratio=1.0,
+        announcement_date="2026-07-20", available_at=available_at, received_at=available_at,
+        quality_status="VALID", rights_ratio=rights_ratio, subscription_price=subscription_price,
+    )
+
+
 DATES = ["2026-08-01", "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06"]
 AS_OF_LATE = datetime(2026, 8, 10)
 
@@ -205,3 +214,131 @@ def test_backtest_result_measurably_changes_from_corporate_action_consumption():
     # Correctness proof: the RAW run shows a large fabricated drawdown from the mechanical
     # split discontinuity that the ADJUSTED run must not exhibit.
     assert result_raw.max_drawdown > result_adjusted.max_drawdown
+
+
+# --- TEST H: RIGHTS_OFFERING (配股) — RIGHTS_OFFERING_ADJUSTMENT_ARCHITECTURE_PROPOSAL.md -----
+
+def test_rights_offering_applies_dilution_adjustment():
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    action = _rights_action(rights_ratio=0.3, subscription_price=6.0)  # discount to reference 90.0
+    result = CorporateActionAdjuster.adjust(DATES, raw, [action], AS_OF_LATE)
+
+    expected_factor = (90.0 + 0.3 * 6.0) / (90.0 * (1.0 + 0.3))
+    assert expected_factor < 1.0
+    assert result.adj_factors[0] == pytest.approx(expected_factor)
+    assert result.adj_factors[1] == pytest.approx(expected_factor)
+    assert result.adj_factors[2] == pytest.approx(1.0)
+
+
+def test_rights_offering_at_market_price_produces_no_adjustment():
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    action = _rights_action(rights_ratio=0.3, subscription_price=90.0)  # priced at reference price
+    result = CorporateActionAdjuster.adjust(DATES, raw, [action], AS_OF_LATE)
+    assert result.adj_factors[0] == pytest.approx(1.0)
+    assert result.adjusted_prices == raw
+
+
+def test_rights_offering_zero_ratio_fails_closed():
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    action = _rights_action(rights_ratio=0.0, subscription_price=6.0)
+    with pytest.raises(ValueError, match="FAIL CLOSED"):
+        CorporateActionAdjuster.adjust(DATES, raw, [action], AS_OF_LATE)
+
+
+def test_rights_offering_negative_ratio_fails_closed():
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    action = _rights_action(rights_ratio=-0.1, subscription_price=6.0)
+    with pytest.raises(ValueError, match="FAIL CLOSED"):
+        CorporateActionAdjuster.adjust(DATES, raw, [action], AS_OF_LATE)
+
+
+def test_rights_offering_non_positive_subscription_price_fails_closed():
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    action = _rights_action(rights_ratio=0.3, subscription_price=0.0)
+    with pytest.raises(ValueError, match="FAIL CLOSED"):
+        CorporateActionAdjuster.adjust(DATES, raw, [action], AS_OF_LATE)
+
+
+def test_rights_offering_missing_ratio_fails_closed():
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    action = _rights_action(rights_ratio=None, subscription_price=6.0)
+    with pytest.raises(ValueError, match="FAIL CLOSED"):
+        CorporateActionAdjuster.adjust(DATES, raw, [action], AS_OF_LATE)
+
+
+def test_rights_offering_missing_subscription_price_fails_closed():
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    action = _rights_action(rights_ratio=0.3, subscription_price=None)
+    with pytest.raises(ValueError, match="FAIL CLOSED"):
+        CorporateActionAdjuster.adjust(DATES, raw, [action], AS_OF_LATE)
+
+
+def test_rights_offering_subscription_price_above_reference_produces_valid_factor_gte_one():
+    """CEO-confirmed (RIGHTS_OFFERING_ADJUSTMENT_ARCHITECTURE_PROPOSAL.md §3.2/§4.2): unlike
+    CASH_DIVIDEND's D >= P fail-closed rule, subscription_price >= reference_price is a
+    legitimate, if unusual, real-world outcome (a weak-demand rights issue) and must NOT raise."""
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    action = _rights_action(rights_ratio=0.3, subscription_price=100.0)  # above reference 90.0
+    result = CorporateActionAdjuster.adjust(DATES, raw, [action], AS_OF_LATE)
+    expected_factor = (90.0 + 0.3 * 100.0) / (90.0 * 1.3)
+    assert expected_factor >= 1.0
+    assert result.adj_factors[0] == pytest.approx(expected_factor)
+
+
+def test_rights_offering_excluded_when_available_at_after_as_of():
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    future_action = _rights_action(available_at=datetime(2026, 8, 9))  # disclosed AFTER as_of below
+    as_of_before_disclosure = datetime(2026, 8, 5)
+
+    result = CorporateActionAdjuster.adjust(DATES, raw, [future_action], as_of_before_disclosure)
+    assert result.adjusted_prices == raw
+    assert result.actions_applied == []
+
+
+def test_rights_offering_backward_compatible_construction_without_new_fields():
+    """An old-style construction call (only the fields that predate this proposal) must still
+    work — proves the two new trailing-defaulted fields don't perturb any existing call site."""
+    action = _split_action()
+    assert action.rights_ratio is None
+    assert action.subscription_price is None
+
+
+def test_rights_offering_combined_with_cash_dividend_same_ex_date_multiplies_factors():
+    """RIGHTS_OFFERING_ADJUSTMENT_ARCHITECTURE_PROPOSAL.md §3.3: two actions sharing one ex_date
+    multiply their independently-computed factors against the same shared reference_price —
+    proven here against a value computed independently in the test, not asserted to match
+    docs/CORPORATE_ACTION_SPECIFICATION.md's unified formula (§3.3 shows those are not the same
+    computation for the combined case — that reconciliation remains a separate future item)."""
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    dividend = _dividend_action()  # cash_amount_per_share=10.0
+    rights = _rights_action(rights_ratio=0.3, subscription_price=6.0)
+    result = CorporateActionAdjuster.adjust(DATES, raw, [dividend, rights], AS_OF_LATE)
+
+    f_dividend = (90.0 - 10.0) / 90.0
+    f_rights = (90.0 + 0.3 * 6.0) / (90.0 * 1.3)
+    expected = f_dividend * f_rights
+    assert result.adj_factors[0] == pytest.approx(expected)
+    assert result.adj_factors[1] == pytest.approx(expected)
+    assert result.adj_factors[2] == pytest.approx(1.0)
+    assert set(result.actions_applied) == {"CASH_DIVIDEND:2026-08-04", "RIGHTS_OFFERING:2026-08-04"}
+
+
+def test_rights_offering_combined_with_bonus_issue_same_ex_date_multiplies_factors():
+    raw = [100.0, 100.0, 90.0, 90.0, 90.0]
+    bonus = CorporateActionContract(
+        symbol="600519.SH", ex_date="2026-08-04", action_type="BONUS_ISSUE",
+        cash_amount_per_share=0.0, bonus_ratio=0.2, split_ratio=1.0,
+        announcement_date="2026-07-20",
+        available_at=datetime(2026, 7, 20, 15, 0), received_at=datetime(2026, 7, 20, 15, 0),
+        quality_status="VALID",
+    )
+    rights = _rights_action(rights_ratio=0.3, subscription_price=6.0)
+    result = CorporateActionAdjuster.adjust(DATES, raw, [bonus, rights], AS_OF_LATE)
+
+    f_bonus = 1.0 / (1.0 + 0.2)
+    f_rights = (90.0 + 0.3 * 6.0) / (90.0 * 1.3)
+    expected = f_bonus * f_rights
+    assert result.adj_factors[0] == pytest.approx(expected)
+    assert result.adj_factors[1] == pytest.approx(expected)
+    assert result.adj_factors[2] == pytest.approx(1.0)
+    assert set(result.actions_applied) == {"BONUS_ISSUE:2026-08-04", "RIGHTS_OFFERING:2026-08-04"}

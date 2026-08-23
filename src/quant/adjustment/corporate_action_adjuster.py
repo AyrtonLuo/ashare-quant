@@ -20,8 +20,15 @@ Adjustment convention (standard backward/back-adjustment):
   (P - D) / P, where P is the raw close on/after ex_date (the reference price). This is the
   standard ex-dividend adjustment factor and requires D < P; a dividend that would produce a
   non-positive adjustment factor fails closed rather than emitting a nonsensical series.
-- RIGHTS_OFFERING is not implemented: rather than guess an adjustment formula that has not
-  been reviewed, this fails closed.
+- RIGHTS_OFFERING (rights_ratio R, subscription_price Pr): dates strictly before ex_date are
+  multiplied by (P + R*Pr) / (P*(1+R)), where P is the same reference price used for
+  CASH_DIVIDEND. This is the standard 配股除权价 formula, adapted through the same
+  single-reference-price substitution CASH_DIVIDEND already uses (see
+  RIGHTS_OFFERING_ADJUSTMENT_ARCHITECTURE_PROPOSAL.md §3 for the full derivation and its
+  relationship to docs/CORPORATE_ACTION_SPECIFICATION.md's composite formula). Unlike
+  CASH_DIVIDEND's D >= P case, subscription_price >= P is a legitimate, if unusual, outcome
+  (factor >= 1.0) and is not treated as an error; rights_ratio <= 0, or a missing/non-positive
+  rights_ratio/subscription_price/reference price, fails closed.
 
 Each event's factor is computed independently from RAW prices (never from an
 already-adjusted price), so factors compose correctly regardless of processing order.
@@ -34,7 +41,7 @@ from typing import List, Dict
 from src.data.contracts.corporate_action import CorporateActionContract
 from src.data.validation.pit_gate import PITGate
 
-SUPPORTED_ADJUSTING_ACTION_TYPES = {"STOCK_SPLIT", "BONUS_ISSUE", "CASH_DIVIDEND"}
+SUPPORTED_ADJUSTING_ACTION_TYPES = {"STOCK_SPLIT", "BONUS_ISSUE", "CASH_DIVIDEND", "RIGHTS_OFFERING"}
 
 
 @dataclass(frozen=True)
@@ -47,7 +54,8 @@ class AdjustedPriceSeries:
 
 
 class CorporateActionAdjuster:
-    """Applies split / bonus / cash-dividend backward adjustment to a dated raw price series."""
+    """Applies split / bonus / cash-dividend / rights-offering backward adjustment to a dated
+    raw price series."""
 
     @staticmethod
     def _event_factor(action: CorporateActionContract, reference_price: float) -> float:
@@ -86,9 +94,32 @@ class CorporateActionAdjuster:
             return (reference_price - action.cash_amount_per_share) / reference_price
 
         if action.action_type == "RIGHTS_OFFERING":
-            raise ValueError(
-                f"FAIL CLOSED: RIGHTS_OFFERING adjustment is not implemented for {action.symbol} "
-                f"on {action.ex_date}; refusing to silently ignore it or guess a formula."
+            if action.rights_ratio is None or action.subscription_price is None:
+                raise ValueError(
+                    f"FAIL CLOSED: RIGHTS_OFFERING action for {action.symbol} on {action.ex_date} "
+                    "is missing rights_ratio or subscription_price; refusing to treat a missing "
+                    "field as ratio 0.0."
+                )
+            if action.rights_ratio <= 0:
+                raise ValueError(
+                    f"FAIL CLOSED: invalid rights_ratio {action.rights_ratio} for {action.symbol} "
+                    f"on {action.ex_date}."
+                )
+            if action.subscription_price <= 0:
+                raise ValueError(
+                    f"FAIL CLOSED: invalid subscription_price {action.subscription_price} for "
+                    f"{action.symbol} on {action.ex_date}."
+                )
+            if reference_price <= 0:
+                raise ValueError(
+                    f"FAIL CLOSED: cannot compute rights-offering adjustment with non-positive "
+                    f"reference price for {action.symbol} on {action.ex_date}."
+                )
+            # subscription_price >= reference_price is deliberately NOT an error here (unlike
+            # CASH_DIVIDEND's D >= P case) — it produces a well-defined factor >= 1.0, a
+            # legitimate outcome for a weak-demand rights issue priced near or above market.
+            return (reference_price + action.rights_ratio * action.subscription_price) / (
+                reference_price * (1.0 + action.rights_ratio)
             )
 
         raise ValueError(
@@ -115,7 +146,7 @@ class CorporateActionAdjuster:
 
         by_ex_date: Dict[str, List[CorporateActionContract]] = {}
         for a in visible_actions:
-            if a.action_type not in SUPPORTED_ADJUSTING_ACTION_TYPES and a.action_type != "RIGHTS_OFFERING":
+            if a.action_type not in SUPPORTED_ADJUSTING_ACTION_TYPES:
                 raise ValueError(f"FAIL CLOSED: unknown corporate action_type '{a.action_type}' for {a.symbol}.")
             by_ex_date.setdefault(a.ex_date, []).append(a)
 
