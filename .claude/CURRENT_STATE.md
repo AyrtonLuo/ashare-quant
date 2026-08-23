@@ -1,6 +1,6 @@
 # Current Project State
 
-_Synchronized to HEAD `0795400` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `aebef90` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > this file > Conversation History._
 
 ## Current Track
@@ -9,9 +9,9 @@ No phase number is assigned to this track (standing CEO instruction). **Phase 9 
 Do NOT create a "Phase 10."**
 
 Governing document: `AI_QUANT_RESEARCH_ANALYST_ARCHITECTURE_PROPOSAL.md` (revision 2, repo root).
-Its §11 Implementation Plan is the authoritative step list; **steps 1–5 are delivered, plus the
-§7 Research Report Generation Layer (which is not a numbered §11 step). Only §11 step 6, the
-Streamlit UI, remains** — and it requires its own explicit CEO directive.
+Its §11 Implementation Plan is the authoritative step list. **All six steps are delivered, plus
+the §7 Research Report Generation Layer (which is not a numbered §11 step). The AI Research
+Analyst track is feature-complete against the proposal as written.**
 
 ## Overall Status
 Production-grade A-Share Quantitative Research & Backtesting Platform: certified Point-in-Time
@@ -25,8 +25,8 @@ adjustment formula.
 On top of that base, the AI Research Analyst track has delivered the full deterministic chain
 `API → Adapter → Contract → Validation → PIT → Evidence Bundle → LLM Provider → Structured
 Output → Citation Validation → Report Identity → Immutable Persistence → 10-Section Research
-Report`. **No live LLM API has been called or wired anywhere in this codebase** — only
-deterministic fake providers exist.
+Report → Application Layer → Streamlit UI`. **No live LLM API has been called or wired anywhere
+in this codebase** — only deterministic fake providers exist.
 
 ## Completed — AI Research Analyst track
 - **Data infrastructure** (`f75b0ef`): `NewsAnnouncementContract`; `NewsAnnouncementProvider` ABC
@@ -60,6 +60,38 @@ deterministic fake providers exist.
     evidence_bundle_hash / timeout / token usage. `LLMRequest`'s only content field is
     `evidence_payload`, so no data handle or search capability can structurally reach a provider.
 
+- **Streamlit UI + analyst Application Layer** (`aebef90`, §9 / §11 step 6):
+  - `src/app/research_analyst_application.py` (new) mirrors `research_application.py`'s
+    contract — the UI calls only this module; this module imports no UI framework. It assembles
+    Evidence from the certified GOLDEN_DATASET (MARKET + FUNDAMENTAL via existing assembly
+    functions, TECHNICAL by calling the **shipped** MA/RSI/MACD — no new indicator), PIT by
+    construction, with `input_price_basis="RAW"` declared honestly since the golden closes are
+    unadjusted.
+  - **Availability is reported, never faked**: the workbench dataset has no news feed and no
+    factor/risk evidence assembly, so `NEWS` / `QUANT_FACTOR` / `RISK` return NOT AVAILABLE each
+    with its own reason string, and the report layer renders those sections as NOT AVAILABLE.
+  - `get_llm_provider_status()` reports **`NO_LIVE_LLM_PROVIDER_IMPLEMENTED`** — the honest
+    blocker. Credential preflight is surfaced but a present key never upgrades the status (there
+    is no vendor client to use it with), and no key value is ever exposed.
+  - `generate_analyst_report()` **fails closed by default**. A caller may opt in to a
+    clearly-labelled synthetic narrative: real certified Evidence + fixed placeholder prose
+    authored in the app layer (not by any model) that says "SYNTHETIC PLACEHOLDER — not
+    analysis, no LLM was called" in every section and **contains no numerals at all**, tagged
+    `data_origin="SYNTHETIC_DATA"` on the persisted identity. Mirrors the existing
+    `LiveNewsAnnouncementProvider` (explicit refusal) / `SyntheticNewsAnnouncementProvider`
+    (labelled fixtures) convention. **Awaiting CEO confirmation of this design choice.**
+  - `streamlit_app.py` gains an "AI Research Analyst" page: provider banner, symbol/as_of
+    selectors, Evidence Bundle panel (per-category AVAILABLE/NOT AVAILABLE + reasons, origin
+    breakdown, bundle hash, item expander), computed Data Confidence panel, conflicts table,
+    all 10 sections with content-type badges and per-section evidence ids, withheld narrative in
+    an expander, provenance incl. `reproducibility_scope`, disclaimer, limitations, Markdown
+    download. Generation sits behind an opt-in checkbox that is **off by default**.
+  - `golden_dataset_seed.py`: one additive public `market_data()` accessor (no second
+    contract-construction site that could drift).
+  - `test_phase_8r_security_boundary.py`: the UI-import assertion became an **allow-list of
+    Application Layer entry points** (§9 specifies the analyst page gets its own module).
+    `FORBIDDEN_UI_IMPORTS` is unchanged — every research internal still fails. Not a relaxation.
+  - 35 new tests.
 - **Research Report Generation Layer** (`0795400`, proposal §7 — `data_confidence.py` and
   `report.py` added to `src/quant/research_report/`, **zero existing files modified**):
   - **Schema fit, audited not assumed**: §7's 10 sections map onto the shipped
@@ -142,8 +174,6 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 - **Phase 2** — Context System Hardening & Multi-Agent Handoff Protocol.
 
 ## Not Implemented — honestly disclosed, not silently dropped
-- **Streamlit UI** — §9, **not built**. Would require a new Application Layer module; only
-  `streamlit_app.py` may import Streamlit.
 - **Volatility / Momentum / Volume indicators** — `NotImplementedError` at
   `src/quant/technical/indicators.py:212,224,237`; design documented in each docstring.
 - **Persistent `NewsAnnouncementStore`** — not built. News items are validated and PIT-filtered
@@ -157,7 +187,7 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 Nothing. Awaiting the next CEO directive.
 
 ## Tests
-- **Passed**: 583
+- **Passed**: 618
 - **Skipped**: 11 (live-provider network tests, safely skipped when `TUSHARE_TOKEN` is absent)
 - **Failures**: 0
 - **Test Command**: `PYTHONPATH=. ./venv/bin/pytest`
@@ -165,8 +195,8 @@ Nothing. Awaiting the next CEO directive.
 ## Git Status
 - **Branch**: `main`
 - **Working Tree**: Clean.
-- **HEAD**: `0795400` (`feat: Research Report Generation Layer, 10 sections (AI Research
-  Analyst section 7)`)
+- **HEAD**: `aebef90` (`feat: AI Research Analyst Streamlit UI via a dedicated Application
+  Layer (step 6)`)
 - **`origin/main` is in sync with local `main`.** Pushes are made only under an explicit CEO
   directive authorizing them (as with Step 5 and the §7 layer).
 - Standing rule unchanged: **never push without explicit Product Owner approval.**
@@ -213,8 +243,16 @@ Nothing. Awaiting the next CEO directive.
 - `docs/CORPORATE_ACTION_SPECIFICATION.md`, `docs/FINAL_RESEARCH_INTEGRITY_CERTIFICATION.md`.
 
 ## Next Recommended Action
-Await a CEO directive. One unit remains in the AI Research Analyst track, unauthorized:
-**§11 step 6 — Streamlit UI** (§9), via a new Application Layer module; only
-`src/app/streamlit_app.py` may import Streamlit. `render_report_markdown()` already provides a
-framework-free rendering the UI layer can build on.
+Await a CEO directive. **The AI Research Analyst track is complete against the proposal as
+written** — no further unit is authorized or outstanding in it.
+
+Two decisions belong to the CEO, not to an implementing agent:
+1. **Confirm or reject the labelled-synthetic-narrative design** in
+   `research_analyst_application.py` (fail-closed by default; opt-in placeholder prose tagged
+   `SYNTHETIC_DATA`). It is the only reason the UI can render a report at all, since no vendor
+   LLM client exists.
+2. **Decide whether a real LLM provider implementation is wanted.** Wiring one is the single
+   change that would turn this pipeline from structurally-complete into operationally useful;
+   it is explicitly unauthorized today and would add a vendor dependency.
+
 Do NOT implement trading, broker connections, or order routing. Do NOT create a "Phase 10."

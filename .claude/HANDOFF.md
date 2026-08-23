@@ -1,6 +1,6 @@
 # Agent Handoff
 
-_Synchronized to HEAD `0795400` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `aebef90` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > `.claude/` files > Conversation History._
 
 ## Handoff Status
@@ -11,15 +11,29 @@ READY
 **Phase 9 is complete. Do NOT create a "Phase 10."**
 
 Governing document: `AI_QUANT_RESEARCH_ANALYST_ARCHITECTURE_PROPOSAL.md` (revision 2, repo root),
-§11 Implementation Plan. **Steps 1–5 delivered, plus the §7 Research Report Generation Layer
-(not a numbered §11 step). Only step 6, the Streamlit UI, remains** — not authorized by that
-document; it requires its own explicit CEO directive.
+§11 Implementation Plan. **All six steps delivered, plus the §7 Research Report Generation
+Layer (not a numbered §11 step). The track is feature-complete against the proposal as
+written.**
 
 ## Current Objective
-None in flight. The §7 Research Report Generation Layer (`0795400`) is delivered, verified,
-committed, and pushed to `origin/main`. **STOP — await the next CEO directive.**
+None in flight. Step 6 (Streamlit UI + analyst Application Layer, `aebef90`) is delivered,
+verified, committed, and pushed to `origin/main`. **STOP — await the next CEO directive.**
 
 ## Completed
+- **Streamlit UI + analyst Application Layer** (`aebef90`, §9 / §11 step 6) — new
+  `src/app/research_analyst_application.py` (the UI calls only it; it imports no UI framework);
+  an "AI Research Analyst" page in `streamlit_app.py` rendering the Evidence Bundle with
+  per-category AVAILABLE / NOT AVAILABLE + reasons and origin breakdown, the computed Data
+  Confidence panel, the conflicts table, all 10 sections with content-type badges and
+  per-section evidence ids, withheld narrative in an expander, provenance incl.
+  `reproducibility_scope`, disclaimer, limitations and a Markdown download. Evidence is
+  assembled from the certified GOLDEN_DATASET (MARKET + FUNDAMENTAL via existing assembly
+  functions, TECHNICAL by calling the **shipped** MA/RSI/MACD — no new indicator), PIT by
+  construction, `input_price_basis="RAW"` declared honestly. `get_llm_provider_status()` reports
+  **`NO_LIVE_LLM_PROVIDER_IMPLEMENTED`**; `generate_analyst_report()` **fails closed by
+  default**, with an opt-in, unmistakably-labelled `SYNTHETIC_DATA` placeholder narrative
+  (no numerals, authored in the app layer, never by a model). One additive `market_data()`
+  accessor on `golden_dataset_seed.py`. 35 new tests.
 - **Research Report Generation Layer** (`0795400`, proposal §7) — `data_confidence.py` +
   `report.py`, both new, zero existing files modified. **§7's 10 sections fit the shipped
   `StructuredResearchOutput` without changing it**: its 9 narrative fields are §7's 9 AI
@@ -80,30 +94,30 @@ committed, and pushed to `origin/main`. **STOP — await the next CEO directive.
 - **Phase 2** — Context System Hardening (`CLAUDE.md` budget protocol, state machine, role map).
 
 ## Not Completed — disclosed, not silently dropped
-1. **Streamlit UI** — §9 / §11 step 6, the last remaining unit of this track. Requires a new
-   Application Layer module; only `src/app/streamlit_app.py` may import Streamlit.
-   `render_report_markdown()` gives it a framework-free rendering to build on.
+1. **Real LLM provider implementation** — the single change that would make this pipeline
+   operationally useful rather than only structurally complete. No vendor client exists in
+   `src/llm/` by design and by directive; wiring one adds a dependency and needs an explicit
+   CEO decision. Until then the UI fails closed or renders a labelled synthetic narrative.
 2. **Volatility / Momentum / Volume indicators** — `NotImplementedError` at
    `src/quant/technical/indicators.py:212,224,237`, design in each docstring.
 3. **Persistent `NewsAnnouncementStore`** — news is validated/PIT-filtered in memory only; no
    stateful immutable revision store exists for news.
-4. **Real LLM API integration** — deliberately absent.
-5. **Category-level `historical_eligible` (§3.4)** — never implemented anywhere. The report
+4. **Category-level `historical_eligible` (§3.4)** — never implemented anywhere. The report
    marks an absent category as `NOT AVAILABLE` without distinguishing "structurally
    current-only" from "simply absent". Disclosed in `REPORT_LIMITATIONS` on every report.
-6. **Semantic conflict detection between free-text news items** (§3.3's "M&A rumour later
+5. **Semantic conflict detection between free-text news items** (§3.3's "M&A rumour later
    denied") — not deterministically decidable, so not claimed. `CONFLICT_DETECTION_SCOPE` is
    carried onto every report so "no conflicts detected" cannot be misread as "no conflicts
    exist"; surfacing that class remains the AI's narrative contract (§6).
 
 ## Current Test Baseline
-- **Passed**: 583
+- **Passed**: 618
 - **Skipped**: 11 (live-provider network tests, safely skipped when `TUSHARE_TOKEN` is absent)
 - **Failures**: 0
 - **Test Command**: `PYTHONPATH=. ./venv/bin/pytest`
 
 ## Git Status
-- **Branch**: `main`; **Working Tree**: clean; **HEAD**: `0795400`.
+- **Branch**: `main`; **Working Tree**: clean; **HEAD**: `aebef90`.
 - **`origin/main` is in sync with local `main`** (pushed under explicit CEO authorization for
   this directive).
 - Standing rule unchanged: never push without explicit Product Owner approval.
@@ -121,6 +135,9 @@ committed, and pushed to `origin/main`. **STOP — await the next CEO directive.
 - `src/quant/research_report/report_identity.py`, `report_store.py` — Step 5 identity + store.
 - `src/quant/research_report/report.py`, `data_confidence.py` — §7 report generation +
   computed Data Confidence / conflict detection.
+- `src/app/research_analyst_application.py` — analyst Application Layer (the ONLY module the
+  analyst UI page may call into).
+- `src/app/streamlit_app.py` — the ONLY file permitted to import Streamlit.
 - `src/quant/evidence/evidence_item.py`, `src/quant/technical/indicators.py` — Evidence + indicators.
 - `src/data/validation/pit_gate.py`, `src/data/revision/corporate_action_store.py` — dual-cutoff PIT.
 - `src/quant/adjustment/corporate_action_adjuster.py` — four action types + unified formula.
@@ -138,6 +155,16 @@ committed, and pushed to `origin/main`. **STOP — await the next CEO directive.
   convention: `ResearchAnalystReportIdentity` has no `result_hash`, and its
   `reproducibility_scope` field is validated in `__post_init__`, so a caller cannot persist a
   stronger claim. Do not add one.
+- **UI boundary is an allow-list, not a single module**: `streamlit_app.py` may import
+  `research_application` and `research_analyst_application` and nothing else from this project.
+  `test_phase_8r_security_boundary.py`'s `FORBIDDEN_UI_IMPORTS` check is unchanged — the
+  allow-list narrowing was a §9-mandated addition, never a relaxation.
+- **Report generation fails closed without a live provider**: `NO_LIVE_LLM_PROVIDER_IMPLEMENTED`
+  is reported as its own status because a *present credential* does not imply a usable provider
+  — there is no vendor client to use a key with. Do not let a key presence upgrade that status.
+- **Synthetic narrative must stay unmistakable**: opt-in only, off by default, no numerals in
+  the placeholder prose, `data_origin="SYNTHETIC_DATA"` on the persisted identity, and a warning
+  surfaced in the UI. **This design is awaiting explicit CEO confirmation.**
 - **No single verdict is structurally impossible, not merely discouraged**: `ResearchReport`
   has no verdict/rating/recommendation/signal/target-price field, Bull and Bear are both
   mandatory, and an identical Bull/Bear pair fails closed. Do not add such a field.
@@ -183,9 +210,11 @@ committed, and pushed to `origin/main`. **STOP — await the next CEO directive.
   absent and requires its own directive.
 
 ## Exact Next Action
-**Await a CEO directive.** No work is currently authorized. One unit remains in this track:
-**§11 step 6 — the Streamlit UI (§9)**, via a new Application Layer module, with only
-`src/app/streamlit_app.py` permitted to import Streamlit.
+**Await a CEO directive.** No work is authorized, and **no unit of the AI Research Analyst track
+remains outstanding** — it is feature-complete against the proposal as written. Two questions
+are the CEO's to answer: (1) confirm or reject the labelled-synthetic-narrative design; (2)
+decide whether a real LLM provider implementation is wanted, which is the only change that would
+make the pipeline operationally useful.
 On a new session or post-compaction recovery, execute the New Session Recovery Protocol
 (`CLAUDE.md` §7) starting with `CLAUDE.md`.
 
@@ -193,7 +222,9 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
 - Do NOT implement live trading, broker connections, or order routing.
 - Do NOT create a "Phase 10" or assign a phase number to the AI Research Analyst track.
 - Do NOT wire a real LLM vendor SDK without an explicit directive.
-- Do NOT expand into the six "Not Completed" items without a new directive.
+- Do NOT expand into the five "Not Completed" items without a new directive.
+- Do NOT let the analyst UI import anything but the two Application Layer modules.
+- Do NOT present synthetic narrative as analysis, or make it the default.
 - Do NOT add a `result_hash` or any prose hash to `ResearchAnalystReportIdentity`.
 - Do NOT add a verdict/rating/recommendation field to `ResearchReport`.
 - Do NOT let an LLM produce, adjust, or influence the Data Confidence metric.
@@ -201,5 +232,5 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
 
 ## Validation Required
 - `git status` — working tree clean.
-- `PYTHONPATH=. ./venv/bin/pytest` — **583 passed, 11 skipped, 0 failed**.
+- `PYTHONPATH=. ./venv/bin/pytest` — **618 passed, 11 skipped, 0 failed**.
 - `git diff --check` — clean.
