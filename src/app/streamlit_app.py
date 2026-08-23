@@ -307,8 +307,10 @@ elif page == "AI Research Analyst":
     )
 
     provider_status = analyst.get_llm_provider_status()
-    if not provider_status.live_provider_implemented:
-        st.error(f"**{provider_status.status}** — {provider_status.message}")
+    if provider_status.status == analyst.LLM_AVAILABLE_STATUS:
+        st.success(f"**{provider_status.status}** — {provider_status.message}")
+    else:
+        st.warning(f"**{provider_status.status}** — {provider_status.message}", icon="⚠️")
     with st.expander("LLM credential pre-flight (informational — no key is ever displayed)"):
         st.json(list(provider_status.credential_reports))
 
@@ -337,20 +339,36 @@ elif page == "AI Research Analyst":
         st.error(str(e))
         preview_bundle = None
 
-    allow_synthetic = st.checkbox(
-        "Generate with a clearly-labelled SYNTHETIC narrative (no LLM API is called)",
-        value=False, key="analyst_allow_synthetic",
-        help="Unchecked, generation fails closed: no live LLM provider exists in this codebase.",
+    real_available = provider_status.status == analyst.LLM_AVAILABLE_STATUS
+    narrative_source = st.radio(
+        "Narrative source",
+        options=["Real LLM provider", "Labelled SYNTHETIC placeholder"],
+        index=0 if real_available else 1,
+        key="analyst_narrative_source",
+        help=(
+            "The real provider makes a billable API call and produces genuine analysis of the "
+            "Evidence Bundle. The synthetic placeholder calls no API and is not analysis — it "
+            "renders the pipeline with prose that says so in every section."
+        ),
     )
+    use_real = narrative_source == "Real LLM provider"
+    if use_real and not real_available:
+        st.warning(
+            "No LLM credential is configured — generation with the real provider will fail "
+            "closed rather than fall back to a synthetic narrative.", icon="⚠️",
+        )
+
     if st.button("🧠 Generate AI Research Report", key="analyst_generate"):
-        try:
-            view = analyst.generate_analyst_report(
-                analyst_symbol, analyst_as_of, allow_synthetic_narrative=allow_synthetic,
-            )
-            st.session_state["last_analyst_report_id"] = view.report_id
-            st.success(f"Report generated and persisted: `{view.report_id}`")
-        except analyst.ResearchAnalystError as e:
-            st.error(f"FAIL CLOSED — {e}")
+        with st.spinner("Generating…" if use_real else "Rendering…"):
+            try:
+                view = analyst.generate_analyst_report(
+                    analyst_symbol, analyst_as_of,
+                    allow_synthetic_narrative=not use_real, use_real_provider=use_real,
+                )
+                st.session_state["last_analyst_report_id"] = view.report_id
+                st.success(f"Report generated and persisted: `{view.report_id}`")
+            except analyst.ResearchAnalystError as e:
+                st.error(f"FAIL CLOSED — {e}")
 
     st.markdown("---")
     st.subheader("Persisted reports")

@@ -7,17 +7,16 @@ imports no UI framework, and every value the UI renders is produced here from ce
 from an already-persisted artifact. `streamlit_app.py` remains the only file in the repository
 permitted to import Streamlit; nothing here imports it, and nothing here renders.
 
-Honest availability, stated up front rather than discovered by a reader
-=======================================================================
-**No live LLM provider implementation exists anywhere in this codebase** — `src/llm/` ships the
-provider ABC, the structured-output contract, the deterministic citation validator, the
-credential preflight, and two deterministic fakes; it ships no vendor client, by design and by
-directive. That is a stronger blocker than a missing API key, so this module reports it as its
-own explicit status (`NO_LIVE_LLM_PROVIDER_IMPLEMENTED`) rather than letting a present-but-
-unusable credential imply a capability that does not exist.
+Availability, stated up front rather than discovered by a reader
+================================================================
+A real LLM provider now exists (`src/llm/openai_provider.py`, stdlib HTTP, no vendor SDK), so
+this module reports availability from the credential preflight: `LLM_PROVIDER_AVAILABLE` when
+`OPENAI_API_KEY` is present, `LLM_PROVIDER_CREDENTIALS_UNAVAILABLE` when it is not.
 
-Consequently `generate_analyst_report()` **fails closed by default**. A caller may opt in to a
-clearly-labelled synthetic narrative (`allow_synthetic_narrative=True`), which is:
+`generate_analyst_report()` uses the real provider whenever the credential is present, and
+**fails closed when it is not**. A caller may still opt in to a clearly-labelled synthetic
+narrative (`allow_synthetic_narrative=True`) — used when no credential is configured, or to
+exercise the rendering path without spending tokens — which is:
   * assembled from the SAME real, certified, PIT-filtered Evidence Bundle as any other report —
     every fact and number on the page is real GOLDEN_DATASET evidence;
   * accompanied by placeholder prose that says so in every single section, authored here and not
@@ -47,7 +46,12 @@ from src.app.golden_dataset_seed import (
 )
 from src.llm.credential import LLMProviderCredentialPreflight
 from src.llm.fake_provider import FakeLLMProvider
-from src.llm.provider_base import LLMProviderError
+from src.llm.openai_provider import (
+    OPENAI_API_KEY_ENV_VAR,
+    OPENAI_PROVIDER_ID,
+    OpenAILLMProvider,
+)
+from src.llm.provider_base import LLMProvider, LLMProviderError
 from src.quant.evidence.evidence_item import (
     EvidenceItem,
     assemble_fundamental_evidence,
@@ -80,15 +84,18 @@ from src.quant.technical.indicators import (
 
 REPORT_STORE_BASE_DIR = "data/research/analyst_reports"
 
-# Informational only. Credential presence does NOT imply a usable provider — see the module
-# docstring; no vendor client exists to use a key with.
+# Only `openai` has a concrete implementation; the other two are listed so the UI can show the
+# preflight for a credential a future provider would use. A key for a vendor with no
+# implementation never makes that vendor usable.
 KNOWN_LLM_PROVIDERS: Tuple[Tuple[str, str], ...] = (
-    ("openai", "OPENAI_API_KEY"),
+    (OPENAI_PROVIDER_ID, OPENAI_API_KEY_ENV_VAR),
     ("anthropic", "ANTHROPIC_API_KEY"),
     ("gemini", "GEMINI_API_KEY"),
 )
 
-NO_LIVE_PROVIDER_STATUS = "NO_LIVE_LLM_PROVIDER_IMPLEMENTED"
+DEFAULT_LLM_MODEL = "gpt-4o-mini"
+LLM_AVAILABLE_STATUS = "LLM_PROVIDER_AVAILABLE"
+LLM_CREDENTIALS_UNAVAILABLE_STATUS = "LLM_PROVIDER_CREDENTIALS_UNAVAILABLE"
 NARRATIVE_ORIGIN_SYNTHETIC = "SYNTHETIC_DATA"
 SYNTHETIC_NARRATIVE_WARNING = (
     "SYNTHETIC NARRATIVE — no LLM API was called. The Evidence Bundle below is real, certified, "
@@ -111,8 +118,9 @@ _CATEGORY_UNAVAILABLE_REASONS: Dict[str, str] = {
 }
 
 ANALYST_LIMITATIONS: Tuple[str, ...] = (
-    "No live LLM provider implementation exists in this codebase; report narrative is either "
-    "absent (fail-closed) or an explicitly-labelled synthetic placeholder.",
+    "A real LLM provider is implemented (OpenAI over stdlib HTTP, no vendor SDK). When no "
+    "credential is configured, report generation fails closed or produces an explicitly-"
+    "labelled synthetic placeholder — never an unlabelled substitute.",
     "All evidence originates from the certified GOLDEN_DATASET; none of it is REAL_PROVIDER "
     "sourced (LIVE_PROVIDER_CREDENTIALS_UNAVAILABLE).",
     "Technical indicators here are computed on RAW golden closes (input_price_basis='RAW'); "
@@ -262,20 +270,33 @@ def get_analyst_symbols() -> List[Dict[str, str]]:
     return [{"symbol": s, "display_name": n} for s, n in sorted(SYMBOL_DISPLAY_NAMES.items())]
 
 
+def _openai_credential_available() -> bool:
+    report = LLMProviderCredentialPreflight.inspect_credentials(
+        OPENAI_PROVIDER_ID, OPENAI_API_KEY_ENV_VAR
+    )
+    return report["credential_status"] == "PRESENT_UNVERIFIED"
+
+
 def get_llm_provider_status() -> LLMProviderStatusView:
-    """Credential preflight is reported for transparency, but the decisive fact is that no vendor
-    client exists — so a present key never upgrades the status."""
+    """Reports the preflight for every known provider. Only `openai` has an implementation, so
+    only its credential can make generation possible; a key for an unimplemented vendor is shown
+    but never treated as a capability."""
     reports = tuple(
         LLMProviderCredentialPreflight.inspect_credentials(provider_id, env_var)
         for provider_id, env_var in KNOWN_LLM_PROVIDERS
     )
+    available = _openai_credential_available()
     return LLMProviderStatusView(
-        live_provider_implemented=False,
-        status=NO_LIVE_PROVIDER_STATUS,
+        live_provider_implemented=True,
+        status=LLM_AVAILABLE_STATUS if available else LLM_CREDENTIALS_UNAVAILABLE_STATUS,
         message=(
-            "No live LLM provider implementation exists in this codebase (src/llm/ ships the "
-            "provider interface, validators and deterministic fakes only). Report generation "
-            "fails closed unless a synthetic, clearly-labelled narrative is explicitly requested."
+            f"Real provider `{OPENAI_PROVIDER_ID}` is implemented (stdlib HTTP, no vendor SDK) "
+            "and its credential is present. Structural presence only — no connectivity probe "
+            "was made, so a call can still fail on quota, rate limit or network."
+            if available else
+            f"Real provider `{OPENAI_PROVIDER_ID}` is implemented, but {OPENAI_API_KEY_ENV_VAR} "
+            "is not set. Report generation fails closed unless a synthetic, clearly-labelled "
+            "narrative is explicitly requested."
         ),
         credential_reports=reports,
     )
@@ -418,9 +439,18 @@ def generate_analyst_report(
     allow_synthetic_narrative: bool = False,
     persist: bool = True,
     research_run_id: Optional[str] = None,
+    model: str = DEFAULT_LLM_MODEL,
+    use_real_provider: Optional[bool] = None,
 ) -> AnalystReportView:
-    """Fails closed unless a synthetic, clearly-labelled narrative is explicitly requested — see
-    the module docstring. The Evidence Bundle is real in either case."""
+    """Uses the real provider when its credential is present. Fails closed when it is not,
+    unless a synthetic, clearly-labelled narrative is explicitly requested. The Evidence Bundle
+    is real in every case.
+
+    `use_real_provider` forces the choice (True demands the real provider and refuses to fall
+    back; False demands the synthetic path) — the default, None, decides from the preflight. A
+    provider-level failure is never silently downgraded to a synthetic narrative: that would put
+    unlabelled placeholder prose where a reader expects real analysis.
+    """
     items, bundle_view = build_evidence_bundle(symbol, as_of)
     if not items:
         raise ResearchAnalystError(
@@ -428,20 +458,39 @@ def generate_analyst_report(
             "not be generated from an empty Evidence Bundle."
         )
 
-    if not allow_synthetic_narrative:
+    real_available = _openai_credential_available()
+    if use_real_provider is None:
+        use_real = real_available
+    else:
+        use_real = use_real_provider
+    if use_real and not real_available:
         raise ResearchAnalystError(
-            f"FAIL CLOSED: {NO_LIVE_PROVIDER_STATUS} — no live LLM provider implementation "
-            "exists in this codebase, so no report narrative can be generated. Explicitly "
-            "request a labelled synthetic narrative if a rendering of the pipeline is wanted."
+            f"FAIL CLOSED: {LLM_CREDENTIALS_UNAVAILABLE_STATUS} — the real provider was "
+            f"requested but {OPENAI_API_KEY_ENV_VAR} is not set."
         )
 
-    provider = FakeLLMProvider(canned_output=_synthetic_canned_output(items))
+    if not use_real and not allow_synthetic_narrative:
+        raise ResearchAnalystError(
+            f"FAIL CLOSED: {LLM_CREDENTIALS_UNAVAILABLE_STATUS} — no LLM credential is "
+            f"configured, so no report narrative can be generated. Set "
+            f"{OPENAI_API_KEY_ENV_VAR}, or explicitly request a labelled synthetic narrative."
+        )
+
+    provider: LLMProvider
+    if use_real:
+        provider = OpenAILLMProvider()
+        narrative_origin, prompt_version, request_model = "REAL_PROVIDER", "1.0", model
+    else:
+        provider = FakeLLMProvider(canned_output=_synthetic_canned_output(items))
+        narrative_origin = NARRATIVE_ORIGIN_SYNTHETIC
+        prompt_version, request_model = "synthetic-1.0", "synthetic-placeholder"
+
     try:
         report = generate_research_report(
             items, provider, symbol=symbol, as_of=_as_of_datetime(as_of),
-            model="synthetic-placeholder", prompt_version="synthetic-1.0",
+            model=request_model, prompt_version=prompt_version,
             research_run_id=research_run_id, provider_version=provider.provider_version,
-            data_origin=NARRATIVE_ORIGIN_SYNTHETIC,
+            data_origin=narrative_origin,
         )
     except (ValueError, LLMProviderError) as e:
         raise ResearchAnalystError(str(e)) from e

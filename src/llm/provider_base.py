@@ -8,9 +8,9 @@ one abstract method, so `OpenAI ↔ Claude ↔ Gemini` can be swapped by impleme
 without changing anything upstream (Research Analyst, §ResearchAnalyst below).
 
 The Research Analyst layer (research_analyst.py) is the ONLY caller of `LLMProvider.
-generate_structured_research()`. Nothing outside src/llm/ ever imports an actual vendor SDK
-(openai/anthropic/google-generativeai) — none is imported anywhere in this module or this
-package, by construction (no such import exists in this file or anywhere in src/llm/).
+generate_structured_research()`. No vendor SDK is imported anywhere in this package: the real
+provider (openai_provider.py) speaks the vendor's HTTP API using only the standard library, so
+`requirements.txt` carries no LLM dependency.
 """
 
 from abc import ABC, abstractmethod
@@ -96,10 +96,10 @@ class LLMResponse:
 
 
 class LLMProvider(ABC):
-    """One abstract method, same shape as UnifiedDataProvider/NewsAnnouncementProvider. A
-    concrete implementation for a real vendor (OpenAI/Claude/Gemini) is NOT built in this phase
-    — see fake_provider.py for the deterministic test doubles used instead, and credential.py
-    for how a real implementation would report LLM_PROVIDER_CREDENTIALS_UNAVAILABLE."""
+    """One abstract method, same shape as UnifiedDataProvider/NewsAnnouncementProvider.
+    Implementations: openai_provider.py (real, network-calling, data_origin=REAL_PROVIDER) and
+    fake_provider.py (two deterministic test doubles, permanently data_origin=SYNTHETIC_DATA, so
+    a fake can never impersonate a real provider in a persisted artifact)."""
 
     @property
     @abstractmethod

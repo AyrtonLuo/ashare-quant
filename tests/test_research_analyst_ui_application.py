@@ -10,6 +10,7 @@ it is produced.
 """
 
 import ast
+import dataclasses
 import json
 import os
 import re
@@ -39,6 +40,10 @@ def as_of():
 
 
 def _generate(as_of, symbol=SYMBOL, **kwargs):
+    """Pins the synthetic path explicitly. Without `use_real_provider=False` these tests would
+    make real, billable API calls whenever OPENAI_API_KEY happens to be set in the environment
+    — a test suite must never depend on that, in either direction."""
+    kwargs.setdefault("use_real_provider", False)
     return analyst.generate_analyst_report(
         symbol, as_of, allow_synthetic_narrative=True, **kwargs
     )
@@ -124,18 +129,27 @@ def test_analyst_application_public_functions_contain_no_trading_verbs():
 
 # --- LLM provider availability is reported honestly -------------------------------------------
 
-def test_provider_status_reports_no_live_implementation():
-    status = analyst.get_llm_provider_status()
-    assert status.live_provider_implemented is False
-    assert status.status == "NO_LIVE_LLM_PROVIDER_IMPLEMENTED"
-    assert "no live llm provider" in status.message.lower()
-
-
-def test_a_present_credential_does_not_imply_a_usable_provider(monkeypatch):
+def test_provider_status_reports_the_real_implementation_as_available(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-not-a-real-key-0123456789")
     status = analyst.get_llm_provider_status()
-    assert status.live_provider_implemented is False
-    assert status.status == "NO_LIVE_LLM_PROVIDER_IMPLEMENTED"
+    assert status.live_provider_implemented is True
+    assert status.status == "LLM_PROVIDER_AVAILABLE"
+    assert "no connectivity probe" in status.message.lower()
+
+
+def test_provider_status_reports_credentials_unavailable_without_a_key(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    status = analyst.get_llm_provider_status()
+    assert status.live_provider_implemented is True   # the implementation exists either way
+    assert status.status == "LLM_PROVIDER_CREDENTIALS_UNAVAILABLE"
+
+
+def test_a_credential_for_an_unimplemented_vendor_grants_no_capability(monkeypatch):
+    """Only `openai` has an implementation. A Gemini key must not make generation possible."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "gm-not-a-real-key-0123456789")
+    status = analyst.get_llm_provider_status()
+    assert status.status == "LLM_PROVIDER_CREDENTIALS_UNAVAILABLE"
 
 
 def test_credential_reports_never_expose_the_key_value(monkeypatch):
@@ -201,16 +215,63 @@ def test_unsupported_as_of_type_fails_closed():
 
 # --- Generation: fail-closed by default ------------------------------------------------------------
 
-def test_generation_fails_closed_without_a_live_provider(as_of):
+def test_generation_fails_closed_without_a_credential(as_of, monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(analyst.ResearchAnalystError) as excinfo:
         analyst.generate_analyst_report(SYMBOL, as_of)
-    assert "NO_LIVE_LLM_PROVIDER_IMPLEMENTED" in str(excinfo.value)
+    assert "LLM_PROVIDER_CREDENTIALS_UNAVAILABLE" in str(excinfo.value)
 
 
-def test_fail_closed_generation_persists_nothing(as_of):
+def test_demanding_the_real_provider_without_a_credential_fails_closed(as_of, monkeypatch):
+    """Never silently downgraded to a synthetic narrative, even when synthetic is permitted."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(analyst.ResearchAnalystError) as excinfo:
+        analyst.generate_analyst_report(
+            SYMBOL, as_of, allow_synthetic_narrative=True, use_real_provider=True
+        )
+    assert "LLM_PROVIDER_CREDENTIALS_UNAVAILABLE" in str(excinfo.value)
+
+
+def test_fail_closed_generation_persists_nothing(as_of, monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(analyst.ResearchAnalystError):
         analyst.generate_analyst_report(SYMBOL, as_of)
     assert analyst.list_analyst_reports() == []
+
+
+def test_real_provider_is_selected_when_a_credential_is_present(as_of, monkeypatch):
+    """Asserts the SELECTION, without making a network call: the real provider class is swapped
+    for a recording stub, so this test proves which branch was taken and nothing else."""
+    from src.llm.fake_provider import FakeLLMProvider
+    from src.llm.openai_provider import OPENAI_PROVIDER_ID
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-not-a-real-key-0123456789")
+    chosen = {}
+
+    class _RecordingProvider(FakeLLMProvider):
+        @property
+        def provider_id(self):
+            return OPENAI_PROVIDER_ID
+
+        def generate_structured_research(self, request):
+            chosen["model"] = request.model
+            chosen["prompt_version"] = request.prompt_version
+            self._canned_output = {
+                "summary": "s", "technical_analysis": "t", "fundamental_analysis": "f",
+                "quant_analysis": "q", "news_analysis": "n", "bull_case": "b",
+                "bear_case": "be", "risk_analysis": "r", "conclusion": "c",
+                "evidence_ids": [i["evidence_id"] for i in request.evidence_payload],
+            }
+            response = super().generate_structured_research(request)
+            return dataclasses.replace(response, data_origin="REAL_PROVIDER")
+
+    monkeypatch.setattr(analyst, "OpenAILLMProvider", lambda: _RecordingProvider())
+    view = analyst.generate_analyst_report(SYMBOL, as_of)
+
+    assert chosen["model"] == analyst.DEFAULT_LLM_MODEL
+    assert chosen["prompt_version"] == "1.0"
+    assert view.narrative_origin == "REAL_PROVIDER"
+    assert view.narrative_warning is None
 
 
 def test_generation_fails_closed_when_no_evidence_exists():
@@ -305,7 +366,7 @@ def test_report_view_carries_disclaimer_and_limitations(as_of):
     view = _generate(as_of)
     assert "not investment advice" in view.disclaimer.lower()
     joined = " ".join(view.limitations)
-    assert "No live LLM provider implementation exists" in joined
+    assert "A real LLM provider is implemented" in joined
     assert "GOLDEN_DATASET" in joined
     assert "bit-reproducible" in joined
 
