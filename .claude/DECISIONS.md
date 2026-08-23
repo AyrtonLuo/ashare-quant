@@ -140,3 +140,47 @@ The gap was a contract-completeness problem, not a storage/serialization/process
 - A fresh process, given only a `research_run_id`, can now read back the exact certified numeric result — closing the gap that previously required the non-canonical, Phase-8R-owned `workbench_metrics/` UI side cache.
 - Legacy runs (`schema_version == "1.0"`) correctly read the new fields as `None`, never fabricated as `0.0` — consistent with this project's Anti-Fabrication principle.
 - Deferred, not decided here: whether `src/app/research_application.py` should be updated to prefer these canonical fields over `workbench_metrics/` — left to a future directive (see `docs/PHASE_9_REPORT.md` §6).
+
+---
+
+## Decision: RIGHTS_OFFERING (配股) Adjustment — Single-Reference-Price Substitution, Same as `CASH_DIVIDEND`
+
+### Status
+Accepted (CEO-approved, `RIGHTS_OFFERING_ADJUSTMENT_ARCHITECTURE_PROPOSAL.md` revision 2)
+
+### Decision
+Implement `RIGHTS_OFFERING` in `CorporateActionAdjuster._event_factor()` as
+`(P + rights_ratio·subscription_price) / (P·(1+rights_ratio))`, where `P` is the same
+`reference_price` (actual raw close on/after `ex_date`) already threaded through
+`CASH_DIVIDEND`'s factor computation — not the theoretical cum-event price
+(`P_pre`) that `docs/CORPORATE_ACTION_SPECIFICATION.md`'s unified composite formula uses. Two
+new trailing-defaulted `Optional[float]` fields (`rights_ratio`, `subscription_price`) added to
+`CorporateActionContract`. Fail-closed on missing/non-positive `rights_ratio`/
+`subscription_price`/reference price; `subscription_price >= reference_price` is explicitly
+**not** an error (produces a well-defined `factor >= 1.0` — a legitimate outcome for a
+weak-demand rights issue, CEO-confirmed).
+
+### Reason
+`_event_factor()`'s signature only ever receives one `reference_price` value — the codebase has
+never had access to a separate `P_pre`/`P_ex` pair for any type. `CASH_DIVIDEND` already
+established (Phase 7I) the convention of substituting the actual observed `reference_price` for
+what a textbook formula would call `P_pre`; `RIGHTS_OFFERING` reuses the identical substitution
+for internal consistency rather than inventing a second convention. Verified term-by-term against
+the specification (`RIGHTS_OFFERING_ADJUSTMENT_ARCHITECTURE_PROPOSAL.md` §3.3): this makes
+`RIGHTS_OFFERING` an approximation of the spec of the *same class* as the already-shipped
+`CASH_DIVIDEND` (not a new or worse divergence), while `BONUS_ISSUE` matches the spec exactly
+(no price reference involved) and `STOCK_SPLIT` isn't modeled by the spec's formula at all.
+
+### Alternatives Considered
+- **Implement the spec's unified composite formula directly** (`P_ex = (P_pre - D + Pr·R)/(1+B+R)`), requiring `adjust()` to pass both `P_pre` and a combined-event bundle into a single computation (Rejected for this phase: would require redesigning `_event_factor()`'s per-type-independent signature and `adjust()`'s per-event-then-multiply loop — a larger change affecting all four action types, not a `RIGHTS_OFFERING`-scoped one; explicitly deferred as a separate future architectural item, see below).
+
+### Consequences
+- `RIGHTS_OFFERING` closes the last unimplemented corporate-action type; all four types are now supported.
+- **Two pre-existing gaps explicitly surfaced, not fixed here, flagged for future directives**:
+  1. `PITGate.filter_pit_corporate_actions()` checks `available_at` only (`received_at` is
+     captured but never enforced) — uniform across all four types since Phase 7A.
+  2. The per-type independent-factor-then-multiply implementation does not match
+     `docs/CORPORATE_ACTION_SPECIFICATION.md`'s unified formula for the combined-same-`ex_date`
+     case (pre-existing for `CASH_DIVIDEND`+`BONUS_ISSUE`+`STOCK_SPLIT` combinations too, not
+     newly introduced by `RIGHTS_OFFERING`). Full reconciliation, if wanted, is a separate,
+     larger architectural review spanning all four types.
