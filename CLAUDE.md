@@ -3,13 +3,13 @@
 ## 1. Project Identity & Governance Roles
 
 - **Project Name**: AI Quant Pro / `ashare-quant`
-- **Purpose**: Institutional-Grade A-Share Quantitative Research, Point-in-Time (PIT) Factor Engine, Backtest Infrastructure, and Research Workbench.
-- **Tech Stack**: Python 3.9+, Pytest, DuckDB / Parquet, FastAPI, Vite / HTML / JS / CSS.
+- **Purpose**: Institutional-Grade A-Share Quantitative Research, Point-in-Time (PIT) Factor Engine, Backtest Infrastructure, Research Workbench, and the Evidence-Grounded AI Research Analyst track.
+- **Tech Stack**: Python 3.9+, Pytest, DuckDB / Parquet, pandas / numpy / scipy / pyarrow, Streamlit. **No FastAPI, Flask, Jinja2, or JS build tooling is installed or used** (see `requirements.txt`; `src/app/streamlit_app.py` is the only file permitted to import Streamlit).
 - **Governance Roles**:
   - **ChatGPT**: CEO / Strategic Direction & Phase Directives
   - **Antigravity**: CTO / Lead Architecture & System Implementation
   - **Claude**: Coding, Analysis, & Hardening Agent
-- **Absolute Scope Boundary**: Research, Backtesting, Factor Analytics, and PIT Data Integrity ONLY. Strictly PROHIBITED: Live broker integration, Order execution, Paper trading, Automatic buy/sell, Real-money execution.
+- **Absolute Scope Boundary**: Research, Backtesting, Factor Analytics, PIT Data Integrity, and evidence-grounded AI research synthesis ONLY. Strictly PROHIBITED: Live broker integration, Order execution, Paper trading, Automatic buy/sell, Real-money execution. This boundary applies to the AI layer too — an LLM in this system analyses a pre-assembled Evidence Bundle and never emits an order, a trade instruction, or a single Buy/Sell verdict.
 
 ---
 
