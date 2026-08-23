@@ -131,6 +131,13 @@ def _market_contracts() -> List[MarketDataContract]:
     return contracts
 
 
+def market_data() -> List[MarketDataContract]:
+    """Public accessor for the GOLDEN_DATASET market contracts, so the Application Layer can
+    read the same series the certified dataset was built from without re-declaring how a
+    contract is constructed (a second construction site could drift from this one)."""
+    return _market_contracts()
+
+
 def fundamental_data() -> Dict[str, List[FundamentalDataContract]]:
     """Returns the GOLDEN_DATASET fundamental records used by value_pe:v1 in the workbench."""
     result = {}

@@ -1,10 +1,13 @@
 """
 streamlit_app.py — Phase 8R Research Workbench UI.
 
-This file (and only this file) may import Streamlit. It imports exactly one project module:
-`src.app.research_application`. It contains no factor/signal/portfolio/backtest logic of its
-own — every number shown here comes from a Phase 8A CertifiedResearchRunExecutor run via the
-Application Layer. See docs/PHASE_8R_ARCHITECTURE_PROPOSAL.md §3 for the enforced boundary.
+This file (and only this file) may import Streamlit. It imports project code ONLY through the
+Application Layer — `src.app.research_application` (Phase 8R workbench) and
+`src.app.research_analyst_application` (AI Research Analyst, proposal §9 / §11 step 6). It
+contains no factor/signal/portfolio/backtest/evidence/LLM logic of its own; every value shown
+here is produced by an Application Layer function. See docs/PHASE_8R_ARCHITECTURE_PROPOSAL.md §3
+for the enforced boundary and AI_QUANT_RESEARCH_ANALYST_ARCHITECTURE_PROPOSAL.md §9 for the
+analyst page's design.
 
 Research & Backtest analysis only. No broker connection, no order execution, no live trading,
 no automatic buy/sell.
@@ -14,6 +17,7 @@ from datetime import date
 
 import streamlit as st
 
+from src.app import research_analyst_application as analyst
 from src.app import research_application as app
 
 st.set_page_config(page_title="Research Workbench", layout="wide")
@@ -126,7 +130,122 @@ def _render_run_detail(run_id: str) -> None:
                 st.markdown(st.session_state[report_state_key])
 
 
-page = st.sidebar.radio("Navigate", ["New Research Run", "Research Run History"])
+def _render_evidence_bundle(bundle) -> None:
+    st.markdown("**Evidence Bundle** — every fact and number in the report traces to an item here")
+    st.caption(
+        f"`{bundle.item_count}` item(s) · evidence_bundle_hash: "
+        f"`{bundle.evidence_bundle_hash[:24]}...` · data origin: {bundle.data_origin_breakdown}"
+    )
+    st.table({
+        "Category": [c.category for c in bundle.categories],
+        "Status": ["AVAILABLE" if c.available else "NOT AVAILABLE" for c in bundle.categories],
+        "Items": [c.item_count for c in bundle.categories],
+        "Data origin": [", ".join(c.data_origins) if c.data_origins else "—"
+                        for c in bundle.categories],
+    })
+    for category in bundle.categories:
+        if not category.available:
+            st.warning(f"**{category.category}: NOT AVAILABLE** — {category.reason}", icon="⚠️")
+
+    with st.expander(f"View all {bundle.item_count} evidence item(s)"):
+        st.json([
+            {
+                "evidence_id": i.evidence_id, "category": i.category, "kind": i.kind,
+                "event_date": i.event_date, "source": i.source, "data_origin": i.data_origin,
+                "content": i.content,
+            }
+            for i in bundle.items
+        ])
+
+
+def _render_data_confidence(dc) -> None:
+    st.markdown("**Data Confidence** _(a computed metric — never an AI self-rating)_")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Score", f"{dc.score:.4f}")
+    c2.metric("Band", dc.band)
+    c3.metric("REAL_PROVIDER ratio", f"{dc.real_provider_ratio:.0%}")
+    c4.metric("Unresolved conflicts", dc.unresolved_conflict_count)
+    st.caption(f"Computed by: `{dc.computed_by}` · sub-scores: {dc.components}")
+    st.caption(
+        f"FACT={dc.fact_count} · MODEL_OUTPUT={dc.model_output_count} · "
+        f"median evidence age={dc.median_evidence_age_days} day(s) · "
+        f"origins={dc.origin_breakdown}"
+    )
+    if dc.missing_categories:
+        st.warning(
+            "Categories with no evidence (reported, never estimated): "
+            + ", ".join(dc.missing_categories),
+            icon="⚠️",
+        )
+    st.caption(f"Conflict detection scope: {dc.conflict_detection_scope}")
+
+
+def _render_analyst_report(view) -> None:
+    st.subheader(f"AI Research Report: `{view.report_id}`")
+    if view.narrative_warning:
+        st.error(f"**{view.narrative_origin}** — {view.narrative_warning}")
+    st.info(view.disclaimer, icon="ℹ️")
+
+    st.markdown("**Provenance**")
+    st.table({
+        "Field": ["Symbol", "As-of", "Generated at", "Provider", "Model", "Model version",
+                  "Prompt version", "Evidence bundle hash", "Code version", "Research run",
+                  "Reproducibility scope"],
+        "Value": [view.symbol, view.as_of, view.generated_at, view.provider_id, view.model,
+                  view.model_version, view.prompt_version,
+                  view.evidence_bundle_hash[:24] + "...",
+                  f"{view.code_version[:12]} ({view.code_state})",
+                  view.research_run_id or "— (not linked to a certified run)",
+                  view.reproducibility_scope],
+    })
+    if view.evidence_integrity_verified:
+        st.success("Evidence integrity VERIFIED — the stored bundle still hashes to "
+                   "`evidence_bundle_hash`.")
+    else:
+        st.error("Evidence integrity FAILED — the stored Evidence Bundle no longer matches "
+                 "`evidence_bundle_hash`.")
+
+    _render_data_confidence(view.data_confidence)
+
+    if view.conflicts:
+        st.markdown("**Unresolved evidence conflicts** _(surfaced, never resolved)_")
+        st.table({
+            "Category": [c.category for c in view.conflicts],
+            "Event date": [c.event_date for c in view.conflicts],
+            "Key": [c.key_repr for c in view.conflicts],
+            "Evidence": [", ".join(c.evidence_ids) for c in view.conflicts],
+            "Detection": [c.detection for c in view.conflicts],
+        })
+
+    st.markdown("---")
+    for section in view.sections:
+        st.markdown(f"### {section.number}. {section.title}  `[{section.content_type}]`")
+        if section.is_missing_data:
+            st.warning(section.body, icon="⚠️")
+        else:
+            st.write(section.body)
+        if section.evidence_ids:
+            st.caption(f"Evidence: {', '.join(section.evidence_ids)}")
+        if section.suppressed_ai_body is not None:
+            with st.expander("Narrative withheld for this section (retained, not discarded)"):
+                st.write(section.suppressed_ai_body)
+
+    _render_evidence_bundle(view.evidence)
+
+    with st.expander("⚠️ Known limitations"):
+        for item in view.limitations:
+            st.write(f"- {item}")
+
+    st.download_button(
+        "Download report (Markdown)", data=view.markdown,
+        file_name=f"{view.report_id}.md", mime="text/markdown",
+        key=f"dl_analyst_{view.report_id}",
+    )
+
+
+page = st.sidebar.radio(
+    "Navigate", ["New Research Run", "Research Run History", "AI Research Analyst"]
+)
 
 if page == "New Research Run":
     st.header("1. Configure Research Run")
@@ -178,6 +297,84 @@ if page == "New Research Run":
     if "last_run_id" in st.session_state:
         st.markdown("---")
         _render_run_detail(st.session_state["last_run_id"])
+
+elif page == "AI Research Analyst":
+    st.header("AI Research Analyst")
+    st.caption(
+        "Evidence-grounded research synthesis — every fact and number traces to a cited "
+        "Evidence item. Bull Case and Bear Case are both mandatory; this system produces no "
+        "single buy/sell verdict."
+    )
+
+    provider_status = analyst.get_llm_provider_status()
+    if not provider_status.live_provider_implemented:
+        st.error(f"**{provider_status.status}** — {provider_status.message}")
+    with st.expander("LLM credential pre-flight (informational — no key is ever displayed)"):
+        st.json(list(provider_status.credential_reports))
+
+    symbols = analyst.get_analyst_symbols()
+    symbol_map = {s["symbol"]: f"{s['symbol']} — {s['display_name']}" for s in symbols}
+    analyst_as_of_range = app.get_available_as_of_range()
+    a_min = date.fromisoformat(analyst_as_of_range["min_as_of"])
+    a_max = date.fromisoformat(analyst_as_of_range["max_as_of"])
+
+    sel_col, date_col = st.columns(2)
+    with sel_col:
+        analyst_symbol = st.selectbox(
+            "Symbol", options=list(symbol_map.keys()),
+            format_func=lambda s: symbol_map[s], key="analyst_symbol",
+        )
+    with date_col:
+        analyst_as_of = st.date_input(
+            "As-of (PIT cutoff for the ENTIRE report)", value=a_max,
+            min_value=a_min, max_value=a_max, key="analyst_as_of",
+        )
+
+    try:
+        preview_bundle = analyst.get_evidence_bundle_view(analyst_symbol, analyst_as_of)
+        _render_evidence_bundle(preview_bundle)
+    except analyst.ResearchAnalystError as e:
+        st.error(str(e))
+        preview_bundle = None
+
+    allow_synthetic = st.checkbox(
+        "Generate with a clearly-labelled SYNTHETIC narrative (no LLM API is called)",
+        value=False, key="analyst_allow_synthetic",
+        help="Unchecked, generation fails closed: no live LLM provider exists in this codebase.",
+    )
+    if st.button("🧠 Generate AI Research Report", key="analyst_generate"):
+        try:
+            view = analyst.generate_analyst_report(
+                analyst_symbol, analyst_as_of, allow_synthetic_narrative=allow_synthetic,
+            )
+            st.session_state["last_analyst_report_id"] = view.report_id
+            st.success(f"Report generated and persisted: `{view.report_id}`")
+        except analyst.ResearchAnalystError as e:
+            st.error(f"FAIL CLOSED — {e}")
+
+    st.markdown("---")
+    st.subheader("Persisted reports")
+    persisted = analyst.list_analyst_reports()
+    if not persisted:
+        st.write("_No persisted AI research reports yet._")
+    else:
+        report_options = {
+            r.report_id: f"{r.symbol} @ {r.as_of} ({r.narrative_origin}, {r.generated_at})"
+            for r in persisted
+        }
+        default_id = st.session_state.get("last_analyst_report_id")
+        ids = list(report_options.keys())
+        selected_report = st.selectbox(
+            "Select a report", options=ids,
+            index=ids.index(default_id) if default_id in ids else 0,
+            format_func=lambda k: report_options[k], key="analyst_report_select",
+        )
+        if selected_report:
+            st.markdown("---")
+            try:
+                _render_analyst_report(analyst.get_analyst_report(selected_report))
+            except analyst.ResearchAnalystError as e:
+                st.error(str(e))
 
 elif page == "Research Run History":
     st.header("Research Run History")

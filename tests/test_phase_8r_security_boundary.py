@@ -103,10 +103,21 @@ def test_a_ui_file_only_imports_the_application_layer_and_stdlib_streamlit():
     forbidden_hit = imported_modules & FORBIDDEN_UI_IMPORTS
     assert not forbidden_hit, f"UI layer imports forbidden research internals: {forbidden_hit}"
 
+    # The UI may import Application Layer modules and NOTHING else from this project. The set
+    # grew from one to two when AI_QUANT_RESEARCH_ANALYST_ARCHITECTURE_PROPOSAL.md §9 / §11
+    # step 6 added the analyst page, whose orchestration lives in its own Application Layer
+    # module exactly as that section specifies. This is an allow-list of Application Layer
+    # entry points, not a relaxation: the FORBIDDEN_UI_IMPORTS check above is unchanged, and
+    # any module outside this set — including any research internal — still fails.
+    ALLOWED_APPLICATION_LAYER_MODULES = {
+        "src.app.research_application",
+        "src.app.research_analyst_application",
+    }
     project_imports = {m for m in imported_modules if m.startswith("src.") and m != "src.app"}
-    assert project_imports == {"src.app.research_application"}, (
-        f"UI layer must import exactly src.app.research_application and nothing else from this "
-        f"project; found: {project_imports}"
+    assert project_imports <= ALLOWED_APPLICATION_LAYER_MODULES, (
+        f"UI layer must import Application Layer modules only "
+        f"({sorted(ALLOWED_APPLICATION_LAYER_MODULES)}) and nothing else from this project; "
+        f"found: {project_imports}"
     )
 
 
