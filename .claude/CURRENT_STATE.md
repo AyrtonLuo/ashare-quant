@@ -1,6 +1,6 @@
 # Current Project State
 
-_Synchronized to HEAD `aebef90` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `b00fe41` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > this file > Conversation History._
 
 ## Current Track
@@ -25,8 +25,9 @@ adjustment formula.
 On top of that base, the AI Research Analyst track has delivered the full deterministic chain
 `API → Adapter → Contract → Validation → PIT → Evidence Bundle → LLM Provider → Structured
 Output → Citation Validation → Report Identity → Immutable Persistence → 10-Section Research
-Report → Application Layer → Streamlit UI`. **No live LLM API has been called or wired anywhere
-in this codebase** — only deterministic fake providers exist.
+Report → Application Layer → Streamlit UI`. **A real LLM provider is now wired**
+(`src/llm/openai_provider.py`, OpenAI over stdlib HTTP, **zero new dependencies**); the
+deterministic fakes are retained for testing and for the labelled-synthetic path.
 
 ## Completed — AI Research Analyst track
 - **Data infrastructure** (`f75b0ef`): `NewsAnnouncementContract`; `NewsAnnouncementProvider` ABC
@@ -60,6 +61,36 @@ in this codebase** — only deterministic fake providers exist.
     evidence_bundle_hash / timeout / token usage. `LLMRequest`'s only content field is
     `evidence_payload`, so no data handle or search capability can structurally reach a provider.
 
+- **Real OpenAI LLM provider** (`b00fe41`) — the first real vendor implementation.
+  - **Zero new dependencies**: speaks the OpenAI Chat Completions HTTP API via
+    `urllib.request` + `json`. `requirements.txt` unchanged; no vendor SDK imported anywhere in
+    `src/`. CEO-approved choice (OpenAI was the only credential present; Anthropic/Gemini keys
+    are unset).
+  - **`LLMProvider` interface required no change**, and neither did the proposal — a real
+    provider was always meant to be a drop-in for the fakes, and this commit proves it.
+  - **Key hygiene**: read from the environment only (no constructor arg, attribute, or config
+    file can carry it), never stored on the instance, never in an exception message, never
+    logged (the module performs no logging). Missing key → `CREDENTIALS_UNAVAILABLE` *before*
+    any socket opens.
+  - **Evidence Boundary at the wire level**: request body built from `evidence_payload` only,
+    with **no tools / function calling / retrieval option** — the model has no capability to
+    reach a database, news API, or the network from inside the call.
+  - **Schema-enforced structured output**: `response_format` pins a strict JSON schema
+    generated from the shipped `REQUIRED_STRUCTURED_OUTPUT_FIELDS` constants (cannot drift), and
+    the response still passes through `parse_structured_output()` — transport guarantees are
+    never a substitute for validation.
+  - **Every failure maps to exactly one `LLMErrorCategory`** (401/403 auth, 429 rate limit,
+    408/504 + socket timeout, 5xx/connection unavailable, non-JSON/non-object/truncated
+    malformed, no-choices/blank empty, refusal invalid). A missing `usage` block is malformed,
+    never back-filled with zeros.
+  - **Provenance**: `data_origin="REAL_PROVIDER"` is set here and only here; the fakes hard-code
+    `SYNTHETIC_DATA`, so **a fake can never impersonate a real provider** in a persisted artifact.
+  - App layer + UI updated: `LLM_PROVIDER_AVAILABLE` / `LLM_PROVIDER_CREDENTIALS_UNAVAILABLE`
+    replace the now-false `NO_LIVE_LLM_PROVIDER_IMPLEMENTED`; the real provider is used when a
+    credential is present and **fails closed when it is not — never silently downgraded to a
+    synthetic narrative**. UI gains an explicit narrative-source choice.
+  - 41 new tests (offline, against a local 127.0.0.1 HTTP stub — deterministic, free,
+    network-free). All existing Fake Provider tests retained unchanged.
 - **Streamlit UI + analyst Application Layer** (`aebef90`, §9 / §11 step 6):
   - `src/app/research_analyst_application.py` (new) mirrors `research_application.py`'s
     contract — the UI calls only this module; this module imports no UI framework. It assembles
@@ -179,24 +210,29 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 - **Persistent `NewsAnnouncementStore`** — not built. News items are validated and PIT-filtered
   as in-memory lists returned by the adapter; there is no stateful, queryable, immutable
   revision store for news (contrast `CorporateActionStore`).
-- **Real LLM API integration** — no vendor SDK (`openai` / `anthropic` / `google-generativeai`)
-  is imported anywhere in `src/llm/`; `src/llm/` is not yet imported by anything outside itself
-  and its tests.
+- **Real end-to-end API verification — NOT COMPLETED.** The real call reached OpenAI and
+  **authenticated successfully**, then returned **HTTP 429 "You exceeded your current quota"**.
+  That is an account billing condition, not a code defect. The live test skips on exactly that
+  condition with a message stating it is *not* a verification; the skip is deliberately narrow —
+  auth failures, timeouts, malformed responses and ordinary rate limits all still fail loudly.
+  **To complete it: add billing credit to the OpenAI account, then run
+  `PYTHONPATH=. ./venv/bin/pytest -m real_llm_provider`.**
 
 ## Currently In Progress
 Nothing. Awaiting the next CEO directive.
 
 ## Tests
-- **Passed**: 618
-- **Skipped**: 11 (live-provider network tests, safely skipped when `TUSHARE_TOKEN` is absent)
+- **Passed**: 660
+- **Skipped**: 12 (11 TuShare live-provider tests when `TUSHARE_TOKEN` is absent; 1 real-LLM
+  end-to-end test blocked on OpenAI account quota — see Known Issues)
 - **Failures**: 0
 - **Test Command**: `PYTHONPATH=. ./venv/bin/pytest`
 
 ## Git Status
 - **Branch**: `main`
 - **Working Tree**: Clean.
-- **HEAD**: `aebef90` (`feat: AI Research Analyst Streamlit UI via a dedicated Application
-  Layer (step 6)`)
+- **HEAD**: `b00fe41` (`feat: real OpenAI LLM provider over stdlib HTTP (zero new
+  dependencies)`)
 - **`origin/main` is in sync with local `main`.** Pushes are made only under an explicit CEO
   directive authorizing them (as with Step 5 and the §7 layer).
 - Standing rule unchanged: **never push without explicit Product Owner approval.**
@@ -243,16 +279,15 @@ Nothing. Awaiting the next CEO directive.
 - `docs/CORPORATE_ACTION_SPECIFICATION.md`, `docs/FINAL_RESEARCH_INTEGRITY_CERTIFICATION.md`.
 
 ## Next Recommended Action
-Await a CEO directive. **The AI Research Analyst track is complete against the proposal as
-written** — no further unit is authorized or outstanding in it.
+Await a CEO directive. **The AI Research Analyst track is complete end to end, including a real
+LLM provider.** One item is outstanding and is the CEO's to unblock:
 
-Two decisions belong to the CEO, not to an implementing agent:
-1. **Confirm or reject the labelled-synthetic-narrative design** in
-   `research_analyst_application.py` (fail-closed by default; opt-in placeholder prose tagged
-   `SYNTHETIC_DATA`). It is the only reason the UI can render a report at all, since no vendor
-   LLM client exists.
-2. **Decide whether a real LLM provider implementation is wanted.** Wiring one is the single
-   change that would turn this pipeline from structurally-complete into operationally useful;
-   it is explicitly unauthorized today and would add a vendor dependency.
+1. **Add billing credit to the OpenAI account and re-run
+   `PYTHONPATH=. ./venv/bin/pytest -m real_llm_provider`** to complete the real end-to-end
+   verification. Everything up to the vendor round-trip is already verified against a local
+   stub, including a full 10-section report driven through the real provider class.
+2. Optional, if wanted later: an Anthropic provider (the proposal's §8 examples name Claude).
+   It would implement the same ABC alongside `OpenAILLMProvider` — no interface change — but
+   needs `ANTHROPIC_API_KEY` and its own directive.
 
 Do NOT implement trading, broker connections, or order routing. Do NOT create a "Phase 10."
