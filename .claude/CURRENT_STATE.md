@@ -1,6 +1,6 @@
 # Current Project State
 
-_Synchronized to HEAD `43b692a` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `0795400` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > this file > Conversation History._
 
 ## Current Track
@@ -9,8 +9,9 @@ No phase number is assigned to this track (standing CEO instruction). **Phase 9 
 Do NOT create a "Phase 10."**
 
 Governing document: `AI_QUANT_RESEARCH_ANALYST_ARCHITECTURE_PROPOSAL.md` (revision 2, repo root).
-Its §11 Implementation Plan is the authoritative step list; **steps 1–5 are delivered, step 6 is
-not**, and each remaining unit requires its own explicit CEO directive.
+Its §11 Implementation Plan is the authoritative step list; **steps 1–5 are delivered, plus the
+§7 Research Report Generation Layer (which is not a numbered §11 step). Only §11 step 6, the
+Streamlit UI, remains** — and it requires its own explicit CEO directive.
 
 ## Overall Status
 Production-grade A-Share Quantitative Research & Backtesting Platform: certified Point-in-Time
@@ -23,8 +24,9 @@ adjustment formula.
 
 On top of that base, the AI Research Analyst track has delivered the full deterministic chain
 `API → Adapter → Contract → Validation → PIT → Evidence Bundle → LLM Provider → Structured
-Output → Citation Validation → Report Identity → Immutable Persistence`. **No live LLM API has
-been called or wired anywhere in this codebase** — only deterministic fake providers exist.
+Output → Citation Validation → Report Identity → Immutable Persistence → 10-Section Research
+Report`. **No live LLM API has been called or wired anywhere in this codebase** — only
+deterministic fake providers exist.
 
 ## Completed — AI Research Analyst track
 - **Data infrastructure** (`f75b0ef`): `NewsAnnouncementContract`; `NewsAnnouncementProvider` ABC
@@ -58,6 +60,32 @@ been called or wired anywhere in this codebase** — only deterministic fake pro
     evidence_bundle_hash / timeout / token usage. `LLMRequest`'s only content field is
     `evidence_payload`, so no data handle or search capability can structurally reach a provider.
 
+- **Research Report Generation Layer** (`0795400`, proposal §7 — `data_confidence.py` and
+  `report.py` added to `src/quant/research_report/`, **zero existing files modified**):
+  - **Schema fit, audited not assumed**: §7's 10 sections map onto the shipped
+    `StructuredResearchOutput` without changing it — its 9 narrative fields are §7's 9 AI
+    sections, and §7 #9 (Data Confidence) is Model Output only, computed here. **The LLM
+    contract was not modified.**
+  - `data_confidence.py` — `detect_evidence_conflicts()` (deterministic; surfaces disagreement,
+    never resolves it; keys defined only for `MARKET`/`FUNDAMENTAL`/`TECHNICAL`, the categories
+    with an actually-implemented content schema) and `compute_data_confidence()` (sub-scores:
+    origin / coverage / recency / conflict, explicit renormalized weights, every component
+    exposed so the score is re-derivable by hand; `computed_by="DETERMINISTIC_CODE"`; this
+    module imports nothing from `src/llm/`). Fails closed on an empty bundle.
+  - `report.py` — `ResearchReport` / `ReportSection` with all 10 sections tagged
+    `FACT` / `MODEL_OUTPUT` / `AI_INTERPRETATION`; **no verdict/rating/recommendation/signal
+    field exists**, so a single Buy/Sell conclusion has nowhere to live; identical Bull/Bear
+    fails closed; absent categories render an explicit `NOT AVAILABLE` marker with the AI's
+    prose retained on `suppressed_ai_body`; §7 #8 carries a code-generated deterministic risk
+    addendum listing unresolved conflicts and missing categories; `render_report_markdown()` is
+    framework-free. `derive_section_evidence_ids()` reuses the citation validator's own numeric
+    tracing rather than declaring a second scanner.
+  - **Disclosed on the artifact itself** (`REPORT_LIMITATIONS`): AI prose is not
+    bit-reproducible; citation validation is not semantic fact-checking; the conflict-detection
+    scope excludes semantic contradiction between free-text news; per-section attribution is
+    *derived*, not model-asserted; and category-level `historical_eligible` (§3.4) is **not
+    implemented anywhere in this codebase**.
+  - 57 new tests.
 - **Research Report Identity + Persistence** (`43b692a`, §11 step 5 — new isolated package
   `src/quant/research_report/`, **zero existing files modified**):
   - `report_identity.py` — `ResearchAnalystReportIdentity`: all 11 fields of proposal §8, plus
@@ -114,9 +142,6 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 - **Phase 2** — Context System Hardening & Multi-Agent Handoff Protocol.
 
 ## Not Implemented — honestly disclosed, not silently dropped
-- **Full Research Report** — the 10-section report of §7 (rendering, assembly, Data Confidence
-  computation) is **not built**; `33296e7` stopped at validated structured output, per the
-  directive's explicit scope boundary.
 - **Streamlit UI** — §9, **not built**. Would require a new Application Layer module; only
   `streamlit_app.py` may import Streamlit.
 - **Volatility / Momentum / Volume indicators** — `NotImplementedError` at
@@ -132,7 +157,7 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 Nothing. Awaiting the next CEO directive.
 
 ## Tests
-- **Passed**: 525
+- **Passed**: 583
 - **Skipped**: 11 (live-provider network tests, safely skipped when `TUSHARE_TOKEN` is absent)
 - **Failures**: 0
 - **Test Command**: `PYTHONPATH=. ./venv/bin/pytest`
@@ -140,11 +165,10 @@ Nothing. Awaiting the next CEO directive.
 ## Git Status
 - **Branch**: `main`
 - **Working Tree**: Clean.
-- **HEAD**: `43b692a` (`feat: Research Report Identity + Persistence (AI Research Analyst
-  Step 5)`)
-- **`origin/main` is in sync with local `main`.** The Step 5 push was explicitly authorized by
-  the CEO directive; it fast-forwarded a remote that had been sitting several commits behind
-  (at `1d05b93`), so the previously unpushed history `e100cda`…`318c05f` reached GitHub with it.
+- **HEAD**: `0795400` (`feat: Research Report Generation Layer, 10 sections (AI Research
+  Analyst section 7)`)
+- **`origin/main` is in sync with local `main`.** Pushes are made only under an explicit CEO
+  directive authorizing them (as with Step 5 and the §7 layer).
 - Standing rule unchanged: **never push without explicit Product Owner approval.**
 
 ## Known Issues
@@ -189,10 +213,8 @@ Nothing. Awaiting the next CEO directive.
 - `docs/CORPORATE_ACTION_SPECIFICATION.md`, `docs/FINAL_RESEARCH_INTEGRITY_CERTIFICATION.md`.
 
 ## Next Recommended Action
-Await a CEO directive. Two units remain in the AI Research Analyst track, neither authorized:
-1. **Full Research Report assembly (§7)** — the 10 mandatory sections and the *computed* Data
-   Confidence metric. This is a prerequisite for anything the UI would render, and it is not a
-   numbered step in §11 (§11 jumps from the provider layer to the UI), so it needs its own
-   directive rather than being absorbed silently into step 6.
-2. **§11 step 6 — Streamlit UI**, via a new Application Layer module.
+Await a CEO directive. One unit remains in the AI Research Analyst track, unauthorized:
+**§11 step 6 — Streamlit UI** (§9), via a new Application Layer module; only
+`src/app/streamlit_app.py` may import Streamlit. `render_report_markdown()` already provides a
+framework-free rendering the UI layer can build on.
 Do NOT implement trading, broker connections, or order routing. Do NOT create a "Phase 10."
