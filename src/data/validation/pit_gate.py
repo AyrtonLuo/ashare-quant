@@ -7,6 +7,7 @@ from typing import List
 from src.data.contracts.temporal import TemporalDataContract
 from src.data.contracts.corporate_action import CorporateActionContract
 from src.data.contracts.fundamental_data import FundamentalDataContract
+from src.data.contracts.news_announcement import NewsAnnouncementContract
 
 
 class PITGate:
@@ -52,4 +53,24 @@ class PITGate:
             r for r in records
             if r.available_at is not None and r.received_at is not None
             and r.available_at <= as_of_cutoff and r.received_at <= as_of_cutoff
+        ]
+
+    @staticmethod
+    def filter_pit_news_announcements(
+        items: List[NewsAnnouncementContract], as_of_cutoff: datetime
+    ) -> List[NewsAnnouncementContract]:
+        """AI_QUANT_RESEARCH_ANALYST — extends this same dual-cutoff PIT pattern to news/company
+        announcements, per the directive's explicit rule: published_at <= as_of AND received_at
+        <= as_of. Uses `published_at` (not `available_at`) as the CEO directive literally
+        specifies — for news, publication IS the moment of legal citability (unlike a corporate
+        action, where an economic effective date and its legal disclosure date can genuinely
+        differ). `available_at` remains on the contract as a descriptive field for cases where
+        legal availability differs from publication (e.g. an embargo), but is deliberately not
+        part of THIS gate's check, to match the directive's formula exactly rather than silently
+        inventing a third condition. Either timestamp left unset (None) excludes the item —
+        an unknown timestamp can never satisfy a PIT check, matching every other filter here."""
+        return [
+            i for i in items
+            if i.published_at is not None and i.received_at is not None
+            and i.published_at <= as_of_cutoff and i.received_at <= as_of_cutoff
         ]
