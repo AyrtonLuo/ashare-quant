@@ -1,6 +1,6 @@
 # Current Project State
 
-_Synchronized to HEAD `33296e7`. Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `43b692a` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > this file > Conversation History._
 
 ## Current Track
@@ -9,8 +9,8 @@ No phase number is assigned to this track (standing CEO instruction). **Phase 9 
 Do NOT create a "Phase 10."**
 
 Governing document: `AI_QUANT_RESEARCH_ANALYST_ARCHITECTURE_PROPOSAL.md` (revision 2, repo root).
-Its §11 Implementation Plan is the authoritative step list; steps 1–4 are delivered, steps 5–6
-are not, and each remaining step requires its own explicit CEO directive.
+Its §11 Implementation Plan is the authoritative step list; **steps 1–5 are delivered, step 6 is
+not**, and each remaining unit requires its own explicit CEO directive.
 
 ## Overall Status
 Production-grade A-Share Quantitative Research & Backtesting Platform: certified Point-in-Time
@@ -23,8 +23,8 @@ adjustment formula.
 
 On top of that base, the AI Research Analyst track has delivered the full deterministic chain
 `API → Adapter → Contract → Validation → PIT → Evidence Bundle → LLM Provider → Structured
-Output → Citation Validation`. **No live LLM API has been called or wired anywhere in this
-codebase** — only deterministic fake providers exist.
+Output → Citation Validation → Report Identity → Immutable Persistence`. **No live LLM API has
+been called or wired anywhere in this codebase** — only deterministic fake providers exist.
 
 ## Completed — AI Research Analyst track
 - **Data infrastructure** (`f75b0ef`): `NewsAnnouncementContract`; `NewsAnnouncementProvider` ABC
@@ -58,6 +58,31 @@ codebase** — only deterministic fake providers exist.
     evidence_bundle_hash / timeout / token usage. `LLMRequest`'s only content field is
     `evidence_payload`, so no data handle or search capability can structurally reach a provider.
 
+- **Research Report Identity + Persistence** (`43b692a`, §11 step 5 — new isolated package
+  `src/quant/research_report/`, **zero existing files modified**):
+  - `report_identity.py` — `ResearchAnalystReportIdentity`: all 11 fields of proposal §8, plus
+    trailing-defaulted provider provenance (`provider_id`, `provider_version`, `model`,
+    `llm_request_id`, `data_origin`, `schema_version`, `reproducibility_scope`). Fail-closed on
+    empty required strings and on an empty-string `research_run_id`/`data_snapshot_id` (`None`
+    means genuinely absent; `""` would be a fabricated link).
+    `build_research_analyst_report_identity()` copies provenance from the validated
+    `AIResearchOutputResult`; an unreported `model_version` is recorded as
+    `NOT_REPORTED_BY_PROVIDER`, never invented. `get_code_version()` reused verbatim.
+    `verify_report_evidence_integrity()` is opt-in, mirroring `verify_result_manifest_integrity()`.
+  - `report_store.py` — `ResearchAnalystReportStore` under `data/research/analyst_reports/`
+    (gitignored): immutable, atomic tmp-then-rename writes, fail-closed corruption handling,
+    persisting `report_metadata.json` / `structured_output.json` / `evidence_bundle.json`. The
+    bundle is stored deliberately — without it `evidence_bundle_hash` would be unverifiable.
+    `create_report()` refuses a self-inconsistent pair: mismatched hash, empty bundle, or an
+    output citing an `evidence_id` absent from the bundle.
+  - **Honest reproducibility scope, enforced structurally**: the identity carries **no
+    `result_hash`** and no hash of any kind over the narrative;
+    `reproducibility_scope` is a validated, persisted field
+    (`EVIDENCE_BUNDLE_DETERMINISTICALLY_VERIFIABLE; AI_PROSE_NOT_BIT_REPRODUCIBLE`) that
+    `__post_init__` refuses to let a caller override with a stronger claim. Two reports over
+    identical evidence with different wording share one `evidence_bundle_hash` and both verify.
+  - 42 new tests.
+
 ## Completed — corporate-action follow-ups (since the previous sync at `c13955e`)
 Both items previously recorded here as "disclosed, pre-existing gaps" are now **closed**:
 - **`received_at` PIT enforcement** (`e100cda`): the audit found **two** independent gates that
@@ -89,8 +114,6 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 - **Phase 2** — Context System Hardening & Multi-Agent Handoff Protocol.
 
 ## Not Implemented — honestly disclosed, not silently dropped
-- **Research Report Identity + Persistence** — `ResearchAnalystReportIdentity` (design finalized
-  in proposal §8) and its store are **not built**. This is §11 step 5, the next step in the plan.
 - **Full Research Report** — the 10-section report of §7 (rendering, assembly, Data Confidence
   computation) is **not built**; `33296e7` stopped at validated structured output, per the
   directive's explicit scope boundary.
@@ -109,7 +132,7 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 Nothing. Awaiting the next CEO directive.
 
 ## Tests
-- **Passed**: 483
+- **Passed**: 525
 - **Skipped**: 11 (live-provider network tests, safely skipped when `TUSHARE_TOKEN` is absent)
 - **Failures**: 0
 - **Test Command**: `PYTHONPATH=. ./venv/bin/pytest`
@@ -117,9 +140,12 @@ Nothing. Awaiting the next CEO directive.
 ## Git Status
 - **Branch**: `main`
 - **Working Tree**: Clean.
-- **HEAD**: `33296e7` (`feat: LLM Provider interface layer (Evidence Bundle -> LLM Provider ->
-  Validated Output)`)
-- **Never pushed to remote without explicit Product Owner approval.**
+- **HEAD**: `43b692a` (`feat: Research Report Identity + Persistence (AI Research Analyst
+  Step 5)`)
+- **`origin/main` is in sync with local `main`.** The Step 5 push was explicitly authorized by
+  the CEO directive; it fast-forwarded a remote that had been sitting several commits behind
+  (at `1d05b93`), so the previously unpushed history `e100cda`…`318c05f` reached GitHub with it.
+- Standing rule unchanged: **never push without explicit Product Owner approval.**
 
 ## Known Issues
 - **Live provider credentials**: TuShare Pro calls require `TUSHARE_TOKEN`. When absent, preflight
@@ -163,7 +189,10 @@ Nothing. Awaiting the next CEO directive.
 - `docs/CORPORATE_ACTION_SPECIFICATION.md`, `docs/FINAL_RESEARCH_INTEGRITY_CERTIFICATION.md`.
 
 ## Next Recommended Action
-Await a CEO directive. The proposal's §11 step 5 — **`ResearchAnalystReportIdentity` +
-persistence**, mirroring the existing `ResearchRunStore` pattern — is the recommended next unit
-of work, but it is **not authorized** by any current document. Do NOT implement trading, broker
-connections, or order routing. Do NOT create a "Phase 10."
+Await a CEO directive. Two units remain in the AI Research Analyst track, neither authorized:
+1. **Full Research Report assembly (§7)** — the 10 mandatory sections and the *computed* Data
+   Confidence metric. This is a prerequisite for anything the UI would render, and it is not a
+   numbered step in §11 (§11 jumps from the provider layer to the UI), so it needs its own
+   directive rather than being absorbed silently into step 6.
+2. **§11 step 6 — Streamlit UI**, via a new Application Layer module.
+Do NOT implement trading, broker connections, or order routing. Do NOT create a "Phase 10."
