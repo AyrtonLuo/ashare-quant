@@ -431,6 +431,32 @@ def test_rights_offering_consumed_by_certified_run(setup):
     assert stored["artifacts"]["corporate_actions_applied"][SYMBOL] != []
 
 
+def test_corporate_action_pit_received_at_hardening_certified_execution(setup):
+    """Corporate Action PIT `received_at` Hardening — end-to-end proof: an action whose
+    available_at qualifies but whose received_at arrives AFTER `as_of` must not be applied by
+    the certified execution path. Two independent gates sit between the request and the
+    adjustment (CorporateActionStore.query_pit_range() and CorporateActionAdjuster.adjust()'s
+    internal PITGate.filter_pit_corporate_actions() call) — both must now agree, or this test
+    would still incorrectly pass."""
+    late_received_split = CorporateActionContract(
+        symbol=SYMBOL, ex_date="2026-08-04", action_type="STOCK_SPLIT",
+        cash_amount_per_share=0.0, bonus_ratio=0.0, split_ratio=2.0,
+        announcement_date="2026-07-20",
+        available_at=datetime(2026, 7, 20), received_at=datetime(2026, 8, 15),  # after AS_OF
+        quality_status="VALID",
+    )
+    setup["corporate_action_store"].add_action(late_received_split)
+
+    raw = [100.0, 100.0, 50.0, 50.0, 50.0]
+    _, identity = CertifiedResearchRunExecutor.execute(
+        _make_request(setup, run_id="run_late_received", raw_price_series={SYMBOL: (DATES, raw)})
+    )
+    stored = setup["run_store"].get_run("run_late_received")
+    adjusted = stored["artifacts"]["daily_prices"][SYMBOL]
+    assert adjusted == raw, "action with late received_at must not be applied, even though available_at qualifies"
+    assert stored["artifacts"]["corporate_actions_applied"][SYMBOL] == []
+
+
 def test_rights_offering_replay_reproducible(setup):
     """RIGHTS_OFFERING_ADJUSTMENT_ARCHITECTURE_PROPOSAL.md §7: CertifiedReplayEngine needs zero
     code changes since it already calls the same CorporateActionAdjuster.adjust() the certified

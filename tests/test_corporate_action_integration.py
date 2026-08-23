@@ -342,3 +342,110 @@ def test_rights_offering_combined_with_bonus_issue_same_ex_date_multiplies_facto
     assert result.adj_factors[1] == pytest.approx(expected)
     assert result.adj_factors[2] == pytest.approx(1.0)
     assert set(result.actions_applied) == {"BONUS_ISSUE:2026-08-04", "RIGHTS_OFFERING:2026-08-04"}
+
+
+# --- TEST I: Corporate Action PIT `received_at` Hardening --------------------------------------
+#
+# Prior to this hardening, PITGate.filter_pit_corporate_actions() and CorporateActionStore's
+# query_pit()/query_pit_range() checked available_at only. Both now also require
+# received_at <= as_of, matching the already-established dual-cutoff pattern used by
+# filter_pit_fundamentals() (pit_gate.py) and RevisionStore.query_pit() (revision_store.py) for
+# other data types.
+
+PIT_CUTOFF = datetime(2026, 8, 5, 12, 0)
+
+
+def _pit_action(available_at, received_at, action_type="STOCK_SPLIT"):
+    return CorporateActionContract(
+        symbol="600519.SH", ex_date="2026-08-04", action_type=action_type,
+        cash_amount_per_share=0.0, bonus_ratio=0.0, split_ratio=2.0,
+        announcement_date="2026-07-20", available_at=available_at, received_at=received_at,
+        quality_status="VALID",
+    )
+
+
+# -- PITGate.filter_pit_corporate_actions() -------------------------------------------------
+
+def test_pit_corporate_action_normal_visible_when_both_cutoffs_satisfied():
+    action = _pit_action(available_at=datetime(2026, 8, 1), received_at=datetime(2026, 8, 2))
+    assert PITGate.filter_pit_corporate_actions([action], PIT_CUTOFF) == [action]
+
+
+def test_pit_corporate_action_excluded_when_available_at_after_cutoff():
+    action = _pit_action(available_at=datetime(2026, 8, 6), received_at=datetime(2026, 8, 2))
+    assert PITGate.filter_pit_corporate_actions([action], PIT_CUTOFF) == []
+
+
+def test_pit_corporate_action_excluded_when_received_at_after_cutoff():
+    """The core of this hardening: before this change, this action would have been (incorrectly)
+    visible, because filter_pit_corporate_actions() checked available_at only."""
+    action = _pit_action(available_at=datetime(2026, 8, 1), received_at=datetime(2026, 8, 6))
+    assert PITGate.filter_pit_corporate_actions([action], PIT_CUTOFF) == []
+
+
+def test_pit_corporate_action_excluded_when_both_cutoffs_violated():
+    action = _pit_action(available_at=datetime(2026, 8, 6), received_at=datetime(2026, 8, 7))
+    assert PITGate.filter_pit_corporate_actions([action], PIT_CUTOFF) == []
+
+
+def test_pit_corporate_action_visible_at_exact_cutoff_equality():
+    action = _pit_action(available_at=PIT_CUTOFF, received_at=PIT_CUTOFF)
+    assert PITGate.filter_pit_corporate_actions([action], PIT_CUTOFF) == [action]
+
+
+def test_pit_corporate_action_missing_received_at_excluded_fails_closed():
+    """received_at is a required (non-Optional) field on CorporateActionContract, but nothing
+    prevents a caller from passing None at runtime (Python dataclasses don't enforce type hints
+    at construction time). An unset received_at must be excluded, never treated as
+    always-visible — the same fail-closed rule filter_pit_fundamentals() already applies."""
+    action = _pit_action(available_at=datetime(2026, 8, 1), received_at=None)
+    assert PITGate.filter_pit_corporate_actions([action], PIT_CUTOFF) == []
+
+
+# -- CorporateActionStore.query_pit() / query_pit_range() ------------------------------------
+
+def test_store_query_pit_normal_visible_when_both_cutoffs_satisfied():
+    store = CorporateActionStore()
+    action = _pit_action(available_at=datetime(2026, 8, 1), received_at=datetime(2026, 8, 2))
+    store.add_action(action)
+    assert store.query_pit("600519.SH", "2026-08-04", "STOCK_SPLIT", PIT_CUTOFF) == action
+
+
+def test_store_query_pit_excluded_when_received_at_after_cutoff():
+    store = CorporateActionStore()
+    action = _pit_action(available_at=datetime(2026, 8, 1), received_at=datetime(2026, 8, 6))
+    store.add_action(action)
+    assert store.query_pit("600519.SH", "2026-08-04", "STOCK_SPLIT", PIT_CUTOFF) is None
+
+
+def test_store_query_pit_falls_back_to_earlier_revision_when_latest_received_late():
+    """Revision-selection correctness: a later, corrected revision whose received_at hasn't
+    arrived yet as of the cutoff must NOT shadow an earlier revision that IS fully visible
+    (both available_at and received_at <= as_of) — the store must select the earlier revision,
+    not silently return None for the whole action."""
+    store = CorporateActionStore()
+    original = _pit_action(available_at=datetime(2026, 7, 20), received_at=datetime(2026, 7, 20))
+    corrected = _pit_action(available_at=datetime(2026, 8, 1), received_at=datetime(2026, 8, 20))
+    store.add_action(original)
+    store.add_action(corrected)
+
+    result = store.query_pit("600519.SH", "2026-08-04", "STOCK_SPLIT", PIT_CUTOFF)
+    assert result == original, "must fall back to the fully-visible earlier revision, not return None"
+
+
+def test_store_query_pit_range_excludes_action_with_late_received_at():
+    store = CorporateActionStore()
+    action = _pit_action(available_at=datetime(2026, 8, 1), received_at=datetime(2026, 8, 6))
+    store.add_action(action)
+    results = store.query_pit_range("600519.SH", "2026-08-01", "2026-08-06", PIT_CUTOFF)
+    assert results == []
+
+
+# -- CorporateActionAdjuster.adjust() (same PITGate path, exercised via the full adjuster) ---
+
+def test_adjust_excludes_action_with_late_received_at():
+    raw = [100.0, 100.0, 50.0, 50.0, 50.0]
+    late_received = _pit_action(available_at=datetime(2026, 7, 20), received_at=datetime(2026, 8, 9))
+    result = CorporateActionAdjuster.adjust(DATES, raw, [late_received], PIT_CUTOFF)
+    assert result.adjusted_prices == raw
+    assert result.actions_applied == []

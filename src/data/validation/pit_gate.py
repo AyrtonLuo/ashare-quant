@@ -27,10 +27,18 @@ class PITGate:
     def filter_pit_corporate_actions(
         actions: List[CorporateActionContract], as_of_cutoff: datetime
     ) -> List[CorporateActionContract]:
-        """Returns only corporate actions legally known at as_of_cutoff time. Filters strictly
-        on available_at (disclosure/ingestion visibility), never on ex_date/effective_date —
-        an action's economic effective date and its PIT availability are separate concepts."""
-        return [a for a in actions if a.available_at <= as_of_cutoff]
+        """Returns only corporate actions legally known at as_of_cutoff time: both available_at
+        (disclosure/ingestion visibility) AND received_at (system ingestion time) must be set
+        and <= as_of_cutoff — matching filter_pit_fundamentals()'s dual-cutoff contract, closing
+        a gap where corporate actions previously checked available_at only. Never filtered on
+        ex_date/effective_date — an action's economic effective date and its PIT availability
+        are separate concepts. A received_at left unset (None) is excluded rather than treated
+        as always-available."""
+        return [
+            a for a in actions
+            if a.received_at is not None
+            and a.available_at <= as_of_cutoff and a.received_at <= as_of_cutoff
+        ]
 
     @staticmethod
     def filter_pit_fundamentals(

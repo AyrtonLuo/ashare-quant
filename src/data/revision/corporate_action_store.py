@@ -28,26 +28,43 @@ class CorporateActionStore:
         existing.append(action)
         existing.sort(key=lambda a: a.available_at)
 
+    @staticmethod
+    def _pit_eligible(action: CorporateActionContract, as_of: datetime) -> bool:
+        """Core PIT & ingestion eligibility filter — mirrors RevisionStore.query_pit()'s
+        established dual-cutoff pattern (available_at <= as_of AND received_at <= as_of),
+        extended to corporate actions. A received_at left unset (None) is excluded rather than
+        treated as always-available, matching PITGate.filter_pit_corporate_actions()'s rule."""
+        return (
+            action.available_at <= as_of
+            and action.received_at is not None
+            and action.received_at <= as_of
+        )
+
     def query_pit(
         self, symbol: str, ex_date: str, action_type: str, as_of: datetime
     ) -> Optional[CorporateActionContract]:
-        """Returns the latest revision of this action legally visible at as_of, or None."""
+        """Returns the latest revision of this action legally visible at as_of (both available_at
+        and received_at <= as_of), or None. A revision whose received_at hasn't arrived yet is
+        ineligible even if its available_at qualifies — an earlier, fully-visible revision of the
+        same action is then correctly selected instead of returning nothing or the not-yet-
+        received one."""
         key = (symbol, ex_date, action_type)
-        valid = [a for a in self._store.get(key, []) if a.available_at <= as_of]
+        valid = [a for a in self._store.get(key, []) if self._pit_eligible(a, as_of)]
         return valid[-1] if valid else None
 
     def query_pit_range(
         self, symbol: str, start_date: str, end_date: str, as_of: datetime
     ) -> List[CorporateActionContract]:
         """Returns the PIT-correct (latest-visible-as-of) revision of every action for `symbol`
-        whose ex_date falls within [start_date, end_date]. Actions not yet available_at <= as_of
-        are excluded entirely, even if their ex_date falls inside the window."""
+        whose ex_date falls within [start_date, end_date]. Actions not yet legally visible
+        (available_at > as_of, received_at unset, or received_at > as_of) are excluded entirely,
+        even if their ex_date falls inside the window — see _pit_eligible()."""
         results: List[CorporateActionContract] = []
         for key, revisions in self._store.items():
             k_symbol, k_ex_date, _ = key
             if k_symbol != symbol or not (start_date <= k_ex_date <= end_date):
                 continue
-            valid = [a for a in revisions if a.available_at <= as_of]
+            valid = [a for a in revisions if self._pit_eligible(a, as_of)]
             if valid:
                 results.append(valid[-1])
         results.sort(key=lambda a: a.ex_date)
