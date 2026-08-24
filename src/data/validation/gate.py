@@ -8,6 +8,7 @@ from src.data.contracts.market_data import MarketDataContract
 from src.data.contracts.fundamental_data import FundamentalDataContract
 from src.data.contracts.news_announcement import NewsAnnouncementContract
 from src.data.contracts.derived import DerivedDataContract
+from src.data.contracts.quote import QuoteContract
 
 
 class DataTrustGate:
@@ -82,8 +83,54 @@ class DataTrustGate:
             errors.append("warm_up_satisfied=False must not be reported as quality_status='VALID'.")
         if contract.effective_date is None:
             errors.append("effective_date is missing — a technical indicator value must state which date it describes.")
-        if contract.input_price_basis not in ("PIT_ADJUSTED", "RAW"):
+        if contract.input_price_basis not in ("PIT_ADJUSTED", "RAW", "NOT_APPLICABLE"):
             errors.append(f"Unknown input_price_basis: {contract.input_price_basis}")
+
+        is_valid = len(errors) == 0
+        return is_valid, errors
+
+    @staticmethod
+    def validate_quote(contract: QuoteContract, max_age_seconds: Optional[float] = None,
+                       now: Optional[datetime] = None) -> Tuple[bool, List[str]]:
+        """TERMINAL step T1 — validates a QuoteContract before the Terminal may display it.
+
+        Checks internal coherence, not vendor honesty: a quote whose high is below its last
+        price, or whose open sits outside its own high/low band, is internally contradictory and
+        must not be shown to a user as fact regardless of who sent it.
+
+        `max_age_seconds` is OPTIONAL and off by default. Staleness is a presentation decision
+        (a Sunday-evening quote is stale but perfectly valid data), so this gate reports it only
+        when a caller states a threshold, and never silently drops an old quote.
+        """
+        errors = []
+
+        if contract.high_price < contract.low_price:
+            errors.append(
+                f"high_price {contract.high_price} is below low_price {contract.low_price}."
+            )
+        for field_name in ("last_price", "open_price"):
+            value = getattr(contract, field_name)
+            if value > contract.high_price or value < contract.low_price:
+                errors.append(
+                    f"{field_name} {value} lies outside the session range "
+                    f"[{contract.low_price}, {contract.high_price}]."
+                )
+        # Turnover without volume (or the reverse) is incoherent; either both moved or neither
+        # did. Reported rather than silently normalised to zero.
+        if contract.volume == 0 and contract.amount > 0:
+            errors.append("amount is positive but volume is zero — inconsistent turnover.")
+        if contract.amount == 0 and contract.volume > 0:
+            errors.append("volume is positive but amount is zero — inconsistent turnover.")
+        if contract.trading_status == "SUSPENDED" and contract.volume > 0:
+            errors.append("trading_status is SUSPENDED but volume is positive.")
+
+        if max_age_seconds is not None:
+            age = contract.age_seconds(now)
+            if age > max_age_seconds:
+                errors.append(
+                    f"quote is {age:.0f}s old, exceeding the caller's max_age_seconds "
+                    f"{max_age_seconds:.0f}."
+                )
 
         is_valid = len(errors) == 0
         return is_valid, errors
