@@ -1,10 +1,17 @@
 # Current Project State
 
-_Synchronized to HEAD `94456ca` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `a55d0ae` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > this file > Conversation History._
 
 ## Current Track
-**AI Quant Research Analyst** — evidence-grounded LLM research synthesis.
+**AI Quant Terminal** — product repositioning from a quant research/audit system to a consumer
+stock-analysis terminal, per the CEO Decision on
+`AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` (`d4a2d70`). **Terminal is the default
+mode; Research mode is retained unchanged.** Steps **T1, T2 and T5 are delivered**; T3/T4/T6 are
+credential- or vendor-gated and explicitly not authorized yet.
+
+The preceding **AI Quant Research Analyst** track remains complete and untouched beneath it —
+evidence-grounded LLM research synthesis.
 No phase number is assigned to this track (standing CEO instruction). **Phase 9 is complete.
 Do NOT create a "Phase 10."**
 
@@ -118,6 +125,44 @@ deterministic fakes are retained for testing and for the labelled-synthetic path
     synthetic narrative**. UI gains an explicit narrative-source choice.
   - 41 new tests (offline, against a local 127.0.0.1 HTTP stub — deterministic, free,
     network-free). All existing Fake Provider tests retained unchanged.
+- **Terminal mode — consumer stock view** (`a55d0ae`, step T2):
+  - New `src/app/terminal_application.py`; the UI reaches project code only through Application
+    Layer modules (now three), and this module imports no UI framework and **nothing from
+    `src/llm/`**.
+  - Panels: 搜索 → 行情 → AI 总结 → 技术面 → 基本面 → 新闻 → 风险 → 看多/看空.
+  - **DEMO DATA badge is derived from `QuoteContract.data_origin`**, so a UI author cannot forget
+    it and a golden quote can never present itself as live. Its 数据更新时间 is the demo bar's own
+    historical timestamp, never `datetime.now()`.
+  - **Missing data always says `暂无数据` with a reason, and every row stays in the table.**
+    毛利率 reports "该指标尚未纳入当前数据契约，不做估算" — it genuinely is not a field on
+    `FundamentalDataContract`. On the demo set only PE resolves; the other seven read 暂无数据.
+    MACD honestly reads 暂无数据 (demo set has 25 bars; MACD needs 34).
+  - **News returns empty + a reason, never a synthetic headline.**
+  - Plain-language technical readings are **deterministic code, not a model**, and contain no
+    买入/卖出/目标价 (both asserted by test).
+  - Terminal branch of the UI is asserted to contain none of `evidence_bundle_hash`,
+    `evidence_id`, `PIT`, `research_run_id`, `reproducibility_scope`, `result_hash`,
+    `prompt_version` — the vocabulary is gone, the machinery is not.
+  - Disclaimer 「本页面仅提供信息与分析，不构成投资建议。」 is persistent, not in an expander.
+- **QuoteContract + QuoteProvider layer** (`2c6bc11`, step T1) — the one genuinely new data
+  shape. `change`/`change_pct` are **computed properties, not stored fields**, so they cannot
+  disagree with the prices shown beside them. `quoted_at` (vendor) and `received_at` (us) are
+  distinct required facts. `GoldenQuoteProvider` is **structurally incapable** of claiming
+  `REAL_PROVIDER` (hard-coded, not a parameter); `LiveQuoteProvider` **refuses explicitly** until
+  a vendor is provisioned. `DataTrustGate.validate_quote()` checks internal coherence; staleness
+  is opt-in only.
+- **Realized volatility / momentum / volume indicators** (`5e3c701`, step T5) — the last three
+  contract-only stubs are now real calculations implementing exactly their documented designs.
+  Volume got its own validator (0 volume is valid for a suspended name; 0 price never is), an
+  undefined ratio reports `None` rather than a fabricated 0.0/1.0, and split-adjustment is an
+  explicit recorded flag. `DerivedDataContract` gained the `NOT_APPLICABLE` price basis, since
+  volume is not a price.
+- **Cloud deployment fix** (`5d1e998`) — `streamlit run` puts only the script's directory on
+  `sys.path`, so `from src.app import ...` raised `ModuleNotFoundError` under the console script
+  Streamlit Cloud uses. Reproduced in a bare clone, fixed by resolving the repo root from
+  `__file__`. `.gitignore` now covers `.streamlit/secrets.toml`.
+- **Product proposal** (`d4a2d70`) — `AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md`,
+  CEO-approved.
 - **Streamlit UI + analyst Application Layer** (`aebef90`, §9 / §11 step 6):
   - `src/app/research_analyst_application.py` (new) mirrors `research_application.py`'s
     contract — the UI calls only this module; this module imports no UI framework. It assembles
@@ -232,8 +277,6 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 - **Phase 2** — Context System Hardening & Multi-Agent Handoff Protocol.
 
 ## Not Implemented — honestly disclosed, not silently dropped
-- **Volatility / Momentum / Volume indicators** — `NotImplementedError` at
-  `src/quant/technical/indicators.py:212,224,237`; design documented in each docstring.
 - **Persistent `NewsAnnouncementStore`** — not built. News items are validated and PIT-filtered
   as in-memory lists returned by the adapter; there is no stateful, queryable, immutable
   revision store for news (contrast `CorporateActionStore`).
@@ -253,7 +296,7 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 Nothing. Awaiting the next CEO directive.
 
 ## Tests
-- **Passed**: 721
+- **Passed**: 830
 - **Skipped**: 13 (11 TuShare live-provider tests when `TUSHARE_TOKEN` is absent; 1 real-OpenAI
   E2E blocked on account quota; 1 real-Gemini E2E blocked on an absent `GEMINI_API_KEY` — see
   Known Issues)
@@ -263,8 +306,8 @@ Nothing. Awaiting the next CEO directive.
 ## Git Status
 - **Branch**: `main`
 - **Working Tree**: Clean.
-- **HEAD**: `94456ca` (`feat: Google Gemini LLM provider alongside OpenAI, selectable,
-  stdlib-only`)
+- **HEAD**: `a55d0ae` (`feat: Terminal mode — consumer stock view via a dedicated Application
+  Layer (T2)`)
 - **`origin/main` is in sync with local `main`.** Pushes are made only under an explicit CEO
   directive authorizing them (as with Step 5 and the §7 layer).
 - Standing rule unchanged: **never push without explicit Product Owner approval.**
@@ -311,9 +354,18 @@ Nothing. Awaiting the next CEO directive.
 - `docs/CORPORATE_ACTION_SPECIFICATION.md`, `docs/FINAL_RESEARCH_INTEGRITY_CERTIFICATION.md`.
 
 ## Next Recommended Action
-Await a CEO directive. **The AI Research Analyst track is complete end to end, with two real LLM
-providers.** One item is outstanding and only the CEO can unblock it — it is credentials, not
-code:
+**Await CEO Review of T1/T2/T5.** All three Terminal steps that require nothing from the CEO are
+delivered, tested and pushed. The remaining Terminal steps are gated on decisions only the CEO
+can make:
+
+- **T3 — real market-data adapter**: blocked on the vendor + cost decision. A-share real-time
+  quotes are a licensed product. `LiveQuoteProvider` is the slot, and it refuses explicitly until
+  then. **When a vendor is provisioned, `terminal_application._quote_provider()` is the ONE place
+  that changes** — every panel reads provenance off the contract.
+- **T4 — real news provider**: blocked on a source decision. Nothing is wired.
+- **T6 — real AI narrative**: blocked on an LLM credential/quota.
+
+Also still outstanding, unchanged and credential-gated:
 
 1. **Set `GEMINI_API_KEY`** (and/or add OpenAI billing credit), then run
    `PYTHONPATH=. ./venv/bin/pytest -m real_llm_provider` to complete the real end-to-end
@@ -323,5 +375,11 @@ code:
 2. Optional, if wanted later: an Anthropic provider (the proposal's §8 examples name Claude).
    It would slot into `LLM_PROVIDER_REGISTRY` against the same ABC — no interface change — but
    needs `ANTHROPIC_API_KEY` and its own directive.
+3. **Cloud deployment is code-ready but not deployed** — it needs the CEO's own Streamlit
+   Community Cloud account authorization (main file `src/app/streamlit_app.py`, branch `main`,
+   **Python 3.11 or 3.12 — not 3.13**, since `scipy==1.13.1`/`numpy==2.0.2` have no 3.13 wheels).
+4. **`CLAUDE.md`'s Absolute Scope Boundary still says "Research/Backtest ONLY"** — the CEO
+   deferred amending it until the Terminal architecture is finally confirmed. Flagged, not
+   quietly stretched.
 
 Do NOT implement trading, broker connections, or order routing. Do NOT create a "Phase 10."

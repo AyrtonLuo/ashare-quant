@@ -1,13 +1,19 @@
 # Agent Handoff
 
-_Synchronized to HEAD `94456ca` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `a55d0ae` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > `.claude/` files > Conversation History._
 
 ## Handoff Status
 READY
 
 ## Current Track
-**AI Quant Research Analyst** — no phase number assigned (standing CEO instruction).
+**AI Quant Terminal** — consumer repositioning per the CEO Decision on
+`AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` (`d4a2d70`). **Terminal is the default
+mode, Research mode is retained unchanged.** Steps **T1, T2, T5 delivered**; T3 (market-data
+vendor), T4 (news source) and T6 (LLM credential) are gated on CEO decisions.
+
+The prior **AI Quant Research Analyst** track sits complete beneath it — no phase number assigned
+(standing CEO instruction).
 **Phase 9 is complete. Do NOT create a "Phase 10."**
 
 Governing document: `AI_QUANT_RESEARCH_ANALYST_ARCHITECTURE_PROPOSAL.md` (revision 2, repo root),
@@ -16,13 +22,31 @@ Layer (not a numbered §11 step). The track is feature-complete against the prop
 written.**
 
 ## Current Objective
-None in flight. The Google Gemini provider (`94456ca`) is delivered, committed and pushed,
-alongside the retained OpenAI provider. **One item is outstanding and only the CEO can unblock
-it — it is credentials, not code**: neither real end-to-end verification could complete
-(`GEMINI_API_KEY` unset; the OpenAI account has no quota). **STOP — await the next CEO
-directive.**
+None in flight. Terminal steps **T5 (`5e3c701`), T1 (`2c6bc11`) and T2 (`a55d0ae`)** are
+delivered, tested and pushed. Every remaining Terminal step is blocked on a CEO decision (data
+vendor, news source, LLM credential), not on code. **STOP — await CEO Review.**
 
 ## Completed
+- **Terminal mode — consumer stock view** (`a55d0ae`, T2) — `src/app/terminal_application.py`
+  plus a Terminal-default 模式 switch in the UI. Panels: 搜索 → 行情 → AI 总结 → 技术面 → 基本面 →
+  新闻 → 风险 → 看多/看空. The DEMO DATA badge derives from `QuoteContract.data_origin`; missing
+  data always says `暂无数据` **with a reason** and the row is never dropped; news returns empty
+  plus its reason and never a synthetic headline; the plain-language readings are deterministic
+  code containing no 买入/卖出/目标价. The Terminal branch of the UI contains none of
+  `evidence_bundle_hash` / `evidence_id` / `PIT` / `research_run_id` / `reproducibility_scope` /
+  `result_hash` / `prompt_version`. Disclaimer is persistent. 34 tests.
+- **QuoteContract + QuoteProvider** (`2c6bc11`, T1) — the new "price right now" shape the PIT
+  path never had. `change`/`change_pct` are computed properties, not stored fields.
+  `GoldenQuoteProvider` cannot claim `REAL_PROVIDER` (hard-coded); `LiveQuoteProvider` refuses
+  explicitly. `DataTrustGate.validate_quote()` added; staleness opt-in only. 45 tests.
+- **Volatility / momentum / volume indicators** (`5e3c701`, T5) — the last three stubs are real
+  calculations. Volume has its own validator, an undefined ratio is `None` not a fabricated
+  number, split-adjustment is an explicit flag, and `DerivedDataContract` gained the
+  `NOT_APPLICABLE` price basis. 30 tests.
+- **Cloud deployment fix** (`5d1e998`) — the app could not have started on Streamlit Cloud
+  (`ModuleNotFoundError: No module named 'src'` under the console-script launcher). Reproduced in
+  a bare clone and fixed via a `__file__`-derived repo root. `.streamlit/secrets.toml` gitignored.
+- **Product proposal** (`d4a2d70`) — CEO-approved.
 - **Google Gemini LLM provider** (`94456ca`) — `src/llm/gemini_provider.py`, added **beside**
   OpenAI and now the active default. **Nothing was refactored**: the ABC, `LLMRequest`,
   `LLMResponse`, `LLMErrorCategory`, `StructuredResearchOutput`, the citation validator, the
@@ -141,27 +165,25 @@ directive.**
 3. **An Anthropic provider** — the proposal's §8 examples name Claude, and `ANTHROPIC_API_KEY`
    is unset here. It would slot into `LLM_PROVIDER_REGISTRY` against the same ABC with no
    interface change, but needs its own directive.
-4. **Volatility / Momentum / Volume indicators** — `NotImplementedError` at
-   `src/quant/technical/indicators.py:212,224,237`, design in each docstring.
-5. **Persistent `NewsAnnouncementStore`** — news is validated/PIT-filtered in memory only; no
+4. **Persistent `NewsAnnouncementStore`** — news is validated/PIT-filtered in memory only; no
    stateful immutable revision store exists for news.
-6. **Category-level `historical_eligible` (§3.4)** — never implemented anywhere. The report
+5. **Category-level `historical_eligible` (§3.4)** — never implemented anywhere. The report
    marks an absent category as `NOT AVAILABLE` without distinguishing "structurally
    current-only" from "simply absent". Disclosed in `REPORT_LIMITATIONS` on every report.
-7. **Semantic conflict detection between free-text news items** (§3.3's "M&A rumour later
+6. **Semantic conflict detection between free-text news items** (§3.3's "M&A rumour later
    denied") — not deterministically decidable, so not claimed. `CONFLICT_DETECTION_SCOPE` is
    carried onto every report so "no conflicts detected" cannot be misread as "no conflicts
    exist"; surfacing that class remains the AI's narrative contract (§6).
 
 ## Current Test Baseline
-- **Passed**: 721
+- **Passed**: 830
 - **Skipped**: 13 (11 TuShare live-provider tests; 1 real-Gemini E2E with no credential; 1
   real-OpenAI E2E blocked on account quota — items 1 and 2 under Not Completed)
 - **Failures**: 0
 - **Test Command**: `PYTHONPATH=. ./venv/bin/pytest`
 
 ## Git Status
-- **Branch**: `main`; **Working Tree**: clean; **HEAD**: `94456ca`.
+- **Branch**: `main`; **Working Tree**: clean; **HEAD**: `a55d0ae`.
 - **`origin/main` is in sync with local `main`** (pushed under explicit CEO authorization for
   this directive).
 - Standing rule unchanged: never push without explicit Product Owner approval.
@@ -180,8 +202,11 @@ directive.**
 - `src/quant/research_report/report_identity.py`, `report_store.py` — Step 5 identity + store.
 - `src/quant/research_report/report.py`, `data_confidence.py` — §7 report generation +
   computed Data Confidence / conflict detection.
-- `src/app/research_analyst_application.py` — analyst Application Layer (the ONLY module the
-  analyst UI page may call into).
+- `src/app/research_analyst_application.py` — analyst Application Layer.
+- `src/app/terminal_application.py` — Terminal Application Layer (the ONLY module the Terminal
+  page may call into). Imports nothing from `src/llm/`.
+- `src/data/contracts/quote.py`, `src/data/providers/quote_provider.py` — the T1 quote layer.
+- `AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` — the approved Terminal design.
 - `src/app/streamlit_app.py` — the ONLY file permitted to import Streamlit.
 - `src/quant/evidence/evidence_item.py`, `src/quant/technical/indicators.py` — Evidence + indicators.
 - `src/data/validation/pit_gate.py`, `src/data/revision/corporate_action_store.py` — dual-cutoff PIT.
@@ -200,8 +225,17 @@ directive.**
   convention: `ResearchAnalystReportIdentity` has no `result_hash`, and its
   `reproducibility_scope` field is validated in `__post_init__`, so a caller cannot persist a
   stronger claim. Do not add one.
+- **Terminal is the default mode; Research mode must stay reachable and unchanged.**
+- **A demo quote must never be able to look live**: `GoldenQuoteProvider` hard-codes
+  `GOLDEN_DATASET` and stamps the demo bar's own historical timestamp, never `datetime.now()`.
+  Do not add a `data_origin` parameter to it.
+- **Missing data is `暂无数据` with a reason, and the row stays in the table.** Never estimate,
+  never zero-fill, never silently drop a row.
+- **The plain-language technical layer is deterministic code.** `terminal_application` must not
+  import from `src/llm/`, and no reading may contain 买入/卖出/目标价.
 - **UI boundary is an allow-list, not a single module**: `streamlit_app.py` may import
-  `research_application` and `research_analyst_application` and nothing else from this project.
+  `research_application`, `research_analyst_application` and `terminal_application`, and nothing
+  else from this project.
   `test_phase_8r_security_boundary.py`'s `FORBIDDEN_UI_IMPORTS` check is unchanged — the
   allow-list narrowing was a §9-mandated addition, never a relaxation.
 - **Two real providers exist and are selected through `LLM_PROVIDER_REGISTRY`.** Gemini is the
@@ -272,10 +306,15 @@ directive.**
   absent and requires its own directive.
 
 ## Exact Next Action
-**Await a CEO directive.** The track is complete end to end with two real providers. The one
-outstanding item is credentials, not code: **set `GEMINI_API_KEY` (and/or add OpenAI billing
-credit), then run `PYTHONPATH=. ./venv/bin/pytest -m real_llm_provider`.** Do not mark either
-verification done until it actually passes.
+**Await CEO Review of T1/T2/T5.** No further Terminal work is authorized or unblocked. The
+remaining steps each need a CEO decision, not code:
+- **T3** market-data vendor + cost (A-share real-time is licensed). When provisioned,
+  `terminal_application._quote_provider()` is the ONE place that changes.
+- **T4** news source.
+- **T6** LLM credential/quota (`GEMINI_API_KEY` unset; OpenAI account has no quota).
+Also outstanding: cloud deployment needs the CEO's Streamlit account authorization
+(main file `src/app/streamlit_app.py`, **Python 3.11/3.12, not 3.13**), and `CLAUDE.md`'s
+Absolute Scope Boundary still says "Research/Backtest ONLY" — the CEO deferred amending it.
 On a new session or post-compaction recovery, execute the New Session Recovery Protocol
 (`CLAUDE.md` §7) starting with `CLAUDE.md`.
 
@@ -287,6 +326,10 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
 - Do NOT let the analyst UI import anything but the two Application Layer modules.
 - Do NOT present synthetic narrative as analysis, or make it the default when a real provider
   is available.
+- Do NOT let Terminal show a fabricated price, headline or fundamental. `暂无数据` is always the
+  correct answer when data is absent.
+- Do NOT delete the Golden Dataset — it is the approved DEMO DATA source.
+- Do NOT select or purchase a data vendor without an explicit CEO directive.
 - Do NOT claim either real end-to-end API verification passed until it actually does.
 - Do NOT broaden the live tests' narrow quota/credential skip to cover other failure categories.
 - Do NOT put an API key in a URL, a log, a config file, or any persisted artifact.
@@ -297,5 +340,5 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
 
 ## Validation Required
 - `git status` — working tree clean.
-- `PYTHONPATH=. ./venv/bin/pytest` — **721 passed, 13 skipped, 0 failed**.
+- `PYTHONPATH=. ./venv/bin/pytest` — **830 passed, 13 skipped, 0 failed**.
 - `git diff --check` — clean.
