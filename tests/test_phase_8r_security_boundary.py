@@ -112,6 +112,7 @@ def test_a_ui_file_only_imports_the_application_layer_and_stdlib_streamlit():
     ALLOWED_APPLICATION_LAYER_MODULES = {
         "src.app.research_application",
         "src.app.research_analyst_application",
+        "src.app.terminal_application",     # Terminal mode, step T2
     }
     project_imports = {m for m in imported_modules if m.startswith("src.") and m != "src.app"}
     assert project_imports <= ALLOWED_APPLICATION_LAYER_MODULES, (

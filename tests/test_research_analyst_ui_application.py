@@ -94,6 +94,7 @@ def test_ui_reaches_project_code_only_through_the_application_layer():
     project = {m for m in imported if m.startswith("src.") and m != "src.app"}
     assert project == {
         "src.app.research_application", "src.app.research_analyst_application",
+        "src.app.terminal_application",
     }
 
 
