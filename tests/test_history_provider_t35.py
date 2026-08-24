@@ -329,11 +329,18 @@ def test_live_history_and_real_technical_panel():
         assert is_valid, errors
     assert [b.trading_date for b in bars] == sorted(b.trading_date for b in bars)
 
-    readings = terminal.get_technical_views(SYMBOL, terminal.QUOTE_SOURCE_REAL)
-    assert all(r.available for r in readings), [r.name for r in readings if not r.available]
-    assert {r.name for r in readings} == set(terminal._TECHNICAL_PANEL_NAMES)
-
+    # The Application Layer builds its own provider, so these are ADDITIONAL live calls. A
+    # transient outage there must skip like the fetch above, not fail — otherwise an external
+    # vendor hiccup is reported as a regression in this code. The assertions themselves are
+    # unchanged; only an unreachable provider short-circuits them.
     history = terminal.get_price_history(SYMBOL, terminal.QUOTE_SOURCE_REAL)
+    if history.unavailable_reason:
+        pytest.skip(f"LIVE_HISTORY_UNAVAILABLE (application layer): {history.unavailable_reason}")
+
     assert history.is_demo is False
     assert history.bar_count >= 34
     assert "GOLDEN" not in history.data_source
+
+    readings = terminal.get_technical_views(SYMBOL, terminal.QUOTE_SOURCE_REAL)
+    assert all(r.available for r in readings), [r.name for r in readings if not r.available]
+    assert {r.name for r in readings} == set(terminal._TECHNICAL_PANEL_NAMES)

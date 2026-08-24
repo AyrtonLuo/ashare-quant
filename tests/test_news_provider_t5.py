@@ -346,8 +346,12 @@ def test_live_announcements_from_the_public_endpoint():
         is_valid, errors = DataTrustGate.validate_news_announcement(item)
         assert is_valid, errors
 
+    # An ADDITIONAL live call via the Application Layer; a transient outage skips rather than
+    # failing, exactly as the fetch above does.
     panel = terminal.get_news_panel(SYMBOL, terminal.QUOTE_SOURCE_REAL)
+    if panel.unavailable_reason:
+        pytest.skip(f"LIVE_NEWS_UNAVAILABLE (application layer): {panel.unavailable_reason}")
     assert panel.is_demo is False
-    assert panel.items, panel.unavailable_reason
+    assert panel.items
     assert all(i.source_url for i in panel.items)
     assert all(i.summary == "" for i in panel.items)   # nothing was generated
