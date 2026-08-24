@@ -253,31 +253,41 @@ def _render_analyst_report(view) -> None:
 
 def _render_terminal_quote(quote) -> None:
     if quote.is_demo:
-        st.warning(f"**{quote.data_status}** — {quote.demo_notice}", icon="⚠️")
-    else:
-        st.success(f"**{quote.data_status}** — 实时行情，{quote.data_source}。", icon="✅")
+        # demo_notice already leads with "DEMO DATA — "; prepending data_status again printed
+        # the badge twice.
+        st.warning(quote.demo_notice, icon="⚠️")
 
-    st.subheader(f"{quote.display_name}　{quote.symbol}")
-    price_col, change_col, volume_col, amount_col = st.columns(4)
-    price_col.metric("最新价", f"{quote.last_price:,.2f}")
-    change_col.metric("涨跌幅", f"{quote.change_pct:+.2f}%", delta=f"{quote.change:+.2f}")
-    volume_col.metric("成交量", f"{quote.volume:,.0f}")
-    amount_col.metric("成交额", f"{quote.amount:,.0f}")
+    name_col, price_col = st.columns([3, 2])
+    with name_col:
+        st.subheader(f"{quote.display_name}")
+        st.caption(f"{quote.symbol}")
+    with price_col:
+        # delta_color="inverse" flips Streamlit's US convention: A股惯例红涨绿跌.
+        st.metric(
+            "最新价", f"{quote.last_price:,.2f}",
+            delta=f"{quote.change:+.2f}（{quote.change_pct:+.2f}%）",
+            delta_color="inverse",
+        )
 
-    open_col, high_col, low_col, prev_col = st.columns(4)
-    open_col.metric("今开", f"{quote.open_price:,.2f}")
-    high_col.metric("最高", f"{quote.high_price:,.2f}")
-    low_col.metric("最低", f"{quote.low_price:,.2f}")
-    prev_col.metric("昨收", f"{quote.prev_close:,.2f}")
+    detail_cols = st.columns(6)
+    for column, (label, value) in zip(detail_cols, [
+        ("今开", f"{quote.open_price:,.2f}"),
+        ("最高", f"{quote.high_price:,.2f}"),
+        ("最低", f"{quote.low_price:,.2f}"),
+        ("昨收", f"{quote.prev_close:,.2f}"),
+        ("成交量", terminal.humanize_volume(quote.volume)),
+        ("成交额", terminal.humanize_amount(quote.amount)),
+    ]):
+        column.caption(label)
+        column.markdown(f"**{value}**")
 
     st.caption(
-        f"数据状态：{quote.data_status}　·　数据更新时间：{quote.updated_at}"
-        f"　·　数据来源：{quote.data_source}　·　交易状态：{quote.trading_status}"
+        f"{quote.data_status}　·　更新时间 {quote.updated_at}　·　{quote.data_source}"
+        f"　·　交易状态 {quote.trading_status}"
     )
 
 
 def _render_terminal_price_history(history) -> None:
-    st.markdown("### K 线历史（收盘价）")
     if history.unavailable_reason or not history.dates:
         st.info(
             f"{terminal.NOT_AVAILABLE_TEXT} — {history.unavailable_reason or '没有可用的历史行情。'}",
@@ -292,46 +302,53 @@ def _render_terminal_price_history(history) -> None:
 
 
 def _render_terminal_technicals(readings) -> None:
-    st.markdown("### 技术面")
-    for reading in readings:
-        if not reading.available:
-            st.write(f"**{reading.name}**　{reading.plain_reading}　—　{reading.explanation}")
-            continue
-        st.write(f"**{reading.name}**　**{reading.plain_reading}**　—　{reading.explanation}")
-        st.caption(reading.detail)
+    st.caption(f"指标概览：{terminal.summarize_technicals(readings)}")
+    columns = st.columns(3)
+    for index, reading in enumerate(readings):
+        with columns[index % 3]:
+            st.metric(reading.name, reading.plain_reading)
+            st.caption(reading.explanation)
+            if reading.detail:
+                st.caption(reading.detail)
 
 
 def _render_terminal_fundamentals(panel) -> None:
-    st.markdown("### 基本面")
     if panel.unavailable_reason:
         st.info(f"{terminal.NOT_AVAILABLE_TEXT} — {panel.unavailable_reason}", icon="ℹ️")
-    st.table({
-        "指标": [row.label for row in panel.rows],
-        "数值": [row.value for row in panel.rows],
-        "说明": [row.reason or "" for row in panel.rows],
-    })
+
+    available = [row for row in panel.rows if row.available]
+    if available:
+        columns = st.columns(3)
+        for index, row in enumerate(available):
+            columns[index % 3].metric(row.label, row.value)
+
+    missing = [row for row in panel.rows if not row.available]
+    if missing:
+        st.caption(
+            f"{terminal.NOT_AVAILABLE_TEXT}：" + "、".join(row.label for row in missing)
+        )
+        with st.expander(f"为什么这 {len(missing)} 项显示「{terminal.NOT_AVAILABLE_TEXT}」？"):
+            for row in missing:
+                st.write(f"- **{row.label}**：{row.reason}")
+
     # The fundamental panel states its OWN source and date: it comes from a different feed than
     # the quote and the K-line history, and must not inherit their labels.
     st.caption(f"数据日期：{panel.data_date}　·　数据来源：{panel.data_source}")
 
 
 def _render_terminal_news(panel) -> None:
-    st.markdown("### 最新消息")
     if not panel.items:
         st.info(
             f"暂无新闻 — {panel.unavailable_reason or '没有可获取的公告。'}", icon="ℹ️"
         )
         st.caption(f"数据来源：{panel.data_source}")
         return
-    st.caption("以下均为公司公告**原文标题**，点击可查看原文；本系统不改写、不补充新闻事实。")
+    st.caption("以下均为公司公告**原文标题**，点击标题可查看原文；本系统不改写、不补充新闻事实。")
     for item in panel.items:
-        columns = st.columns([2, 9, 3])
-        columns[0].write(item.published_at)
-        columns[1].write(item.title)
         if item.source_url:
-            columns[2].markdown(f"[查看原文]({item.source_url})")
+            st.markdown(f"**{item.published_at}**　[{item.title}]({item.source_url})")
         else:
-            columns[2].write("—")
+            st.markdown(f"**{item.published_at}**　{item.title}")
     st.caption(f"共 {len(panel.items)} 条　·　数据来源：{panel.data_source}")
 
 
@@ -358,33 +375,41 @@ def _render_terminal_ai(analysis) -> None:
 mode = st.sidebar.radio("模式", ["Terminal", "Research"], index=0)
 
 if mode == "Terminal":
-    st.title("📈 AI Quant Terminal")
-    st.info(terminal.DISCLAIMER, icon="ℹ️")
-
-    source_label = st.radio(
-        "数据源", ["实时行情", "演示数据 (DEMO)"], index=0, horizontal=True,
+    # 数据源 lives in the sidebar: an ordinary user never needs to touch it, and the page itself
+    # leads with search + price, 同花顺-style. REAL/DEMO honesty is unchanged — the badge on the
+    # quote card and every panel's own source label still come from the data, not from this
+    # control.
+    source_label = st.sidebar.radio(
+        "数据源", ["实时行情", "演示数据 (DEMO)"], index=0,
         key="terminal_source",
         help="实时行情来自公开行情接口；演示数据是固定的示例数据集。两者不会混合显示。",
     )
     quote_source = (terminal.QUOTE_SOURCE_REAL if source_label == "实时行情"
                     else terminal.QUOTE_SOURCE_DEMO)
 
+    st.title("📈 A股行情终端")
+    st.info(terminal.DISCLAIMER, icon="ℹ️")
+
     options = terminal.list_stocks(quote_source)
     labels = {o["symbol"]: f"{o['symbol']} — {o['display_name']}" for o in options}
-    query = st.text_input(
-        "搜索股票（代码或名称，实时模式下可直接输入 6 位代码）", key="terminal_search"
-    )
+
+    search_col, select_col = st.columns([2, 3])
+    with search_col:
+        query = st.text_input(
+            "🔍 搜索股票", key="terminal_search",
+            placeholder="输入代码或名称，如 600519 / 茅台",
+        )
     if query.strip():
         matches = terminal.search_stocks(query, quote_source)
         if matches:
             labels = {m["symbol"]: f"{m['symbol']} — {m['display_name']}" for m in matches}
         else:
             st.warning(f"没有找到匹配「{query}」的股票，已显示全部可选标的。", icon="⚠️")
-
-    selected_symbol = st.selectbox(
-        "选择股票", options=list(labels.keys()), format_func=lambda s: labels[s],
-        key="terminal_symbol",
-    )
+    with select_col:
+        selected_symbol = st.selectbox(
+            "选择股票", options=list(labels.keys()), format_func=lambda s: labels[s],
+            key="terminal_symbol",
+        )
 
     try:
         stock = terminal.get_stock_view(selected_symbol, quote_source)
@@ -394,29 +419,38 @@ if mode == "Terminal":
 
     if stock is not None:
         _render_terminal_quote(stock.quote)
-        st.markdown("---")
 
-        ai_state_key = f"terminal_ai_{selected_symbol}"
-        if st.button("🧠 生成 AI 分析", key="terminal_generate_ai"):
-            with st.spinner("正在分析…"):
-                try:
-                    st.session_state[ai_state_key] = terminal.get_ai_analysis(selected_symbol)
-                except terminal.TerminalError as e:
-                    st.error(f"AI 分析未能生成：{e}")
-        if ai_state_key in st.session_state:
-            _render_terminal_ai(st.session_state[ai_state_key])
-        else:
-            st.caption("点击上方按钮生成 AI 总结、风险与看多/看空分析。")
+        chart_tab, tech_tab, fund_tab, news_tab, ai_tab = st.tabs(
+            ["📈 行情走势", "📊 技术面", "🏢 基本面", "📰 最新消息", "🤖 AI 分析"]
+        )
+        with chart_tab:
+            _render_terminal_price_history(stock.price_history)
+        with tech_tab:
+            _render_terminal_technicals(stock.technicals)
+        with fund_tab:
+            _render_terminal_fundamentals(stock.fundamentals)
+        with news_tab:
+            _render_terminal_news(stock.news)
+        with ai_tab:
+            if not terminal.is_ai_available():
+                # Honest for a consumer: no button that would produce a placeholder narrative.
+                # The labelled-synthetic path remains available in Research mode, untouched.
+                st.info(terminal.AI_UNAVAILABLE_NOTICE, icon="ℹ️")
+            else:
+                ai_state_key = f"terminal_ai_{selected_symbol}"
+                if st.button("🧠 生成 AI 分析", key="terminal_generate_ai"):
+                    with st.spinner("正在分析…"):
+                        try:
+                            st.session_state[ai_state_key] = terminal.get_ai_analysis(
+                                selected_symbol
+                            )
+                        except terminal.TerminalError as e:
+                            st.error(f"AI 分析未能生成：{e}")
+                if ai_state_key in st.session_state:
+                    _render_terminal_ai(st.session_state[ai_state_key])
+                else:
+                    st.caption("点击上方按钮生成 AI 总结、风险与看多/看空分析。")
 
-        st.markdown("---")
-        _render_terminal_price_history(stock.price_history)
-        st.markdown("---")
-        _render_terminal_technicals(stock.technicals)
-        st.markdown("---")
-        _render_terminal_fundamentals(stock.fundamentals)
-        st.markdown("---")
-        _render_terminal_news(stock.news)
-        st.markdown("---")
         st.caption(stock.disclaimer)
 
 else:

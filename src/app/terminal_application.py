@@ -88,10 +88,61 @@ INSUFFICIENT_HISTORY_REASON = (
 
 DISCLAIMER = "本页面仅提供信息与分析，不构成投资建议。"
 
-DEMO_DATA_NOTICE = (
-    "DEMO DATA — 当前显示的是演示数据集，不是实时行情。真实行情数据源尚未接入；"
-    "接入后本页会自动显示真实来源与更新时间。"
+AI_UNAVAILABLE_NOTICE = (
+    "AI 分析暂未开通：尚未配置大模型服务。开通后，这里会显示 AI 总结、主要风险与"
+    "看多/看空因素。"
 )
+
+DEMO_DATA_NOTICE = (
+    "DEMO DATA — 当前显示的是演示数据集，不是实时行情。在左侧「数据源」切换到"
+    "「实时行情」即可查看真实数据。"
+)
+
+
+def humanize_volume(shares: float) -> str:
+    """成交量, A股惯例以「手」计 (1手 = 100股). Pure formatting — the underlying share count is
+    未经改动 and stays available on the view for anyone who wants the raw number."""
+    if shares < 0:
+        raise ValueError(f"FAIL CLOSED: negative volume {shares}.")
+    lots = shares / 100.0
+    if lots >= 1e4:
+        return f"{lots / 1e4:.2f}万手"
+    return f"{lots:,.0f}手"
+
+
+def humanize_amount(yuan: float) -> str:
+    """成交额, in 亿元/万元 as every consumer terminal displays it."""
+    if yuan < 0:
+        raise ValueError(f"FAIL CLOSED: negative amount {yuan}.")
+    if yuan >= 1e8:
+        return f"{yuan / 1e8:.2f}亿元"
+    if yuan >= 1e4:
+        return f"{yuan / 1e4:.2f}万元"
+    return f"{yuan:,.0f}元"
+
+
+def summarize_technicals(readings) -> str:
+    """A neutral tally of the panel's readings ("偏强 2 项 · 中性 3 项"), first-seen order.
+    Descriptive only — it counts labels that already exist and never produces a verdict,
+    recommendation or score of its own."""
+    counts: Dict[str, int] = {}
+    missing = 0
+    for reading in readings:
+        if not reading.available:
+            missing += 1
+            continue
+        counts[reading.plain_reading] = counts.get(reading.plain_reading, 0) + 1
+    parts = [f"{label} {n} 项" for label, n in counts.items()]
+    if missing:
+        parts.append(f"{NOT_AVAILABLE_TEXT} {missing} 项")
+    return "　·　".join(parts) if parts else f"{NOT_AVAILABLE_TEXT}"
+
+
+def is_ai_available() -> bool:
+    """True only when a real LLM credential is configured. The Terminal shows an honest
+    「暂未开通」 notice instead of offering a consumer a placeholder narrative — the
+    labelled-synthetic path remains available in Research mode, untouched."""
+    return analyst.get_llm_provider_status().status == analyst.LLM_AVAILABLE_STATUS
 
 
 class TerminalError(Exception):
