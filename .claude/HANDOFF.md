@@ -1,6 +1,6 @@
 # Agent Handoff
 
-_Synchronized to HEAD `3deffa5` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `43dd721` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > `.claude/` files > Conversation History._
 
 ## Handoff Status
@@ -9,8 +9,9 @@ READY
 ## Current Track
 **AI Quant Terminal** — consumer repositioning per the CEO Decision on
 `AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` (`d4a2d70`). **Terminal is the default
-mode, Research mode is retained unchanged.** Steps **T1, T2, T3, T5 delivered — the Terminal serves REAL live quotes by default.** T4 (news
-source) and T6 (LLM credential) remain gated on CEO decisions.
+mode, Research mode is retained unchanged.** Steps **T1, T2, T3, T3.5, T5 delivered — REAL live quotes AND all six technical indicators
+computed from REAL historical bars.** T4 (news source) and T6 (LLM credential) remain gated on
+CEO decisions.
 
 The prior **AI Quant Research Analyst** track sits complete beneath it — no phase number assigned
 (standing CEO instruction).
@@ -23,10 +24,22 @@ written.**
 
 ## Current Objective
 None in flight. Terminal steps **T5 (`5e3c701`), T1 (`2c6bc11`), T2 (`a55d0ae`) and T3
-(`3deffa5`)** are delivered, tested and pushed. **Real-time quotes are live and verified against
-the public endpoint.** **STOP — await CEO Review.**
+(`3deffa5`)** are delivered, tested and pushed, plus **T3.5 (`43dd721`)**. **Real-time quotes and real historical
+K-line are both live and verified against public endpoints.** **STOP — await CEO Review.**
 
 ## Completed
+- **Real historical K-line + real technical indicators** (`43dd721`, T3.5) —
+  `history_provider.py` (ABC + demo) and `tencent_history_provider.py` (real), stdlib-only,
+  **zero new dependencies**. A **series** capability was needed because
+  `fetch_market_data(symbol, trade_date)` returns one bar per call. Source chosen on measurement
+  **and data quality**: Tencent 4/4 **forward-adjusted** → chosen; Sina 4/4 but **unadjusted** →
+  rejected because 600519 has a corporate action in the window (raw 1326.000 vs adjusted
+  1297.976) that would visibly distort MA/RSI/MACD; East Money 3/4 dropped → rejected. The
+  positional layout was **verified across 105 live bars before the parser was written** and its
+  invariants re-checked per row. New `VENDOR_FORWARD_ADJUSTED` basis (adjusted, but as-of-today,
+  **not** PIT — correct for display, **wrong for backtesting**), declared by the provider. Every
+  bar passes `DataTrustGate.validate_market_data`. **REAL 6/6 indicators from 121 bars; DEMO 5/6
+  with MACD honestly short.** 31 tests.
 - **Real-time A-share quotes** (`3deffa5`, T3) — `src/data/providers/sina_quote_provider.py`,
   stdlib-only (`urllib` + GBK), **zero new dependencies**, no key/account/purchase. Source picked
   by live measurement: Sina 4/4, Tencent 4/4, **East Money 2/4 (dropped sockets, IP throttling)
@@ -184,14 +197,14 @@ the public endpoint.** **STOP — await CEO Review.**
    exist"; surfacing that class remains the AI's narrative contract (§6).
 
 ## Current Test Baseline
-- **Passed**: 863
+- **Passed**: 895
 - **Skipped**: 13 (11 TuShare live-provider tests; 1 real-Gemini E2E with no credential; 1
   real-OpenAI E2E blocked on account quota — items 1 and 2 under Not Completed)
 - **Failures**: 0
 - **Test Command**: `PYTHONPATH=. ./venv/bin/pytest`
 
 ## Git Status
-- **Branch**: `main`; **Working Tree**: clean; **HEAD**: `3deffa5`.
+- **Branch**: `main`; **Working Tree**: clean; **HEAD**: `43dd721`.
 - **`origin/main` is in sync with local `main`** (pushed under explicit CEO authorization for
   this directive).
 - Standing rule unchanged: never push without explicit Product Owner approval.
@@ -215,6 +228,8 @@ the public endpoint.** **STOP — await CEO Review.**
   page may call into). Imports nothing from `src/llm/`.
 - `src/data/contracts/quote.py`, `src/data/providers/quote_provider.py` — the T1 quote layer.
 - `src/data/providers/sina_quote_provider.py` — the REAL live quote source (T3).
+- `src/data/providers/history_provider.py`, `tencent_history_provider.py` — the REAL daily K-line
+  series feeding the technical panel (T3.5).
 - `AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` — the approved Terminal design.
 - `src/app/streamlit_app.py` — the ONLY file permitted to import Streamlit.
 - `src/quant/evidence/evidence_item.py`, `src/quant/technical/indicators.py` — Evidence + indicators.
@@ -235,9 +250,17 @@ the public endpoint.** **STOP — await CEO Review.**
   `reproducibility_scope` field is validated in `__post_init__`, so a caller cannot persist a
   stronger claim. Do not add one.
 - **Terminal is the default mode; Research mode must stay reachable and unchanged.**
-- **REAL and DEMO must never appear on the same page.** In REAL mode the technical and
-  fundamental panels report `暂无数据` because no real historical/fundamental feed is wired —
-  do NOT "improve" this by computing indicators from demo history beside a live price.
+- **REAL and DEMO must never appear on the same page.** REAL and DEMO run the **identical**
+  computation path and differ only in provider; the **fundamental** panel is still 暂无数据 in
+  REAL mode because no real fundamental feed is wired — do NOT "improve" that by showing demo
+  fundamentals beside a live price.
+- **Indicator availability is decided PER INDICATOR**, by each function's own warm-up. Do not
+  reintroduce a blanket threshold: a single MACD-sized gate hides five computable readings.
+- **`VENDOR_FORWARD_ADJUSTED` is not PIT.** The history series is re-adjusted as of today, so it
+  is correct for displaying current indicators and **wrong for backtesting**. It must never reach
+  `BacktestEngine`, Replay or any certified research path.
+- **The history row layout is positional and undocumented.** Its high==max / low==min invariants
+  are re-checked on every row on purpose — do not remove that check to "simplify" the parser.
 - **There is no automatic REAL→DEMO fallback, and there must never be one.** A failed live fetch
   shows 暂无数据 + reason; a failed live search returns nothing.
 - **The live quote source is public but UNDOCUMENTED and UNLICENSED** — no SLA, delayed quotes,
@@ -324,12 +347,11 @@ the public endpoint.** **STOP — await CEO Review.**
   absent and requires its own directive.
 
 ## Exact Next Action
-**Await CEO Review of T3.** No further Terminal work is authorized. Outstanding, each needing a
+**Await CEO Review of T3.5.** No further Terminal work is authorized. Outstanding, each needing a
 CEO decision rather than code:
-- **Licensed quote feed** — whether to procure one before any commercial use; the current source
-  is unlicensed with no SLA.
-- **Real historical bar series** — a separate feed from the quote endpoint, and what the
-  REAL-mode technical panels are waiting on.
+- **Licensed data feeds** — whether to procure them before any commercial use; both the quote and
+  history sources are public, undocumented and unlicensed, with no SLA.
+- **Real fundamental source** — the last Terminal panel still reporting 暂无数据 in REAL mode.
 - **T4** news source.
 - **T6** LLM credential/quota (`GEMINI_API_KEY` unset; OpenAI account has no quota).
 Also outstanding: cloud deployment needs the CEO's Streamlit account authorization
@@ -351,7 +373,8 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
 - Do NOT delete the Golden Dataset — it is the approved DEMO DATA source.
 - Do NOT select or purchase a data vendor without an explicit CEO directive.
 - Do NOT let REAL and DEMO data appear on one page, and do NOT add a REAL→DEMO fallback.
-- Do NOT describe the current quote source as licensed or SLA-backed.
+- Do NOT describe the current quote or history sources as licensed or SLA-backed.
+- Do NOT let the forward-adjusted history series reach any backtest, replay or PIT path.
 - Do NOT claim either real end-to-end API verification passed until it actually does.
 - Do NOT broaden the live tests' narrow quota/credential skip to cover other failure categories.
 - Do NOT put an API key in a URL, a log, a config file, or any persisted artifact.
@@ -362,5 +385,5 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
 
 ## Validation Required
 - `git status` — working tree clean.
-- `PYTHONPATH=. ./venv/bin/pytest` — **863 passed, 13 skipped, 0 failed**.
+- `PYTHONPATH=. ./venv/bin/pytest` — **895 passed, 13 skipped, 0 failed**.
 - `git diff --check` — clean.

@@ -1,14 +1,15 @@
 # Current Project State
 
-_Synchronized to HEAD `3deffa5` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `43dd721` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > this file > Conversation History._
 
 ## Current Track
 **AI Quant Terminal** — product repositioning from a quant research/audit system to a consumer
 stock-analysis terminal, per the CEO Decision on
 `AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` (`d4a2d70`). **Terminal is the default
-mode; Research mode is retained unchanged.** Steps **T1, T2, T3 and T5 are delivered — the Terminal now serves REAL live quotes by
-default.** T4 (news) and T6 (real AI narrative) remain vendor/credential-gated.
+mode; Research mode is retained unchanged.** Steps **T1, T2, T3, T3.5 and T5 are delivered — the Terminal serves REAL live quotes AND
+computes all six technical indicators from REAL historical bars.** T4 (news) and T6 (real AI
+narrative) remain vendor/credential-gated.
 
 The preceding **AI Quant Research Analyst** track remains complete and untouched beneath it —
 evidence-grounded LLM research synthesis.
@@ -125,6 +126,41 @@ deterministic fakes are retained for testing and for the labelled-synthetic path
     synthetic narrative**. UI gains an explicit narrative-source choice.
   - 41 new tests (offline, against a local 127.0.0.1 HTTP stub — deterministic, free,
     network-free). All existing Fake Provider tests retained unchanged.
+- **Real historical K-line + real-data technical indicators** (`43dd721`, step T3.5) — REAL mode
+  now computes **all six** indicators from a real bar series, through
+  API → Adapter → Contract → Validation → Application → Technical Indicators → UI.
+  - **Audit finding**: `UnifiedDataProvider.fetch_market_data(symbol, trade_date)` returns ONE
+    bar for ONE date — a 120-bar series would be 120 round-trips. A **series capability** was
+    needed, not a new caller of the per-date one.
+  - **Source chosen on measurement AND data quality**: Tencent `web.ifzq.gtimg.cn` **4/4,
+    forward-adjusted** → chosen; Sina `getKLineData` **4/4 but UNADJUSTED** → rejected;
+    East Money **3/4, dropped sockets** → rejected. Sina's rejection was **measured, not
+    assumed**: 600519 has a corporate action inside the 120-day window (raw 1326.000 vs adjusted
+    1297.976 on 2026-05-29), so raw prices would have produced visibly wrong MA/RSI/MACD.
+  - The positional row layout `[date, open, close, high, low, volume]` was **verified across 105
+    live distinct-price bars** (high==max, low==min) *before* the parser was written, and those
+    invariants are **re-checked on every row at runtime** — a silent vendor reordering becomes a
+    refusal, not wrong prices.
+  - **New price basis `VENDOR_FORWARD_ADJUSTED`** (additive to `DerivedDataContract` +
+    `DataTrustGate`): the series is adjusted for corporate actions but re-adjusted **as of
+    today**, not point-in-time. **Correct for current indicators, wrong for backtesting.** The
+    provider **declares its own basis**; the caller never guesses. Unreachable from any certified
+    research path.
+  - **Fail-closed, nothing substituted**: an unadjusted-only payload is **refused** rather than
+    falling back to raw; transposed field order, unknown code, empty series, short row,
+    non-numeric field, bad date, non-positive close, malformed JSON, HTTP error and unreachable
+    host each raise; one incoherent bar refuses the **whole series** rather than being repaired
+    or quietly dropped. Volume converted 手→shares (×100), vendor lot rounding (~0.001%) disclosed.
+  - **REAL and DEMO run the identical computation path**, differing only in provider. **No
+    REAL→DEMO fallback anywhere.** Every bar passes `DataTrustGate.validate_market_data` before
+    reaching an indicator.
+  - **Self-review caught a regression**: an initial blanket 34-bar gate made DEMO report 暂无数据
+    for all six indicators when five were computable from its 25 bars. Availability is now decided
+    **per indicator** — REAL 6/6 from 121 bars, DEMO 5/6 with MACD honestly short.
+  - UI gains a **K 线历史** chart (closes, bar count, date range, source).
+  - **VERIFIED**: live test ran (did not skip); browser showed 平安银行 11.56 +1.31% @ 10:46:03,
+    a 121-bar chart (2026-03-02 → 2026-08-24) from `tencent_kline`, and MA 11.32 / RSI 55.26 /
+    MACD 0.1151 / 量比 0.53 / 波动率 17.9% / 动量 +4.05% — all from real bars.
 - **Real-time A-share quotes** (`3deffa5`, step T3) — **the Terminal shows REAL DATA by
   default**, through API → Adapter → Contract → Validation → Application → UI. No raw vendor
   data reaches the UI.
@@ -144,11 +180,10 @@ deterministic fakes are retained for testing and for the labelled-synthetic path
     timestamp, HTTP error or unreachable endpoint each raise. An unmappable symbol is refused,
     never guessed — guessing returns a real quote for the **wrong security**.
   - A 3-second cache keeps a page reload from becoming a burst against a free endpoint.
-  - **REAL and DEMO are never mixed.** The quote endpoint serves a quote, not a bar series, so in
-    REAL mode the technical and fundamental panels report `暂无数据` with the reason
-    「不会用演示数据代替真实数据」 — every row still present. **There is no automatic
-    REAL→DEMO fallback anywhere**: a failed fetch shows 暂无数据 + reason; a failed live search
-    returns nothing rather than answering from the demo universe.
+  - **REAL and DEMO are never mixed.** **There is no automatic REAL→DEMO fallback anywhere**:
+    a failed fetch shows 暂无数据 + reason; a failed live search returns nothing rather than
+    answering from the demo universe. (Technical indicators were 暂无数据 in REAL mode until
+    T3.5 wired a real bar series; **fundamentals still are**, with the reason stated.)
   - UI: 数据源 selector (实时行情 default / 演示数据), **REAL DATA / DEMO DATA** badge on every
     card, plus 数据状态 / 数据更新时间 / 数据来源 / 交易状态. Search accepts a bare 6-digit code
     resolved live, so any listed A-share is reachable.
@@ -326,7 +361,7 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 Nothing. Awaiting the next CEO directive.
 
 ## Tests
-- **Passed**: 863
+- **Passed**: 895
 - **Skipped**: 13 (11 TuShare live-provider tests when `TUSHARE_TOKEN` is absent; 1 real-OpenAI
   E2E blocked on account quota; 1 real-Gemini E2E blocked on an absent `GEMINI_API_KEY` — see
   Known Issues)
@@ -336,7 +371,8 @@ Nothing. Awaiting the next CEO directive.
 ## Git Status
 - **Branch**: `main`
 - **Working Tree**: Clean.
-- **HEAD**: `3deffa5` (`feat: real-time A-share quotes via Sina public endpoint (T3)`)
+- **HEAD**: `43dd721` (`feat: real historical K-line and real-data technical indicators
+  (T3.5)`)
 - **`origin/main` is in sync with local `main`.** Pushes are made only under an explicit CEO
   directive authorizing them (as with Step 5 and the §7 layer).
 - Standing rule unchanged: **never push without explicit Product Owner approval.**
@@ -387,10 +423,10 @@ Nothing. Awaiting the next CEO directive.
 delivered, tested and pushed. The remaining Terminal steps are gated on decisions only the CEO
 can make:
 
-- **T3 — DONE** (`3deffa5`), via a free public endpoint. Two follow-ups belong to the CEO:
-  (a) whether to procure a **licensed** feed before any commercial use — the current source is
-  unlicensed and has no SLA; (b) a **real historical bar series**, which is a separate feed from
-  the quote endpoint and is what the REAL-mode technical panels are waiting on.
+- **T3 + T3.5 — DONE** (`3deffa5`, `43dd721`), via free public endpoints. Outstanding CEO
+  decisions: (a) whether to procure a **licensed** feed before any commercial use — both current
+  sources are unlicensed, undocumented and without SLA; (b) a **real fundamental source**, the
+  last panel still reporting 暂无数据 in REAL mode.
 - **T4 — real news provider**: blocked on a source decision. Nothing is wired.
 - **T6 — real AI narrative**: blocked on an LLM credential/quota.
 
