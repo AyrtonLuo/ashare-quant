@@ -1,6 +1,6 @@
 # Current Project State
 
-_Synchronized to HEAD `183c4b1` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `c24840b` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > this file > Conversation History._
 
 ## Current Track
@@ -416,7 +416,15 @@ Nothing. Awaiting the next CEO directive.
   call; the Application Layer builds its own provider and makes ADDITIONAL live requests, so
   a transient vendor drop was reported as a FAILURE rather than a skip. All three now skip on
   an unreachable provider with **no assertion weakened**.
-- **Passed**: 974
+- **Consumer UI polish** (`c24840b`): 同花顺式 layout — search + quote card lead the page,
+  five sections in tabs, 数据源 in the sidebar. **红涨绿跌** via `delta_color="inverse"`
+  (Streamlit defaults to the US green-up convention); 成交量/成交额 humanized to 万手/亿元 by
+  pure app-layer formatters. AI tab shows an honest 「暂未开通」 notice when no LLM credential
+  exists (`is_ai_available()`), instead of offering a consumer a placeholder narrative — the
+  labelled-synthetic path stays in Research mode. Two honesty bugs fixed in passing: a
+  doubled DEMO badge, and a notice still claiming no real quote source was wired (false
+  since T3).
+- **Passed**: 998
 - **Skipped**: 13 (11 TuShare live-provider tests when `TUSHARE_TOKEN` is absent; 1 real-OpenAI
   E2E blocked on account quota; 1 real-Gemini E2E blocked on an absent `GEMINI_API_KEY` — see
   Known Issues)

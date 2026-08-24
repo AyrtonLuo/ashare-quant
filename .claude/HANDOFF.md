@@ -1,6 +1,6 @@
 # Agent Handoff
 
-_Synchronized to HEAD `183c4b1` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `c24840b` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > `.claude/` files > Conversation History._
 
 ## Handoff Status
@@ -218,7 +218,7 @@ live and verified against public endpoints.** **STOP — await CEO Review.**
    exist"; surfacing that class remains the AI's narrative contract (§6).
 
 ## Current Test Baseline
-- **Passed**: 974
+- **Passed**: 998
 - **Skipped**: 13 (11 TuShare live-provider tests; 1 real-Gemini E2E with no credential; 1
   real-OpenAI E2E blocked on account quota — items 1 and 2 under Not Completed)
 - **Failures**: 0
@@ -288,6 +288,7 @@ live and verified against public endpoints.** **STOP — await CEO Review.**
   queried that symbol — an item that does not name the company must be excluded, not attributed.
 - **DEMO mode has no news source and must say so.** Never synthesise headlines, and never let a
   REAL failure fall back to a DEMO answer.
+- **The Terminal's consumer conventions are deliberate**: 红涨绿跌 via `delta_color="inverse"`, volume in 万手, amounts in 亿元, sections in tabs, 数据源 in the sidebar, and an AI tab that says 「暂未开通」 when no credential exists rather than generating placeholder text for a consumer. Do not "simplify" these back.
 - **A live test must SKIP on an unreachable vendor, never fail.** Every call that reaches a public endpoint needs that guard — including the *second* call an Application-Layer helper makes, which is what once reported a vendor hiccup as a regression (`183c4b1`). Never weaken the assertions themselves to achieve this.
 - **PB (and anything like it) must be vendor-reported, never derived.** A derived PB was wrong
   for the dual-listed 000333; the vendor's own figure is the only safe one.
@@ -433,5 +434,5 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
 
 ## Validation Required
 - `git status` — working tree clean.
-- `PYTHONPATH=. ./venv/bin/pytest` — **974 passed, 13 skipped, 0 failed**.
+- `PYTHONPATH=. ./venv/bin/pytest` — **998 passed, 13 skipped, 0 failed**.
 - `git diff --check` — clean.
