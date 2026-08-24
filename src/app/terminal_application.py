@@ -34,7 +34,13 @@ from src.app.golden_dataset_seed import (
 from src.app import research_analyst_application as analyst
 from src.data.contracts.quote import QuoteContract
 from src.data.providers.base import ProviderError
+from src.data.providers.history_provider import (
+    MIN_BARS_FOR_FULL_TECHNICALS,
+    GoldenHistoryProvider,
+    MarketHistoryProvider,
+)
 from src.data.providers.quote_provider import GoldenQuoteProvider, QuoteProvider
+from src.data.providers.tencent_history_provider import TencentHistoryProvider
 from src.data.providers.sina_quote_provider import (
     SINA_QUOTE_PROVIDER_ID,
     SinaQuoteProvider,
@@ -60,16 +66,16 @@ DEFAULT_QUOTE_SOURCE = QUOTE_SOURCE_REAL
 REAL_DATA_STATUS = "REAL DATA"
 DEMO_DATA_STATUS = "DEMO DATA"
 
-# Real quotes are live; the historical bar series behind the indicators is NOT yet wired to a
-# real source (that is a separate data feed from the quote endpoint). Rather than compute
-# indicators from demo history and display them beside a real price -- which would mix REAL and
-# DEMO on one page -- those panels report 暂无数据 with this reason.
-REAL_MODE_NO_HISTORY_REASON = (
-    "实时模式下尚未接入真实历史行情序列，因此不展示由历史数据计算的指标；"
-    "不会用演示数据代替真实数据。"
-)
 REAL_MODE_NO_FUNDAMENTAL_REASON = (
     "实时模式下尚未接入真实财务数据源；不会用演示数据代替真实数据。"
+)
+
+# How many daily bars the Terminal asks for. Comfortably above MACD's 34-bar warm-up so several
+# valid points exist, without pulling years of history a consumer page never shows.
+HISTORY_BAR_LIMIT = 120
+
+INSUFFICIENT_HISTORY_REASON = (
+    "该股票可获取的历史交易日不足，无法计算该指标；不会用其他数据补齐。"
 )
 
 DISCLAIMER = "本页面仅提供信息与分析，不构成投资建议。"
@@ -148,6 +154,7 @@ class AIAnalysisView:
 @dataclass(frozen=True)
 class TerminalStockView:
     quote: QuoteView
+    price_history: "PriceHistoryView"
     technicals: Tuple[TechnicalReadingView, ...]
     fundamentals: Tuple[FundamentalRowView, ...]
     news: Tuple[NewsItemView, ...]
@@ -174,6 +181,23 @@ def _quote_provider(source: Optional[str] = None) -> QuoteProvider:
         for contract in golden_market_data():
             bars_by_symbol.setdefault(contract.symbol, []).append(contract)
         return GoldenQuoteProvider(bars_by_symbol, display_names=dict(SYMBOL_DISPLAY_NAMES))
+    raise TerminalError(
+        f"未知的数据源模式 '{mode}'，应为 {QUOTE_SOURCE_REAL} 或 {QUOTE_SOURCE_DEMO}。"
+    )
+
+
+def _history_provider(source: Optional[str] = None) -> MarketHistoryProvider:
+    """The single seam for the daily-bar series, mirroring `_quote_provider`. As with quotes
+    there is NO automatic REAL→DEMO fallback: if the live history cannot be fetched, the
+    technical panels say 暂无数据 with the reason."""
+    mode = source or DEFAULT_QUOTE_SOURCE
+    if mode == QUOTE_SOURCE_REAL:
+        return TencentHistoryProvider()
+    if mode == QUOTE_SOURCE_DEMO:
+        bars_by_symbol: Dict[str, List[Any]] = {}
+        for contract in golden_market_data():
+            bars_by_symbol.setdefault(contract.symbol, []).append(contract)
+        return GoldenHistoryProvider(bars_by_symbol)
     raise TerminalError(
         f"未知的数据源模式 '{mode}'，应为 {QUOTE_SOURCE_REAL} 或 {QUOTE_SOURCE_DEMO}。"
     )
@@ -292,35 +316,97 @@ _TECHNICAL_PANEL_NAMES = (
 )
 
 
+@dataclass(frozen=True)
+class PriceHistoryView:
+    """The K-line history behind the indicators, in the plainest possible shape for charting."""
+    dates: Tuple[str, ...]
+    closes: Tuple[float, ...]
+    bar_count: int
+    data_source: str
+    is_demo: bool
+    unavailable_reason: Optional[str] = None
+
+
+def _validated_bars(symbol: str, source: Optional[str] = None):
+    """Fetches the daily series and puts EVERY bar through DataTrustGate before it can reach an
+    indicator. A bar that fails validation is dropped and counted — never silently repaired, and
+    never replaced from another source.
+
+    Returns (bars, provider, rejected_count) or raises TerminalError.
+    """
+    provider = _history_provider(source)
+    try:
+        raw_bars = provider.get_daily_bars(symbol, limit=HISTORY_BAR_LIMIT)
+    except ProviderError as e:
+        raise TerminalError(str(e)) from e
+
+    bars, rejected = [], 0
+    for bar in raw_bars:
+        is_valid, _errors = DataTrustGate.validate_market_data(bar)
+        if is_valid:
+            bars.append(bar)
+        else:
+            rejected += 1
+    return bars, provider, rejected
+
+
+def get_price_history(symbol: str, source: Optional[str] = None) -> PriceHistoryView:
+    mode = source or DEFAULT_QUOTE_SOURCE
+    is_demo = mode != QUOTE_SOURCE_REAL
+    try:
+        bars, provider, _rejected = _validated_bars(symbol, mode)
+    except TerminalError as e:
+        return PriceHistoryView(
+            dates=(), closes=(), bar_count=0,
+            data_source=DEMO_DATA_STATUS if is_demo else REAL_DATA_STATUS,
+            is_demo=is_demo, unavailable_reason=str(e),
+        )
+    label = ("演示数据集 (DEMO DATA)" if is_demo
+             else f"实时历史行情源 ({provider.provider_id})")
+    return PriceHistoryView(
+        dates=tuple(b.trading_date for b in bars),
+        closes=tuple(b.close_price for b in bars),
+        bar_count=len(bars), data_source=label, is_demo=is_demo,
+    )
+
+
 def get_technical_views(symbol: str, source: Optional[str] = None
                         ) -> List[TechnicalReadingView]:
-    """All readings are computed locally by the SHIPPED indicator functions — never taken from a
-    third party's own reported indicator value.
+    """All readings are computed locally by the SHIPPED indicator functions from a validated
+    daily-bar series — never taken from a third party's own reported indicator value.
 
-    In REAL mode they are reported as 暂无数据: the live quote endpoint serves a quote, not a
-    historical bar series, and computing indicators from demo history to sit beside a real price
-    would put REAL and DEMO data on the same page.
+    REAL and DEMO run the IDENTICAL computation path and differ only in which provider supplies
+    the bars, so a reading can never be silently produced from the wrong source. If the series is
+    unavailable or too short, every row reports 暂无数据 with the reason; nothing is padded.
     """
-    if (source or DEFAULT_QUOTE_SOURCE) == QUOTE_SOURCE_REAL:
-        return [_unavailable(name, REAL_MODE_NO_HISTORY_REASON)
+    mode = source or DEFAULT_QUOTE_SOURCE
+    try:
+        bars, provider, _rejected = _validated_bars(symbol, mode)
+    except TerminalError as e:
+        return [_unavailable(name, str(e)) for name in _TECHNICAL_PANEL_NAMES]
+
+    if not bars:
+        return [_unavailable(name, INSUFFICIENT_HISTORY_REASON)
                 for name in _TECHNICAL_PANEL_NAMES]
 
-    bars = sorted(
-        [c for c in golden_market_data() if c.symbol == symbol],
-        key=lambda c: c.trading_date,
+    # Availability is decided PER INDICATOR, not by one blanket threshold: each has its own
+    # warm-up (MACD needs 34 bars, MA20 needs 20, RSI14 needs 15). A single gate at MACD's
+    # requirement would hide five perfectly computable readings whenever the series is short.
+    short_history = (
+        f"{INSUFFICIENT_HISTORY_REASON}（仅 {len(bars)} 个交易日，"
+        f"该指标需要更长的历史）"
     )
-    if not bars:
-        raise TerminalError(f"没有可用于 '{symbol}' 的行情序列。")
 
     dates = [b.trading_date for b in bars]
     prices = [b.close_price for b in bars]
     volumes = [b.volume for b in bars]
-    basis = dict(input_price_basis="RAW", data_origin=GOLDEN_DATA_ORIGIN)
-    short_history = "历史数据不足，指标尚未满足计算所需的最小周期。"
+    # The price basis is taken from the PROVIDER, never assumed by this layer — mislabelling it
+    # would attach a false adjustment claim to every indicator computed here.
+    basis = dict(input_price_basis=provider.input_price_basis,
+                 data_origin=bars[-1].data_origin)
 
     views: List[TechnicalReadingView] = []
 
-    # --- 趋势 (MA)
     ma = _latest_valid(compute_moving_average(symbol, dates, prices, window=20, **basis))
     if ma is None:
         views.append(_unavailable("趋势 (20日均线)", short_history))
@@ -331,11 +417,10 @@ def get_technical_views(symbol: str, source: Optional[str] = None
             plain_reading="偏强" if above else "偏弱",
             explanation=("最新价高于20日均线，中期趋势向上。" if above
                          else "最新价低于20日均线，中期趋势偏弱。"),
-            detail=f"最新价 {prices[-1]:.2f}，20日均线 {ma.calculated_value:.2f}",
+            detail=f"最新收盘 {prices[-1]:.2f}，20日均线 {ma.calculated_value:.2f}",
             available=True,
         ))
 
-    # --- RSI
     rsi = _latest_valid(compute_rsi(symbol, dates, prices, window=14, **basis))
     if rsi is None:
         views.append(_unavailable("RSI (相对强弱)", short_history))
@@ -346,7 +431,6 @@ def get_technical_views(symbol: str, source: Optional[str] = None
             detail=f"RSI(14) = {rsi.calculated_value:.2f}", available=True,
         ))
 
-    # --- MACD
     macd = _latest_valid(compute_macd(symbol, dates, prices, **basis))
     if macd is None:
         views.append(_unavailable("MACD (动能)", short_history))
@@ -363,9 +447,8 @@ def get_technical_views(symbol: str, source: Optional[str] = None
             available=True,
         ))
 
-    # --- 成交量
-    volume = _latest_valid(compute_volume_indicator(symbol, dates, volumes, window=20,
-                                                    data_origin=GOLDEN_DATA_ORIGIN))
+    volume = _latest_valid(compute_volume_indicator(
+        symbol, dates, volumes, window=20, data_origin=bars[-1].data_origin))
     if volume is None:
         views.append(_unavailable("成交量", short_history))
     else:
@@ -384,7 +467,6 @@ def get_technical_views(symbol: str, source: Optional[str] = None
                 detail=f"最新成交量为20日均量的 {ratio:.2f} 倍", available=True,
             ))
 
-    # --- 波动率
     vol = _latest_valid(compute_realized_volatility(symbol, dates, prices, window=20, **basis))
     if vol is None:
         views.append(_unavailable("波动率", short_history))
@@ -401,7 +483,6 @@ def get_technical_views(symbol: str, source: Optional[str] = None
             detail=f"年化波动率 {annualized * 100:.1f}%", available=True,
         ))
 
-    # --- 动量
     momentum = _latest_valid(compute_momentum_indicator(symbol, dates, prices, window=20, **basis))
     if momentum is None:
         views.append(_unavailable("动量 (20日涨跌)", short_history))
@@ -504,6 +585,7 @@ def get_stock_view(symbol: str, source: Optional[str] = None) -> TerminalStockVi
     news, news_reason = get_news_views(symbol)
     return TerminalStockView(
         quote=get_quote_view(symbol, mode),
+        price_history=get_price_history(symbol, mode),
         technicals=tuple(get_technical_views(symbol, mode)),
         fundamentals=tuple(get_fundamental_views(symbol, mode)),
         news=tuple(news),

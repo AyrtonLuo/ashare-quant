@@ -276,6 +276,21 @@ def _render_terminal_quote(quote) -> None:
     )
 
 
+def _render_terminal_price_history(history) -> None:
+    st.markdown("### K 线历史（收盘价）")
+    if history.unavailable_reason or not history.dates:
+        st.info(
+            f"{terminal.NOT_AVAILABLE_TEXT} — {history.unavailable_reason or '没有可用的历史行情。'}",
+            icon="ℹ️",
+        )
+        return
+    st.line_chart({"收盘价": list(history.closes)})
+    st.caption(
+        f"共 {history.bar_count} 个交易日　·　{history.dates[0]} 至 {history.dates[-1]}"
+        f"　·　数据来源：{history.data_source}"
+    )
+
+
 def _render_terminal_technicals(readings) -> None:
     st.markdown("### 技术面")
     for reading in readings:
@@ -380,6 +395,8 @@ if mode == "Terminal":
         else:
             st.caption("点击上方按钮生成 AI 总结、风险与看多/看空分析。")
 
+        st.markdown("---")
+        _render_terminal_price_history(stock.price_history)
         st.markdown("---")
         _render_terminal_technicals(stock.technicals)
         st.markdown("---")

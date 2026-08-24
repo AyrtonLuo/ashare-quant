@@ -83,7 +83,9 @@ class DataTrustGate:
             errors.append("warm_up_satisfied=False must not be reported as quality_status='VALID'.")
         if contract.effective_date is None:
             errors.append("effective_date is missing — a technical indicator value must state which date it describes.")
-        if contract.input_price_basis not in ("PIT_ADJUSTED", "RAW", "NOT_APPLICABLE"):
+        if contract.input_price_basis not in (
+            "PIT_ADJUSTED", "RAW", "NOT_APPLICABLE", "VENDOR_FORWARD_ADJUSTED",
+        ):
             errors.append(f"Unknown input_price_basis: {contract.input_price_basis}")
 
         is_valid = len(errors) == 0

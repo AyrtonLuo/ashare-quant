@@ -240,15 +240,23 @@ def test_an_unknown_source_mode_fails_closed():
         terminal.get_quote_view(SYMBOL, "SOMETHING_ELSE")
 
 
-def test_real_mode_never_shows_demo_derived_indicators():
-    """The live endpoint serves a quote, not a bar series. Computing indicators from demo history
-    beside a real price would put REAL and DEMO on one page."""
-    readings = terminal.get_technical_views(SYMBOL, terminal.QUOTE_SOURCE_REAL)
-    assert len(readings) == len(terminal._TECHNICAL_PANEL_NAMES)
-    for reading in readings:
-        assert reading.available is False
-        assert reading.plain_reading == terminal.NOT_AVAILABLE_TEXT
-        assert "不会用演示数据代替真实数据" in reading.explanation
+def test_each_mode_draws_its_bars_from_its_own_provider():
+    """Superseded by T3.5, which gave REAL mode a real bar series. The invariant under test is
+    now stronger AND network-free: the two modes resolve to DIFFERENT providers, so a REAL-mode
+    indicator can never be computed from demo bars."""
+    from src.data.providers.history_provider import GoldenHistoryProvider
+    from src.data.providers.tencent_history_provider import TencentHistoryProvider
+
+    real = terminal._history_provider(terminal.QUOTE_SOURCE_REAL)
+    demo = terminal._history_provider(terminal.QUOTE_SOURCE_DEMO)
+    assert isinstance(real, TencentHistoryProvider)
+    assert isinstance(demo, GoldenHistoryProvider)
+    assert real.provider_id != demo.provider_id
+
+
+def test_an_unknown_source_mode_has_no_history_provider():
+    with pytest.raises(terminal.TerminalError, match="未知的数据源模式"):
+        terminal._history_provider("SOMETHING_ELSE")
 
 
 def test_real_mode_never_shows_demo_fundamentals():

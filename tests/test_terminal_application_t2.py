@@ -125,7 +125,10 @@ def test_every_expected_indicator_appears_even_when_it_cannot_be_computed():
     macd = readings["MACD (动能)"]
     if not macd.available:
         assert macd.plain_reading == terminal.NOT_AVAILABLE_TEXT
-        assert "历史数据不足" in macd.explanation
+        # Wording tightened in T3.5 to name the actual bar count and to state that nothing is
+        # substituted; the guarantee under test is unchanged.
+        assert "历史交易日不足" in macd.explanation
+        assert "不会用其他数据补齐" in macd.explanation
 
 
 def test_technical_readings_are_deterministic():

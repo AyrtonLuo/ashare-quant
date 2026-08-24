@@ -50,7 +50,13 @@ class DerivedDataContract:
         # "NOT_APPLICABLE" was added for volume-based indicators (Terminal step T5): traded
         # volume is not a price, so it has no price basis at all. Labelling it "RAW" would
         # assert a price basis it does not have; the sentinel states the truth instead.
-        if self.input_price_basis not in ("PIT_ADJUSTED", "RAW", "NOT_APPLICABLE"):
+        # "VENDOR_FORWARD_ADJUSTED" (Terminal T3.5) is a vendor's qfq series: adjusted for
+        # corporate actions, but re-adjusted as of today rather than point-in-time. It is neither
+        # RAW nor PIT_ADJUSTED, and labelling it as either would be false — it is correct for
+        # displaying current indicators and must never be used for backtesting.
+        if self.input_price_basis not in (
+            "PIT_ADJUSTED", "RAW", "NOT_APPLICABLE", "VENDOR_FORWARD_ADJUSTED",
+        ):
             raise ValueError(f"FAIL CLOSED: unknown input_price_basis '{self.input_price_basis}' for {self.symbol}.")
 
     def to_temporal_contract(self) -> TemporalDataContract:
