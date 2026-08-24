@@ -1,15 +1,15 @@
 # Current Project State
 
-_Synchronized to HEAD `7e9258f` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `4c1c8dd` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > this file > Conversation History._
 
 ## Current Track
 **AI Quant Terminal** — product repositioning from a quant research/audit system to a consumer
 stock-analysis terminal, per the CEO Decision on
 `AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` (`d4a2d70`). **Terminal is the default
-mode; Research mode is retained unchanged.** Steps **T1, T2, T3, T3.5, T4 and T5 are delivered — the Terminal serves REAL live quotes,
-computes all six technical indicators from REAL historical bars, and shows REAL valuation
-fundamentals.** News and real AI narrative remain vendor/credential-gated.
+mode; Research mode is retained unchanged.** **Every data panel now runs on REAL data**: live quotes, all six technical indicators from REAL
+historical bars, REAL valuation fundamentals, and REAL company announcements. Only the **AI
+narrative** remains credential-gated.
 
 The preceding **AI Quant Research Analyst** track remains complete and untouched beneath it —
 evidence-grounded LLM research synthesis.
@@ -126,6 +126,29 @@ deterministic fakes are retained for testing and for the labelled-synthetic path
     synthetic narrative**. UI gains an explicit narrative-source choice.
   - 41 new tests (offline, against a local 127.0.0.1 HTTP stub — deterministic, free,
     network-free). All existing Fake Provider tests retained unchanged.
+- **Real company announcements** (`4c1c8dd`, step T5) — the 最新消息 panel shows real 公告,
+  implementing the `NewsAnnouncementProvider` ABC that shipped in `f75b0ef`. **No news contract,
+  validation or PIT code was changed; no data architecture was refactored.**
+  - **Sources measured**: East Money `np-anotice-stock` **3/3 then 4/4 on four codes, 1 call** →
+    chosen; **巨潮资讯 cninfo 3/3 but 2 calls** → rejected.
+  - **Why the official platform was rejected — a measured failure mode, not a preference**:
+    cninfo's query needs an `orgId` that is **not derivable** (000333 → `9900005965`, 601398 →
+    `jjxt0000019`, 300750 → `GD165627`), and a wrong/absent orgId returns
+    `totalAnnouncement: 0` **silently with HTTP 200** — which would render as 「暂无新闻」 when the
+    truth is "the lookup was wrong".
+  - **Nothing is invented**: `body_summary` is left **empty** (the endpoint has no body text;
+    writing one would fabricate a news fact) and every item links to the original document
+    instead. Symbol association comes from the payload's **own `codes[]`**, never inferred from
+    the query. `relevance_score` is a deterministic rule. `item_type` is always
+    `COMPANY_ANNOUNCEMENT`, never `NEWS`. The vendor's category label was **dropped** rather than
+    squeezed into `body_summary`.
+  - **`published_at` is `notice_date`** (statutory disclosure date, date-granular) — not the
+    finer `display_time`, which is when East Money surfaced the item, not when the company
+    disclosed it.
+  - **No synthetic fallback anywhere**: DEMO mode has **no** news source and says so; a REAL
+    failure reports the failure and stays `is_demo=False`.
+  - **VERIFIED**: live test ran (did not skip); browser showed 平安银行 with **15 real
+    announcements** each carrying a 查看原文 link, sourced 「东方财富-上市公司公告」.
 - **Real fundamental / valuation data** (`7e9258f`, step T4) — REAL mode shows real
   **总市值 / PE / PB** instead of 暂无数据.
   - **Sources measured**: Tencent `qt.gtimg.cn` **3/3** → chosen; Sina `_i` reachable but
@@ -389,7 +412,7 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 Nothing. Awaiting the next CEO directive.
 
 ## Tests
-- **Passed**: 939
+- **Passed**: 974
 - **Skipped**: 13 (11 TuShare live-provider tests when `TUSHARE_TOKEN` is absent; 1 real-OpenAI
   E2E blocked on account quota; 1 real-Gemini E2E blocked on an absent `GEMINI_API_KEY` — see
   Known Issues)
@@ -399,7 +422,7 @@ Nothing. Awaiting the next CEO directive.
 ## Git Status
 - **Branch**: `main`
 - **Working Tree**: Clean.
-- **HEAD**: `7e9258f` (`feat: real fundamental / valuation data for the Terminal (T4)`)
+- **HEAD**: `4c1c8dd` (`feat: real company announcements for the Terminal (T5)`)
 - **`origin/main` is in sync with local `main`.** Pushes are made only under an explicit CEO
   directive authorizing them (as with Step 5 and the §7 layer).
 - Standing rule unchanged: **never push without explicit Product Owner approval.**
@@ -450,11 +473,13 @@ Nothing. Awaiting the next CEO directive.
 delivered, tested and pushed. The remaining Terminal steps are gated on decisions only the CEO
 can make:
 
-- **T3 + T3.5 + T4 — DONE** (`3deffa5`, `43dd721`, `7e9258f`), all via free public endpoints.
-  Outstanding CEO decisions: (a) whether to procure a **licensed** feed before any commercial use
-  — all three sources are unlicensed, undocumented and without SLA; (b) whether to add a source
-  for **营收 / 净利润 / 毛利率 / 净利率 / EPS / ROE**, which no verifiable free endpoint provides
-  and which therefore still read 暂无数据.
+- **T3 + T3.5 + T4 + T5 — DONE** (`3deffa5`, `43dd721`, `7e9258f`, `4c1c8dd`), all via free
+  public endpoints. Outstanding CEO decisions: (a) whether to procure **licensed** feeds before
+  any commercial use — all four sources are unlicensed, undocumented and without SLA; (b) whether
+  to add a source for **营收 / 净利润 / 毛利率 / 净利率 / EPS / ROE**, which no verifiable free
+  endpoint provides and which therefore still read 暂无数据; (c) whether to enable the **real AI
+  narrative**, which needs an LLM credential (`GEMINI_API_KEY` unset; the OpenAI account has no
+  quota).
 - **T4 — real news provider**: blocked on a source decision. Nothing is wired.
 - **T6 — real AI narrative**: blocked on an LLM credential/quota.
 

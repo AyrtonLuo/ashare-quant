@@ -1,6 +1,6 @@
 # Agent Handoff
 
-_Synchronized to HEAD `7e9258f` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `4c1c8dd` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > `.claude/` files > Conversation History._
 
 ## Handoff Status
@@ -9,9 +9,9 @@ READY
 ## Current Track
 **AI Quant Terminal** — consumer repositioning per the CEO Decision on
 `AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` (`d4a2d70`). **Terminal is the default
-mode, Research mode is retained unchanged.** Steps **T1, T2, T3, T3.5, T4, T5 delivered — REAL live quotes, all six technical indicators from
-REAL historical bars, and REAL valuation fundamentals.** News and a real AI narrative remain
-gated on CEO decisions.
+mode, Research mode is retained unchanged.** **Every data panel now runs on REAL data** — live quotes, all six technical indicators from REAL
+historical bars, REAL valuation fundamentals, and REAL company announcements. Only the **AI
+narrative** remains credential-gated.
 
 The prior **AI Quant Research Analyst** track sits complete beneath it — no phase number assigned
 (standing CEO instruction).
@@ -24,11 +24,21 @@ written.**
 
 ## Current Objective
 None in flight. Terminal steps **T5 (`5e3c701`), T1 (`2c6bc11`), T2 (`a55d0ae`) and T3
-(`3deffa5`)** are delivered, tested and pushed, plus **T3.5 (`43dd721`)** and **T4 (`7e9258f`)**. **Quotes,
-K-line history and valuation fundamentals are all live and verified against public endpoints.**
-**STOP — await CEO Review.**
+(`3deffa5`)** are delivered, tested and pushed, plus **T3.5 (`43dd721`)**, **T4 (`7e9258f`)** and **T5
+(`4c1c8dd`)**. **Quotes, K-line history, valuation fundamentals and company announcements are all
+live and verified against public endpoints.** **STOP — await CEO Review.**
 
 ## Completed
+- **Real company announcements** (`4c1c8dd`, T5) — `eastmoney_news_provider.py`, implementing the
+  `NewsAnnouncementProvider` ABC that already shipped. Stdlib-only, **zero new dependencies**, and
+  **no news contract / validation / PIT code was changed**. Sources measured: East Money **3/3
+  then 4/4 on four codes, 1 call** → chosen; **cninfo (the OFFICIAL platform) rejected** because
+  its `orgId` is **not derivable** and a wrong one returns `total: 0` **silently with HTTP 200** —
+  which would render as 「暂无新闻」 when the lookup was simply wrong. Nothing invented:
+  `body_summary` stays **empty** (no body text exists; every item links to the original document),
+  symbol association comes from the payload's own `codes[]`, `relevance_score` is a deterministic
+  rule, and `item_type` is always `COMPANY_ANNOUNCEMENT`. DEMO mode has **no** news source and
+  says so; a REAL failure never becomes a DEMO answer. 35 tests.
 - **Real fundamental / valuation data** (`7e9258f`, T4) — `fundamental_provider.py` (ABC + demo)
   and `tencent_fundamental_provider.py` (real), stdlib-only, **zero new dependencies**. A THIRD
   capability: quotes, history and fundamentals each declare their **own** provider and
@@ -208,14 +218,14 @@ K-line history and valuation fundamentals are all live and verified against publ
    exist"; surfacing that class remains the AI's narrative contract (§6).
 
 ## Current Test Baseline
-- **Passed**: 939
+- **Passed**: 974
 - **Skipped**: 13 (11 TuShare live-provider tests; 1 real-Gemini E2E with no credential; 1
   real-OpenAI E2E blocked on account quota — items 1 and 2 under Not Completed)
 - **Failures**: 0
 - **Test Command**: `PYTHONPATH=. ./venv/bin/pytest`
 
 ## Git Status
-- **Branch**: `main`; **Working Tree**: clean; **HEAD**: `7e9258f`.
+- **Branch**: `main`; **Working Tree**: clean; **HEAD**: `4c1c8dd`.
 - **`origin/main` is in sync with local `main`** (pushed under explicit CEO authorization for
   this directive).
 - Standing rule unchanged: never push without explicit Product Owner approval.
@@ -243,6 +253,8 @@ K-line history and valuation fundamentals are all live and verified against publ
   series feeding the technical panel (T3.5).
 - `src/data/providers/fundamental_provider.py`, `tencent_fundamental_provider.py` — the REAL
   valuation source feeding the fundamental panel (T4).
+- `src/data/providers/eastmoney_news_provider.py` — the REAL announcement source feeding the
+  最新消息 panel (T5).
 - `AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` — the approved Terminal design.
 - `src/app/streamlit_app.py` — the ONLY file permitted to import Streamlit.
 - `src/quant/evidence/evidence_item.py`, `src/quant/technical/indicators.py` — Evidence + indicators.
@@ -267,8 +279,15 @@ K-line history and valuation fundamentals are all live and verified against publ
   computation path and differ only in provider; the **fundamental** panel is still 暂无数据 in
   REAL mode because no real fundamental feed is wired — do NOT "improve" that by showing demo
   fundamentals beside a live price.
-- **Quotes, K-line history and fundamentals are THREE separate feeds**, each with its own
-  provider, `source_label` and date. Never collapse them into one data-source claim.
+- **Quotes, K-line history, fundamentals and announcements are FOUR separate feeds**, each with
+  its own provider and `source_label`. Never collapse them into one data-source claim.
+- **News must never be generated, paraphrased or summarised.** `body_summary` is intentionally
+  empty because the source carries no body text; the Terminal links to the original document.
+  Do NOT "improve" the panel by writing summaries.
+- **Symbol association comes from the payload's own `codes[]`**, never from the fact that we
+  queried that symbol — an item that does not name the company must be excluded, not attributed.
+- **DEMO mode has no news source and must say so.** Never synthesise headlines, and never let a
+  REAL failure fall back to a DEMO answer.
 - **PB (and anything like it) must be vendor-reported, never derived.** A derived PB was wrong
   for the dual-listed 000333; the vendor's own figure is the only safe one.
 - **A metric no verifiable source reports stays `None`.** 营收/净利润/毛利率/净利率/EPS/ROE render
@@ -369,13 +388,15 @@ K-line history and valuation fundamentals are all live and verified against publ
   absent and requires its own directive.
 
 ## Exact Next Action
-**Await CEO Review of T4.** No further Terminal work is authorized. Outstanding, each needing a
-CEO decision rather than code:
-- **Licensed data feeds** — whether to procure them before any commercial use; all three sources
-  (quote, history, fundamentals) are public, undocumented and unlicensed, with no SLA.
+**Await CEO Review of T5.** No further Terminal work is authorized. Every data panel is now on
+real data; only the AI narrative is not. Outstanding, each needing a CEO decision rather than
+code:
+- **Licensed data feeds** — whether to procure them before any commercial use; all FOUR sources
+  (quote, history, fundamentals, announcements) are public, undocumented and unlicensed, no SLA.
 - **A source for 营收 / 净利润 / 毛利率 / 净利率 / EPS / ROE** — no verifiable free endpoint
   provides them, so those rows still read 暂无数据.
-- **News source** (not started).
+- **The real AI narrative** — needs an LLM credential (`GEMINI_API_KEY` unset; the OpenAI account
+  has no quota). Not started, and not to be started without a directive.
 - **T6** LLM credential/quota (`GEMINI_API_KEY` unset; OpenAI account has no quota).
 Also outstanding: cloud deployment needs the CEO's Streamlit account authorization
 (main file `src/app/streamlit_app.py`, **Python 3.11/3.12, not 3.13**), and `CLAUDE.md`'s
@@ -399,7 +420,8 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
 - Do NOT describe the current quote or history sources as licensed or SLA-backed.
 - Do NOT let the forward-adjusted history series reach any backtest, replay or PIT path.
 - Do NOT derive a valuation metric and present it as vendor data.
-- Do NOT collapse the three feeds into a single "数据来源" claim.
+- Do NOT collapse the four feeds into a single "数据来源" claim.
+- Do NOT generate, paraphrase or summarise a news item.
 - Do NOT claim either real end-to-end API verification passed until it actually does.
 - Do NOT broaden the live tests' narrow quota/credential skip to cover other failure categories.
 - Do NOT put an API key in a URL, a log, a config file, or any persisted artifact.
@@ -410,5 +432,5 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
 
 ## Validation Required
 - `git status` — working tree clean.
-- `PYTHONPATH=. ./venv/bin/pytest` — **939 passed, 13 skipped, 0 failed**.
+- `PYTHONPATH=. ./venv/bin/pytest` — **974 passed, 13 skipped, 0 failed**.
 - `git diff --check` — clean.
