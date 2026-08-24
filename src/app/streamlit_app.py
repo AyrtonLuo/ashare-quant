@@ -315,16 +315,24 @@ def _render_terminal_fundamentals(panel) -> None:
     st.caption(f"数据日期：{panel.data_date}　·　数据来源：{panel.data_source}")
 
 
-def _render_terminal_news(news, unavailable_reason) -> None:
-    st.markdown("### 新闻 / 公告")
-    if not news:
-        st.info(unavailable_reason or terminal.NOT_AVAILABLE_TEXT, icon="ℹ️")
+def _render_terminal_news(panel) -> None:
+    st.markdown("### 最新消息")
+    if not panel.items:
+        st.info(
+            f"暂无新闻 — {panel.unavailable_reason or '没有可获取的公告。'}", icon="ℹ️"
+        )
+        st.caption(f"数据来源：{panel.data_source}")
         return
-    st.caption("以下为新闻**事实**原文摘要；AI 的解读单独显示在下方，两者不混同。")
-    for item in news:
-        st.markdown(f"**{item.title}**")
-        st.caption(f"{item.published_at}　·　{item.source}")
-        st.write(item.summary)
+    st.caption("以下均为公司公告**原文标题**，点击可查看原文；本系统不改写、不补充新闻事实。")
+    for item in panel.items:
+        columns = st.columns([2, 9, 3])
+        columns[0].write(item.published_at)
+        columns[1].write(item.title)
+        if item.source_url:
+            columns[2].markdown(f"[查看原文]({item.source_url})")
+        else:
+            columns[2].write("—")
+    st.caption(f"共 {len(panel.items)} 条　·　数据来源：{panel.data_source}")
 
 
 def _render_terminal_ai(analysis) -> None:
@@ -407,7 +415,7 @@ if mode == "Terminal":
         st.markdown("---")
         _render_terminal_fundamentals(stock.fundamentals)
         st.markdown("---")
-        _render_terminal_news(stock.news, stock.news_unavailable_reason)
+        _render_terminal_news(stock.news)
         st.markdown("---")
         st.caption(stock.disclaimer)
 

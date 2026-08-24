@@ -210,17 +210,21 @@ def test_no_fundamental_value_is_ever_zero_filled():
 
 # --- News: never fabricated ---------------------------------------------------------------------------
 
-def test_news_is_empty_and_says_why_rather_than_inventing_headlines():
-    news, reason = terminal.get_news_views(SYMBOL)
+def test_demo_mode_has_no_news_and_says_why_rather_than_inventing_headlines():
+    """Superseded by T5, which gave REAL mode a live announcement source. DEMO mode still has
+    none, and must say so rather than serving synthetic headlines."""
+    news, reason = terminal.get_news_views(SYMBOL, DEMO)
     assert news == []
-    assert "尚未接入新闻" in reason
-    assert "不会用其他数据推测新闻" in reason
+    assert "演示数据集不包含新闻" in reason
+    assert "不会用合成新闻填充" in reason
 
 
-def test_the_assembled_page_carries_the_news_reason():
+def test_the_assembled_page_carries_the_news_panel_with_its_own_source():
     view = terminal.get_stock_view(SYMBOL, DEMO)
-    assert view.news == ()
-    assert view.news_unavailable_reason
+    assert view.news.items == ()
+    assert view.news.unavailable_reason
+    assert view.news.is_demo is True
+    assert view.news.data_source        # the panel names its own source, like the others
 
 
 # --- Assembled page + disclaimer -------------------------------------------------------------------------

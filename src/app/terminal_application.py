@@ -22,7 +22,7 @@ an LLM. They are descriptive statements about a number that was already computed
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.app.golden_dataset_seed import (
@@ -45,6 +45,7 @@ from src.data.providers.history_provider import (
     GoldenHistoryProvider,
     MarketHistoryProvider,
 )
+from src.data.providers.eastmoney_news_provider import EastMoneyAnnouncementProvider
 from src.data.providers.quote_provider import GoldenQuoteProvider, QuoteProvider
 from src.data.providers.tencent_history_provider import TencentHistoryProvider
 from src.data.providers.sina_quote_provider import (
@@ -144,6 +145,18 @@ class NewsItemView:
     published_at: str
     source: str
     summary: str
+    source_url: Optional[str] = None
+    symbol: str = ""
+
+
+@dataclass(frozen=True)
+class NewsPanelView:
+    """The news panel declares its OWN source, exactly like the quote, history and fundamental
+    panels. Four feeds, four source labels — never one combined claim."""
+    items: Tuple[NewsItemView, ...]
+    data_source: str
+    is_demo: bool
+    unavailable_reason: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -164,8 +177,7 @@ class TerminalStockView:
     price_history: "PriceHistoryView"
     technicals: Tuple[TechnicalReadingView, ...]
     fundamentals: "FundamentalPanelView"
-    news: Tuple[NewsItemView, ...]
-    news_unavailable_reason: Optional[str]
+    news: "NewsPanelView"
     disclaimer: str = DISCLAIMER
 
 
@@ -628,18 +640,89 @@ def get_fundamental_views(symbol: str, source: Optional[str] = None
     return list(get_fundamentals_panel(symbol, source).rows)
 
 
-# --- News -----------------------------------------------------------------------------------------
+# --- News ---------------------------------------------------------------------------------------
 
-NEWS_UNAVAILABLE_REASON = (
-    "尚未接入新闻/公告数据源。此处不显示任何内容，也不会用其他数据推测新闻。"
+# How far back the Terminal looks for announcements. Long enough that a quiet company still shows
+# something, short enough that "最新消息" stays a fair description.
+NEWS_LOOKBACK_DAYS = 180
+NEWS_DISPLAY_LIMIT = 15
+
+DEMO_NEWS_UNAVAILABLE_REASON = (
+    "演示数据集不包含新闻/公告，且不会用合成新闻填充。切换到「实时行情」可查看真实公告。"
 )
 
 
-def get_news_views(symbol: str) -> Tuple[List[NewsItemView], Optional[str]]:
-    """No news vendor is wired (`LiveNewsAnnouncementProvider` refuses by design), so this
-    returns an empty list plus the reason. It never falls back to a synthetic headline: a
-    fabricated news item is the single most misleading thing this product could show."""
-    return [], NEWS_UNAVAILABLE_REASON
+def _news_provider(source: Optional[str] = None):
+    """The fourth seam. REAL mode reaches a live announcement source; DEMO mode has none, and
+    says so rather than serving synthetic headlines."""
+    mode = source or DEFAULT_QUOTE_SOURCE
+    if mode == QUOTE_SOURCE_REAL:
+        return EastMoneyAnnouncementProvider()
+    if mode == QUOTE_SOURCE_DEMO:
+        return None
+    raise TerminalError(
+        f"未知的数据源模式 '{mode}'，应为 {QUOTE_SOURCE_REAL} 或 {QUOTE_SOURCE_DEMO}。"
+    )
+
+
+def get_news_panel(symbol: str, source: Optional[str] = None) -> NewsPanelView:
+    """Real company announcements, each validated before it may be displayed.
+
+    A fabricated news item is the single most misleading thing this product could show, so there
+    is no synthetic fallback anywhere on this path: DEMO mode reports that it has no news source,
+    and a REAL-mode failure reports the failure — neither ever substitutes the other.
+    """
+    mode = source or DEFAULT_QUOTE_SOURCE
+    is_demo = mode != QUOTE_SOURCE_REAL
+
+    provider = _news_provider(mode)
+    if provider is None:
+        return NewsPanelView(
+            items=(), data_source="演示数据集 (DEMO DATA)", is_demo=True,
+            unavailable_reason=DEMO_NEWS_UNAVAILABLE_REASON,
+        )
+
+    end = datetime.now()
+    start = end - timedelta(days=NEWS_LOOKBACK_DAYS)
+    try:
+        page = provider.fetch_news_announcements(
+            symbol, start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+        )
+    except ProviderError as e:
+        return NewsPanelView(
+            items=(), data_source=provider.source_label, is_demo=False,
+            unavailable_reason=str(e),
+        )
+
+    items: List[NewsItemView] = []
+    for contract in page.items:
+        # Validation stage: an item that fails the gate is excluded, never repaired and never
+        # shown with a caveat.
+        is_valid, _errors = DataTrustGate.validate_news_announcement(contract)
+        if not is_valid:
+            continue
+        items.append(NewsItemView(
+            title=contract.title,
+            published_at=contract.published_at.strftime("%Y-%m-%d"),
+            source=contract.source,
+            summary=contract.body_summary,   # empty by design — never paraphrased or generated
+            source_url=contract.source_url,
+            symbol=contract.symbols[0] if contract.symbols else "",
+        ))
+
+    items.sort(key=lambda i: i.published_at, reverse=True)
+    reason = None if items else "该股票在最近半年内没有可获取的公告。"
+    return NewsPanelView(
+        items=tuple(items[:NEWS_DISPLAY_LIMIT]), data_source=provider.source_label,
+        is_demo=False, unavailable_reason=reason,
+    )
+
+
+def get_news_views(symbol: str, source: Optional[str] = None
+                   ) -> Tuple[List[NewsItemView], Optional[str]]:
+    """Item-only view, retained for callers that do not need the panel's source metadata."""
+    panel = get_news_panel(symbol, source)
+    return list(panel.items), panel.unavailable_reason
 
 
 # --- Assembled page -------------------------------------------------------------------------------
@@ -648,14 +731,12 @@ def get_stock_view(symbol: str, source: Optional[str] = None) -> TerminalStockVi
     """Assembles one page from ONE data source. A page never blends REAL and DEMO: panels with
     no source in the active mode report 暂无数据 with the reason."""
     mode = source or DEFAULT_QUOTE_SOURCE
-    news, news_reason = get_news_views(symbol)
     return TerminalStockView(
         quote=get_quote_view(symbol, mode),
         price_history=get_price_history(symbol, mode),
         technicals=tuple(get_technical_views(symbol, mode)),
         fundamentals=get_fundamentals_panel(symbol, mode),
-        news=tuple(news),
-        news_unavailable_reason=news_reason,
+        news=get_news_panel(symbol, mode),
     )
 
 
