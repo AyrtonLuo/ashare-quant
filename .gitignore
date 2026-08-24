@@ -12,3 +12,7 @@ data/research/
 data/manifests/
 *.parquet
 *.db
+
+# Streamlit secrets — API keys live in the cloud platform's own secrets store or in the local
+# environment, never in the repository. Ignored so a local secrets file can never be committed.
+.streamlit/secrets.toml

@@ -13,7 +13,20 @@ Research & Backtest analysis only. No broker connection, no order execution, no 
 no automatic buy/sell.
 """
 
+import os
+import sys
 from datetime import date
+
+# Deployment bootstrap. `streamlit run src/app/streamlit_app.py` puts THIS file's directory on
+# sys.path, not the repository root — so `from src.app import ...` fails with
+# ModuleNotFoundError under the `streamlit` console script, which is how Streamlit Community
+# Cloud launches an app. (It happens to work locally only when launched as
+# `python -m streamlit`, which additionally places the CWD on sys.path.) Resolving the repo root
+# from __file__ rather than a CWD or an absolute path keeps this correct under every launcher
+# and on any machine.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 import streamlit as st
 
