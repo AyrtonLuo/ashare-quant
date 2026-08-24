@@ -35,6 +35,10 @@ from src.app import research_analyst_application as analyst
 from src.data.contracts.quote import QuoteContract
 from src.data.providers.base import ProviderError
 from src.data.providers.quote_provider import GoldenQuoteProvider, QuoteProvider
+from src.data.providers.sina_quote_provider import (
+    SINA_QUOTE_PROVIDER_ID,
+    SinaQuoteProvider,
+)
 from src.data.validation.gate import DataTrustGate
 from src.quant.technical.indicators import (
     compute_macd,
@@ -46,6 +50,27 @@ from src.quant.technical.indicators import (
 )
 
 NOT_AVAILABLE_TEXT = "暂无数据"
+
+# Data-source modes. REAL is the default: the Terminal is a live-quote product, and demo data is
+# something the user opts into, not something they are silently served.
+QUOTE_SOURCE_REAL = "REAL"
+QUOTE_SOURCE_DEMO = "DEMO"
+DEFAULT_QUOTE_SOURCE = QUOTE_SOURCE_REAL
+
+REAL_DATA_STATUS = "REAL DATA"
+DEMO_DATA_STATUS = "DEMO DATA"
+
+# Real quotes are live; the historical bar series behind the indicators is NOT yet wired to a
+# real source (that is a separate data feed from the quote endpoint). Rather than compute
+# indicators from demo history and display them beside a real price -- which would mix REAL and
+# DEMO on one page -- those panels report 暂无数据 with this reason.
+REAL_MODE_NO_HISTORY_REASON = (
+    "实时模式下尚未接入真实历史行情序列，因此不展示由历史数据计算的指标；"
+    "不会用演示数据代替真实数据。"
+)
+REAL_MODE_NO_FUNDAMENTAL_REASON = (
+    "实时模式下尚未接入真实财务数据源；不会用演示数据代替真实数据。"
+)
 
 DISCLAIMER = "本页面仅提供信息与分析，不构成投资建议。"
 
@@ -80,6 +105,7 @@ class QuoteView:
     demo_notice: Optional[str]
     market_session: str
     trading_status: str
+    data_status: str = DEMO_DATA_STATUS   # "REAL DATA" | "DEMO DATA", shown verbatim in the UI
 
 
 @dataclass(frozen=True)
@@ -131,35 +157,79 @@ class TerminalStockView:
 
 # --- Symbol search / quote ------------------------------------------------------------------------
 
-def _quote_provider() -> QuoteProvider:
-    """The GOLDEN (demo) provider. When a real vendor is provisioned this is the ONE place that
-    changes; every panel downstream reads provenance off the contract, so nothing else needs to
-    know which provider produced the quote."""
-    bars_by_symbol: Dict[str, List[Any]] = {}
-    for contract in golden_market_data():
-        bars_by_symbol.setdefault(contract.symbol, []).append(contract)
-    return GoldenQuoteProvider(bars_by_symbol, display_names=dict(SYMBOL_DISPLAY_NAMES))
+def _quote_provider(source: Optional[str] = None) -> QuoteProvider:
+    """The single seam between the Terminal and whichever provider serves it. Every panel
+    downstream reads provenance off the contract, so nothing else needs to know which provider
+    produced a quote.
+
+    There is deliberately NO automatic fallback from REAL to DEMO. If the live source fails, the
+    Terminal says so; silently serving demo numbers under a live page is precisely the confusion
+    this product must never create.
+    """
+    mode = source or DEFAULT_QUOTE_SOURCE
+    if mode == QUOTE_SOURCE_REAL:
+        return SinaQuoteProvider(display_names=dict(SYMBOL_DISPLAY_NAMES))
+    if mode == QUOTE_SOURCE_DEMO:
+        bars_by_symbol: Dict[str, List[Any]] = {}
+        for contract in golden_market_data():
+            bars_by_symbol.setdefault(contract.symbol, []).append(contract)
+        return GoldenQuoteProvider(bars_by_symbol, display_names=dict(SYMBOL_DISPLAY_NAMES))
+    raise TerminalError(
+        f"未知的数据源模式 '{mode}'，应为 {QUOTE_SOURCE_REAL} 或 {QUOTE_SOURCE_DEMO}。"
+    )
 
 
-def search_stocks(query: str) -> List[Dict[str, str]]:
-    return _quote_provider().search_symbols(query)
+def search_stocks(query: str, source: Optional[str] = None) -> List[Dict[str, str]]:
+    mode = source or DEFAULT_QUOTE_SOURCE
+    try:
+        return [
+            {"symbol": m["symbol"], "display_name": _display_name(m["display_name"], mode)}
+            for m in _quote_provider(mode).search_symbols(query)
+        ]
+    except ProviderError:
+        # A search that cannot reach the live source returns nothing rather than quietly
+        # answering from the demo universe.
+        return []
 
 
-def list_stocks() -> List[Dict[str, str]]:
-    return [{"symbol": s, "display_name": n} for s, n in sorted(SYMBOL_DISPLAY_NAMES.items())]
+# The seeded display names carry a "(GOLDEN_DATASET demo)" suffix. The SYMBOLS themselves are
+# real A-share codes; only the label is a demo artefact. Showing that suffix next to a live price
+# would misdescribe real data as demo data, so it is stripped in REAL mode.
+_DEMO_LABEL_SUFFIX = " (GOLDEN_DATASET demo)"
+
+
+def _display_name(name: str, mode: str) -> str:
+    if mode == QUOTE_SOURCE_REAL and name.endswith(_DEMO_LABEL_SUFFIX):
+        return name[: -len(_DEMO_LABEL_SUFFIX)]
+    return name
+
+
+def list_stocks(source: Optional[str] = None) -> List[Dict[str, str]]:
+    mode = source or DEFAULT_QUOTE_SOURCE
+    return [
+        {"symbol": symbol, "display_name": _display_name(name, mode)}
+        for symbol, name in sorted(SYMBOL_DISPLAY_NAMES.items())
+    ]
+
+
+# Human-readable names for real sources. A provider absent from this map is still described
+# honestly by its id — the label must never assert a vendor that did not serve the quote.
+_REAL_SOURCE_NAMES = {SINA_QUOTE_PROVIDER_ID: "新浪财经"}
 
 
 def _describe_source(quote: QuoteContract) -> str:
     if quote.data_origin == "REAL_PROVIDER":
-        return f"实时数据源 ({quote.provider_id})"
+        vendor = _REAL_SOURCE_NAMES.get(quote.provider_id)
+        return (f"实时行情源：{vendor} ({quote.provider_id})" if vendor
+                else f"实时行情源 ({quote.provider_id})")
     if quote.data_origin == "GOLDEN_DATASET":
         return "演示数据集 (DEMO DATA)"
     return f"{quote.data_origin} ({quote.provider_id})"
 
 
-def get_quote_view(symbol: str) -> QuoteView:
+def get_quote_view(symbol: str, source: Optional[str] = None) -> QuoteView:
     try:
-        quote = _quote_provider().get_quote(symbol)
+        quote = _quote_provider(source).get_quote(symbol)
     except ProviderError as e:
         raise TerminalError(str(e)) from e
 
@@ -177,6 +247,7 @@ def get_quote_view(symbol: str) -> QuoteView:
         data_source=_describe_source(quote), is_demo=quote.is_demo,
         demo_notice=DEMO_DATA_NOTICE if quote.is_demo else None,
         market_session=quote.market_session, trading_status=quote.trading_status,
+        data_status=DEMO_DATA_STATUS if quote.is_demo else REAL_DATA_STATUS,
     )
 
 
@@ -216,9 +287,24 @@ def _unavailable(name: str, reason: str) -> TechnicalReadingView:
     )
 
 
-def get_technical_views(symbol: str) -> List[TechnicalReadingView]:
-    """All readings are computed locally from the demo price series by the SHIPPED indicator
-    functions — never taken from a third-party's own reported indicator value."""
+_TECHNICAL_PANEL_NAMES = (
+    "趋势 (20日均线)", "RSI (相对强弱)", "MACD (动能)", "成交量", "波动率", "动量 (20日涨跌)",
+)
+
+
+def get_technical_views(symbol: str, source: Optional[str] = None
+                        ) -> List[TechnicalReadingView]:
+    """All readings are computed locally by the SHIPPED indicator functions — never taken from a
+    third party's own reported indicator value.
+
+    In REAL mode they are reported as 暂无数据: the live quote endpoint serves a quote, not a
+    historical bar series, and computing indicators from demo history to sit beside a real price
+    would put REAL and DEMO data on the same page.
+    """
+    if (source or DEFAULT_QUOTE_SOURCE) == QUOTE_SOURCE_REAL:
+        return [_unavailable(name, REAL_MODE_NO_HISTORY_REASON)
+                for name in _TECHNICAL_PANEL_NAMES]
+
     bars = sorted(
         [c for c in golden_market_data() if c.symbol == symbol],
         key=lambda c: c.trading_date,
@@ -366,9 +452,19 @@ def _format_value(value: float, kind: str) -> str:
     return f"{value:.2f}"
 
 
-def get_fundamental_views(symbol: str) -> List[FundamentalRowView]:
+def get_fundamental_views(symbol: str, source: Optional[str] = None
+                          ) -> List[FundamentalRowView]:
     """Every row is always present in the output. A missing number renders as 暂无数据 with a
-    reason — never omitted from the table, and never estimated."""
+    reason — never omitted from the table, and never estimated.
+
+    In REAL mode every row is 暂无数据: no real fundamental source is wired, and showing demo
+    fundamentals beside a real price would mix the two."""
+    if (source or DEFAULT_QUOTE_SOURCE) == QUOTE_SOURCE_REAL:
+        return [
+            FundamentalRowView(label, NOT_AVAILABLE_TEXT, False, REAL_MODE_NO_FUNDAMENTAL_REASON)
+            for label, _, _ in _FUNDAMENTAL_ROWS
+        ]
+
     records = golden_fundamental_data().get(symbol, [])
     latest = records[-1] if records else None
 
@@ -401,12 +497,15 @@ def get_news_views(symbol: str) -> Tuple[List[NewsItemView], Optional[str]]:
 
 # --- Assembled page -------------------------------------------------------------------------------
 
-def get_stock_view(symbol: str) -> TerminalStockView:
+def get_stock_view(symbol: str, source: Optional[str] = None) -> TerminalStockView:
+    """Assembles one page from ONE data source. A page never blends REAL and DEMO: panels with
+    no source in the active mode report 暂无数据 with the reason."""
+    mode = source or DEFAULT_QUOTE_SOURCE
     news, news_reason = get_news_views(symbol)
     return TerminalStockView(
-        quote=get_quote_view(symbol),
-        technicals=tuple(get_technical_views(symbol)),
-        fundamentals=tuple(get_fundamental_views(symbol)),
+        quote=get_quote_view(symbol, mode),
+        technicals=tuple(get_technical_views(symbol, mode)),
+        fundamentals=tuple(get_fundamental_views(symbol, mode)),
         news=tuple(news),
         news_unavailable_reason=news_reason,
     )

@@ -18,6 +18,10 @@ from src.app import research_analyst_application as analyst
 from src.app import terminal_application as terminal
 
 SYMBOL = "600519.SH"
+
+# These tests cover the DEMO data path. Since T3 made REAL the default source, the mode is now
+# stated explicitly rather than relying on a default that has since changed.
+DEMO = "DEMO"
 APP_DIR = os.path.join(os.path.dirname(__file__), "..", "src", "app")
 UI_FILE = os.path.join(APP_DIR, "streamlit_app.py")
 TERMINAL_APP_FILE = os.path.join(APP_DIR, "terminal_application.py")
@@ -55,7 +59,7 @@ def test_list_stocks_returns_the_demo_universe():
 # --- Quote panel ------------------------------------------------------------------------------
 
 def test_quote_view_exposes_every_field_the_directive_requires():
-    quote = terminal.get_quote_view(SYMBOL)
+    quote = terminal.get_quote_view(SYMBOL, DEMO)
     assert quote.display_name and quote.symbol == SYMBOL
     assert quote.last_price > 0
     assert isinstance(quote.change_pct, float)
@@ -65,7 +69,7 @@ def test_quote_view_exposes_every_field_the_directive_requires():
 
 
 def test_demo_quote_is_labelled_as_demo_not_as_live():
-    quote = terminal.get_quote_view(SYMBOL)
+    quote = terminal.get_quote_view(SYMBOL, DEMO)
     assert quote.is_demo is True
     assert "DEMO DATA" in quote.demo_notice
     assert "不是实时行情" in quote.demo_notice
@@ -84,25 +88,25 @@ def test_the_demo_badge_is_driven_by_provenance_not_by_a_ui_flag():
         market_session="OPEN", trading_status="NORMAL", provider_id="p",
         data_origin="REAL_PROVIDER",
     )
-    assert terminal._describe_source(real) == "实时数据源 (p)"
+    assert terminal._describe_source(real) == "实时行情源 (p)"   # unknown provider named by id
     assert real.is_demo is False
 
 
 def test_change_pct_matches_the_prices_displayed_beside_it():
-    quote = terminal.get_quote_view(SYMBOL)
+    quote = terminal.get_quote_view(SYMBOL, DEMO)
     expected = (quote.last_price - quote.prev_close) / quote.prev_close * 100
     assert quote.change_pct == pytest.approx(expected, abs=1e-6)
 
 
 def test_unknown_symbol_fails_closed_rather_than_showing_an_empty_card():
     with pytest.raises(terminal.TerminalError):
-        terminal.get_quote_view("999999.XX")
+        terminal.get_quote_view("999999.XX", DEMO)
 
 
 # --- Technical panel: deterministic plain language ------------------------------------------------
 
 def test_technical_readings_are_in_plain_language_with_the_number_kept_visible():
-    readings = {r.name: r for r in terminal.get_technical_views(SYMBOL)}
+    readings = {r.name: r for r in terminal.get_technical_views(SYMBOL, DEMO)}
     assert "趋势 (20日均线)" in readings
     assert "RSI (相对强弱)" in readings
     assert "MACD (动能)" in readings
@@ -117,7 +121,7 @@ def test_technical_readings_are_in_plain_language_with_the_number_kept_visible()
 def test_every_expected_indicator_appears_even_when_it_cannot_be_computed():
     """MACD needs more history than the demo set has. It must still appear, saying 暂无数据 —
     silently dropping the row would hide the gap."""
-    readings = {r.name: r for r in terminal.get_technical_views(SYMBOL)}
+    readings = {r.name: r for r in terminal.get_technical_views(SYMBOL, DEMO)}
     macd = readings["MACD (动能)"]
     if not macd.available:
         assert macd.plain_reading == terminal.NOT_AVAILABLE_TEXT
@@ -125,14 +129,14 @@ def test_every_expected_indicator_appears_even_when_it_cannot_be_computed():
 
 
 def test_technical_readings_are_deterministic():
-    first = terminal.get_technical_views(SYMBOL)
-    second = terminal.get_technical_views(SYMBOL)
+    first = terminal.get_technical_views(SYMBOL, DEMO)
+    second = terminal.get_technical_views(SYMBOL, DEMO)
     assert [(r.name, r.plain_reading, r.detail) for r in first] == \
            [(r.name, r.plain_reading, r.detail) for r in second]
 
 
 def test_technical_readings_contain_no_buy_or_sell_advice():
-    for reading in terminal.get_technical_views(SYMBOL):
+    for reading in terminal.get_technical_views(SYMBOL, DEMO):
         text = reading.plain_reading + reading.explanation + reading.detail
         for forbidden in ("买入", "卖出", "建议买", "建议卖", "目标价", "满仓", "清仓"):
             assert forbidden not in text
@@ -160,14 +164,14 @@ def test_rsi_thresholds_map_to_the_documented_readings(value, expected):
 # --- Fundamentals: 暂无数据 with a reason, never estimated -----------------------------------------
 
 def test_every_fundamental_row_the_directive_lists_is_present():
-    labels = [row.label for row in terminal.get_fundamental_views(SYMBOL)]
+    labels = [row.label for row in terminal.get_fundamental_views(SYMBOL, DEMO)]
     for required in ("营收", "净利润", "每股收益 (EPS)", "净资产收益率 (ROE)", "毛利率",
                      "经营现金流", "市盈率 (PE)", "市净率 (PB)"):
         assert required in labels
 
 
 def test_missing_fundamentals_say_暂无数据_and_explain_why():
-    rows = {row.label: row for row in terminal.get_fundamental_views(SYMBOL)}
+    rows = {row.label: row for row in terminal.get_fundamental_views(SYMBOL, DEMO)}
     revenue = rows["营收"]
     assert revenue.available is False
     assert revenue.value == terminal.NOT_AVAILABLE_TEXT
@@ -177,7 +181,7 @@ def test_missing_fundamentals_say_暂无数据_and_explain_why():
 def test_a_field_not_modelled_at_all_is_reported_honestly():
     """毛利率 is not a field on FundamentalDataContract. It is reported as absent for that
     reason, rather than being quietly dropped from the table or derived from other numbers."""
-    rows = {row.label: row for row in terminal.get_fundamental_views(SYMBOL)}
+    rows = {row.label: row for row in terminal.get_fundamental_views(SYMBOL, DEMO)}
     margin = rows["毛利率"]
     assert margin.available is False
     assert "尚未纳入当前数据契约" in margin.reason
@@ -185,7 +189,7 @@ def test_a_field_not_modelled_at_all_is_reported_honestly():
 
 
 def test_an_available_fundamental_shows_its_real_value():
-    rows = {row.label: row for row in terminal.get_fundamental_views(SYMBOL)}
+    rows = {row.label: row for row in terminal.get_fundamental_views(SYMBOL, DEMO)}
     pe = rows["市盈率 (PE)"]
     assert pe.available is True
     assert pe.value != terminal.NOT_AVAILABLE_TEXT
@@ -193,7 +197,7 @@ def test_an_available_fundamental_shows_its_real_value():
 
 
 def test_no_fundamental_value_is_ever_zero_filled():
-    for row in terminal.get_fundamental_views(SYMBOL):
+    for row in terminal.get_fundamental_views(SYMBOL, DEMO):
         if not row.available:
             assert row.value == terminal.NOT_AVAILABLE_TEXT
             assert row.value != "0.00"
@@ -209,7 +213,7 @@ def test_news_is_empty_and_says_why_rather_than_inventing_headlines():
 
 
 def test_the_assembled_page_carries_the_news_reason():
-    view = terminal.get_stock_view(SYMBOL)
+    view = terminal.get_stock_view(SYMBOL, DEMO)
     assert view.news == ()
     assert view.news_unavailable_reason
 
@@ -217,7 +221,7 @@ def test_the_assembled_page_carries_the_news_reason():
 # --- Assembled page + disclaimer -------------------------------------------------------------------------
 
 def test_stock_view_assembles_every_panel():
-    view = terminal.get_stock_view(SYMBOL)
+    view = terminal.get_stock_view(SYMBOL, DEMO)
     assert view.quote.symbol == SYMBOL
     assert len(view.technicals) >= 4
     assert len(view.fundamentals) == 8

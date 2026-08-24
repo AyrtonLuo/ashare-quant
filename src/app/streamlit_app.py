@@ -253,7 +253,9 @@ def _render_analyst_report(view) -> None:
 
 def _render_terminal_quote(quote) -> None:
     if quote.is_demo:
-        st.warning(quote.demo_notice, icon="⚠️")
+        st.warning(f"**{quote.data_status}** — {quote.demo_notice}", icon="⚠️")
+    else:
+        st.success(f"**{quote.data_status}** — 实时行情，{quote.data_source}。", icon="✅")
 
     st.subheader(f"{quote.display_name}　{quote.symbol}")
     price_col, change_col, volume_col, amount_col = st.columns(4)
@@ -269,8 +271,8 @@ def _render_terminal_quote(quote) -> None:
     prev_col.metric("昨收", f"{quote.prev_close:,.2f}")
 
     st.caption(
-        f"数据更新时间：{quote.updated_at}　·　数据来源：{quote.data_source}"
-        f"　·　交易状态：{quote.trading_status}"
+        f"数据状态：{quote.data_status}　·　数据更新时间：{quote.updated_at}"
+        f"　·　数据来源：{quote.data_source}　·　交易状态：{quote.trading_status}"
     )
 
 
@@ -331,11 +333,21 @@ if mode == "Terminal":
     st.title("📈 AI Quant Terminal")
     st.info(terminal.DISCLAIMER, icon="ℹ️")
 
-    options = terminal.list_stocks()
+    source_label = st.radio(
+        "数据源", ["实时行情", "演示数据 (DEMO)"], index=0, horizontal=True,
+        key="terminal_source",
+        help="实时行情来自公开行情接口；演示数据是固定的示例数据集。两者不会混合显示。",
+    )
+    quote_source = (terminal.QUOTE_SOURCE_REAL if source_label == "实时行情"
+                    else terminal.QUOTE_SOURCE_DEMO)
+
+    options = terminal.list_stocks(quote_source)
     labels = {o["symbol"]: f"{o['symbol']} — {o['display_name']}" for o in options}
-    query = st.text_input("搜索股票（代码或名称）", key="terminal_search")
+    query = st.text_input(
+        "搜索股票（代码或名称，实时模式下可直接输入 6 位代码）", key="terminal_search"
+    )
     if query.strip():
-        matches = terminal.search_stocks(query)
+        matches = terminal.search_stocks(query, quote_source)
         if matches:
             labels = {m["symbol"]: f"{m['symbol']} — {m['display_name']}" for m in matches}
         else:
@@ -347,9 +359,9 @@ if mode == "Terminal":
     )
 
     try:
-        stock = terminal.get_stock_view(selected_symbol)
+        stock = terminal.get_stock_view(selected_symbol, quote_source)
     except terminal.TerminalError as e:
-        st.error(str(e))
+        st.error(f"{terminal.NOT_AVAILABLE_TEXT} — {e}")
         stock = None
 
     if stock is not None:
