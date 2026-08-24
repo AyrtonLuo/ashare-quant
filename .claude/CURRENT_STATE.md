@@ -1,6 +1,6 @@
 # Current Project State
 
-_Synchronized to HEAD `b00fe41` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `94456ca` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > this file > Conversation History._
 
 ## Current Track
@@ -25,8 +25,9 @@ adjustment formula.
 On top of that base, the AI Research Analyst track has delivered the full deterministic chain
 `API → Adapter → Contract → Validation → PIT → Evidence Bundle → LLM Provider → Structured
 Output → Citation Validation → Report Identity → Immutable Persistence → 10-Section Research
-Report → Application Layer → Streamlit UI`. **A real LLM provider is now wired**
-(`src/llm/openai_provider.py`, OpenAI over stdlib HTTP, **zero new dependencies**); the
+Report → Application Layer → Streamlit UI`. **Two real LLM providers are wired** — Google
+Gemini (`src/llm/gemini_provider.py`, the active default) and OpenAI
+(`src/llm/openai_provider.py`), both over stdlib HTTP with **zero new dependencies**; the
 deterministic fakes are retained for testing and for the labelled-synthetic path.
 
 ## Completed — AI Research Analyst track
@@ -61,7 +62,33 @@ deterministic fakes are retained for testing and for the labelled-synthetic path
     evidence_bundle_hash / timeout / token usage. `LLMRequest`'s only content field is
     `evidence_payload`, so no data handle or search capability can structurally reach a provider.
 
-- **Real OpenAI LLM provider** (`b00fe41`) — the first real vendor implementation.
+- **Google Gemini LLM provider** (`94456ca`) — added *beside* OpenAI, now the active default.
+  - **Nothing refactored**: `LLMProvider`, `LLMRequest`, `LLMResponse`, `LLMErrorCategory`,
+    `StructuredResearchOutput`, `parse_structured_output()`, `validate_citations()`,
+    `generate_ai_research_output()` and `openai_provider.py` are all **untouched**.
+  - **Zero new dependencies**: official Gemini REST API via `urllib.request` + `json`; no
+    `google-generativeai` SDK.
+  - **Key hygiene**: `GEMINI_API_KEY` only; never on the instance, in an exception, in a log
+    (AST-asserted), or in any persisted artifact. Missing key → `CREDENTIALS_UNAVAILABLE`
+    *before* any socket. Auth travels in the **`x-goog-api-key` header, never `?key=`** — a
+    secret in a URL leaks into proxy logs and history; a test asserts it never appears in the path.
+  - **Evidence boundary at the wire level**: body built from `evidence_payload` only, with **no
+    `tools`, no `functionDeclarations`, no `googleSearch`/grounding block**.
+  - **Structured JSON output**: `responseMimeType` + `responseSchema` generated from the shipped
+    structured-output constants (cannot drift), still re-validated by `parse_structured_output()`.
+  - **Four real Gemini differences handled, not copied over**: model lives in the URL path; an
+    **invalid key returns HTTP 400** (body's `error.status` inspected so a credential problem is
+    not misreported as an outage); the schema dialect is uppercase and rejects
+    `additionalProperties`; `candidatesTokenCount` may be omitted and is then **derived by
+    subtraction** from reported counts — never a fabricated zero, and a negative derivation is
+    malformed.
+  - **Provider registry** in the app layer: `provider_id → (factory, env var, default model)`.
+    Gemini is `DEFAULT_LLM_PROVIDER_ID`; **OpenAI is retained and selectable**; UI gains a
+    provider selectbox. One vendor's missing credential **never** silently falls through to the
+    other, and no provider failure is ever downgraded to a synthetic narrative.
+  - 55 new tests, every offline one against a local 127.0.0.1 HTTP stub — **no test depends on
+    the real API**.
+- **Real OpenAI LLM provider** (`b00fe41`) — the first real vendor implementation, retained.
   - **Zero new dependencies**: speaks the OpenAI Chat Completions HTTP API via
     `urllib.request` + `json`. `requirements.txt` unchanged; no vendor SDK imported anywhere in
     `src/`. CEO-approved choice (OpenAI was the only credential present; Anthropic/Gemini keys
@@ -210,29 +237,34 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 - **Persistent `NewsAnnouncementStore`** — not built. News items are validated and PIT-filtered
   as in-memory lists returned by the adapter; there is no stateful, queryable, immutable
   revision store for news (contrast `CorporateActionStore`).
-- **Real end-to-end API verification — NOT COMPLETED.** The real call reached OpenAI and
-  **authenticated successfully**, then returned **HTTP 429 "You exceeded your current quota"**.
-  That is an account billing condition, not a code defect. The live test skips on exactly that
-  condition with a message stating it is *not* a verification; the skip is deliberately narrow —
-  auth failures, timeouts, malformed responses and ordinary rate limits all still fail loudly.
-  **To complete it: add billing credit to the OpenAI account, then run
+- **Real Gemini end-to-end verification — NOT VERIFIED.** `GEMINI_API_KEY` is **not set** in
+  this environment, so the real call could not be attempted at all. The test skips with a
+  message stating plainly that it is *not* a verification. Its failure handling is deliberately
+  narrow: only an exhausted account quota skips; a credential failure, rate limit, timeout or
+  malformed response each **FAIL** with the exact classified `LLMErrorCategory`.
+  **To complete it: set `GEMINI_API_KEY`, then run
   `PYTHONPATH=. ./venv/bin/pytest -m real_llm_provider`.**
+- **Real OpenAI end-to-end verification — NOT COMPLETED.** The call reached OpenAI and
+  **authenticated successfully**, then returned **HTTP 429 "You exceeded your current quota"** —
+  an account billing condition, not a code defect. Same narrow-skip discipline. **To complete
+  it: add OpenAI billing credit and re-run the same command.**
 
 ## Currently In Progress
 Nothing. Awaiting the next CEO directive.
 
 ## Tests
-- **Passed**: 660
-- **Skipped**: 12 (11 TuShare live-provider tests when `TUSHARE_TOKEN` is absent; 1 real-LLM
-  end-to-end test blocked on OpenAI account quota — see Known Issues)
+- **Passed**: 721
+- **Skipped**: 13 (11 TuShare live-provider tests when `TUSHARE_TOKEN` is absent; 1 real-OpenAI
+  E2E blocked on account quota; 1 real-Gemini E2E blocked on an absent `GEMINI_API_KEY` — see
+  Known Issues)
 - **Failures**: 0
 - **Test Command**: `PYTHONPATH=. ./venv/bin/pytest`
 
 ## Git Status
 - **Branch**: `main`
 - **Working Tree**: Clean.
-- **HEAD**: `b00fe41` (`feat: real OpenAI LLM provider over stdlib HTTP (zero new
-  dependencies)`)
+- **HEAD**: `94456ca` (`feat: Google Gemini LLM provider alongside OpenAI, selectable,
+  stdlib-only`)
 - **`origin/main` is in sync with local `main`.** Pushes are made only under an explicit CEO
   directive authorizing them (as with Step 5 and the §7 layer).
 - Standing rule unchanged: **never push without explicit Product Owner approval.**
@@ -279,15 +311,17 @@ Nothing. Awaiting the next CEO directive.
 - `docs/CORPORATE_ACTION_SPECIFICATION.md`, `docs/FINAL_RESEARCH_INTEGRITY_CERTIFICATION.md`.
 
 ## Next Recommended Action
-Await a CEO directive. **The AI Research Analyst track is complete end to end, including a real
-LLM provider.** One item is outstanding and is the CEO's to unblock:
+Await a CEO directive. **The AI Research Analyst track is complete end to end, with two real LLM
+providers.** One item is outstanding and only the CEO can unblock it — it is credentials, not
+code:
 
-1. **Add billing credit to the OpenAI account and re-run
-   `PYTHONPATH=. ./venv/bin/pytest -m real_llm_provider`** to complete the real end-to-end
-   verification. Everything up to the vendor round-trip is already verified against a local
-   stub, including a full 10-section report driven through the real provider class.
+1. **Set `GEMINI_API_KEY`** (and/or add OpenAI billing credit), then run
+   `PYTHONPATH=. ./venv/bin/pytest -m real_llm_provider` to complete the real end-to-end
+   verification for whichever vendor is provisioned. Everything up to the vendor round-trip is
+   already verified against local stubs for **both** providers, including a full 10-section
+   report driven through each real provider class.
 2. Optional, if wanted later: an Anthropic provider (the proposal's §8 examples name Claude).
-   It would implement the same ABC alongside `OpenAILLMProvider` — no interface change — but
+   It would slot into `LLM_PROVIDER_REGISTRY` against the same ABC — no interface change — but
    needs `ANTHROPIC_API_KEY` and its own directive.
 
 Do NOT implement trading, broker connections, or order routing. Do NOT create a "Phase 10."

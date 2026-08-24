@@ -4,7 +4,7 @@
 
 - **Project Name**: AI Quant Pro / `ashare-quant`
 - **Purpose**: Institutional-Grade A-Share Quantitative Research, Point-in-Time (PIT) Factor Engine, Backtest Infrastructure, Research Workbench, and the Evidence-Grounded AI Research Analyst track.
-- **Tech Stack**: Python 3.9+, Pytest, DuckDB / Parquet, pandas / numpy / scipy / pyarrow, Streamlit. **No FastAPI, Flask, Jinja2, or JS build tooling is installed or used** (see `requirements.txt`; `src/app/streamlit_app.py` is the only file permitted to import Streamlit).
+- **Tech Stack**: Python 3.9+, Pytest, DuckDB / Parquet, pandas / numpy / scipy / pyarrow, Streamlit. **No FastAPI, Flask, Jinja2, or JS build tooling is installed or used** (see `requirements.txt`; `src/app/streamlit_app.py` is the only file permitted to import Streamlit). **No LLM vendor SDK either** — real LLM providers (`src/llm/gemini_provider.py`, `src/llm/openai_provider.py`) speak their vendors' HTTP APIs through the standard library, so `requirements.txt` carries no LLM dependency. API keys are read from environment variables only and must never reach code, config, logs, or a persisted artifact.
 - **Governance Roles**:
   - **ChatGPT**: CEO / Strategic Direction & Phase Directives
   - **Antigravity**: CTO / Lead Architecture & System Implementation

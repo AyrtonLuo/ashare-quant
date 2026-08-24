@@ -1,6 +1,6 @@
 # Agent Handoff
 
-_Synchronized to HEAD `b00fe41` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `94456ca` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > `.claude/` files > Conversation History._
 
 ## Handoff Status
@@ -16,13 +16,30 @@ Layer (not a numbered §11 step). The track is feature-complete against the prop
 written.**
 
 ## Current Objective
-None in flight. The real OpenAI LLM provider (`b00fe41`) is delivered, committed and pushed.
-**One item is outstanding and only the CEO can unblock it**: the real end-to-end API
-verification could not complete — the call authenticated but the OpenAI account returned HTTP
-429 "exceeded your current quota". **STOP — await the next CEO directive.**
+None in flight. The Google Gemini provider (`94456ca`) is delivered, committed and pushed,
+alongside the retained OpenAI provider. **One item is outstanding and only the CEO can unblock
+it — it is credentials, not code**: neither real end-to-end verification could complete
+(`GEMINI_API_KEY` unset; the OpenAI account has no quota). **STOP — await the next CEO
+directive.**
 
 ## Completed
-- **Real OpenAI LLM provider** (`b00fe41`) — `src/llm/openai_provider.py`, the first real vendor
+- **Google Gemini LLM provider** (`94456ca`) — `src/llm/gemini_provider.py`, added **beside**
+  OpenAI and now the active default. **Nothing was refactored**: the ABC, `LLMRequest`,
+  `LLMResponse`, `LLMErrorCategory`, `StructuredResearchOutput`, the citation validator, the
+  analyst orchestration and `openai_provider.py` are all untouched. Official Gemini REST API via
+  `urllib.request` + `json`; **no `google-generativeai` SDK, `requirements.txt` unchanged**.
+  `GEMINI_API_KEY` from the environment only — never on the instance, in an exception, in a log
+  (AST-asserted), or in any persisted artifact; missing key → `CREDENTIALS_UNAVAILABLE` before
+  any socket. Auth in the **`x-goog-api-key` header, never `?key=`**. No `tools` /
+  `functionDeclarations` / `googleSearch` grounding in the body, so the Evidence Boundary holds
+  at the wire level. `responseMimeType` + `responseSchema` generated from the shipped
+  structured-output constants, still re-validated upstream. Gemini-specific handling: model in
+  the URL path, **HTTP 400 `API_KEY_INVALID` mapped to `AUTHENTICATION_FAILURE`** (not a generic
+  outage), uppercase schema dialect, and an omitted `candidatesTokenCount` **derived by
+  subtraction** rather than zero-filled. App-layer `LLM_PROVIDER_REGISTRY` makes both providers
+  selectable with Gemini as `DEFAULT_LLM_PROVIDER_ID`; the UI gains a provider selectbox. 55 new
+  tests, all offline against a local HTTP stub.
+- **Real OpenAI LLM provider** (`b00fe41`) — retained, unchanged, still selectable. — `src/llm/openai_provider.py`, the first real vendor
   implementation, speaking the OpenAI Chat Completions HTTP API through `urllib.request` +
   `json`. **Zero new dependencies** (`requirements.txt` unchanged; no vendor SDK anywhere in
   `src/`). **The `LLMProvider` ABC and the proposal both needed no change.** API key read from
@@ -110,39 +127,41 @@ verification could not complete — the call authenticated but the OpenAI accoun
 - **Phase 2** — Context System Hardening (`CLAUDE.md` budget protocol, state machine, role map).
 
 ## Not Completed — disclosed, not silently dropped
-1. **Real end-to-end API verification — NOT COMPLETED, blocked on account billing.** The call
-   reached OpenAI and **authenticated successfully**, then returned HTTP 429 "You exceeded your
-   current quota". Not a code defect. The live test skips on exactly that condition with a
-   message saying it is not a verification, and the skip is **deliberately narrow** — auth
-   failures, timeouts, malformed responses and ordinary rate limits all still fail loudly,
-   because any of those could be a real regression. **To finish: add OpenAI billing credit, then
-   run `PYTHONPATH=. ./venv/bin/pytest -m real_llm_provider`.** Everything short of the vendor
-   round-trip is already verified against a local stub, including a full 10-section report
-   driven through the real provider class.
-2. **An Anthropic provider** — the proposal's §8 examples name Claude, and `ANTHROPIC_API_KEY`
-   is unset here. It would implement the same ABC alongside `OpenAILLMProvider` with no
+1. **Real Gemini end-to-end verification — NOT VERIFIED (no credential).** `GEMINI_API_KEY` is
+   not set here, so the real call was never attempted. The test skips saying plainly it is not a
+   verification. Its failure handling is **deliberately narrow**: only an exhausted account quota
+   skips; a credential failure, rate limit, timeout or malformed response each **FAIL** with the
+   exact classified `LLMErrorCategory`, never softened into a pass. **To finish: set
+   `GEMINI_API_KEY`, then run `PYTHONPATH=. ./venv/bin/pytest -m real_llm_provider`.**
+2. **Real OpenAI end-to-end verification — NOT COMPLETED (account quota).** The call
+   authenticated, then returned HTTP 429 "exceeded your current quota". Not a code defect. Same
+   narrow-skip discipline. **To finish: add OpenAI billing credit and re-run the same command.**
+   For both providers, everything short of the vendor round-trip is already verified against a
+   local stub, including a full 10-section report driven through each real provider class.
+3. **An Anthropic provider** — the proposal's §8 examples name Claude, and `ANTHROPIC_API_KEY`
+   is unset here. It would slot into `LLM_PROVIDER_REGISTRY` against the same ABC with no
    interface change, but needs its own directive.
-3. **Volatility / Momentum / Volume indicators** — `NotImplementedError` at
+4. **Volatility / Momentum / Volume indicators** — `NotImplementedError` at
    `src/quant/technical/indicators.py:212,224,237`, design in each docstring.
-4. **Persistent `NewsAnnouncementStore`** — news is validated/PIT-filtered in memory only; no
+5. **Persistent `NewsAnnouncementStore`** — news is validated/PIT-filtered in memory only; no
    stateful immutable revision store exists for news.
-5. **Category-level `historical_eligible` (§3.4)** — never implemented anywhere. The report
+6. **Category-level `historical_eligible` (§3.4)** — never implemented anywhere. The report
    marks an absent category as `NOT AVAILABLE` without distinguishing "structurally
    current-only" from "simply absent". Disclosed in `REPORT_LIMITATIONS` on every report.
-6. **Semantic conflict detection between free-text news items** (§3.3's "M&A rumour later
+7. **Semantic conflict detection between free-text news items** (§3.3's "M&A rumour later
    denied") — not deterministically decidable, so not claimed. `CONFLICT_DETECTION_SCOPE` is
    carried onto every report so "no conflicts detected" cannot be misread as "no conflicts
    exist"; surfacing that class remains the AI's narrative contract (§6).
 
 ## Current Test Baseline
-- **Passed**: 660
-- **Skipped**: 12 (11 TuShare live-provider tests; 1 real-LLM end-to-end test blocked on
-  OpenAI account quota — item 1 under Not Completed)
+- **Passed**: 721
+- **Skipped**: 13 (11 TuShare live-provider tests; 1 real-Gemini E2E with no credential; 1
+  real-OpenAI E2E blocked on account quota — items 1 and 2 under Not Completed)
 - **Failures**: 0
 - **Test Command**: `PYTHONPATH=. ./venv/bin/pytest`
 
 ## Git Status
-- **Branch**: `main`; **Working Tree**: clean; **HEAD**: `b00fe41`.
+- **Branch**: `main`; **Working Tree**: clean; **HEAD**: `94456ca`.
 - **`origin/main` is in sync with local `main`** (pushed under explicit CEO authorization for
   this directive).
 - Standing rule unchanged: never push without explicit Product Owner approval.
@@ -155,9 +174,9 @@ verification could not complete — the call authenticated but the OpenAI accoun
   §1a status table, §1b next-phase diagram, §6–§9 design-only sections, §11 plan.
 - `CORPORATE_ACTION_UNIFIED_FORMULA_ARCHITECTURE_PROPOSAL.md`,
   `RIGHTS_OFFERING_ADJUSTMENT_ARCHITECTURE_PROPOSAL.md` — CEO-approved corporate-action designs.
-- `src/llm/` — LLM Provider layer. `openai_provider.py` is the real, network-calling
-  implementation (stdlib HTTP, no vendor SDK); `fake_provider.py` holds the deterministic
-  doubles.
+- `src/llm/` — LLM Provider layer. `gemini_provider.py` (default) and `openai_provider.py` are
+  the real, network-calling implementations (stdlib HTTP, no vendor SDK); `fake_provider.py`
+  holds the deterministic doubles.
 - `src/quant/research_report/report_identity.py`, `report_store.py` — Step 5 identity + store.
 - `src/quant/research_report/report.py`, `data_confidence.py` — §7 report generation +
   computed Data Confidence / conflict detection.
@@ -185,14 +204,23 @@ verification could not complete — the call authenticated but the OpenAI accoun
   `research_application` and `research_analyst_application` and nothing else from this project.
   `test_phase_8r_security_boundary.py`'s `FORBIDDEN_UI_IMPORTS` check is unchanged — the
   allow-list narrowing was a §9-mandated addition, never a relaxation.
-- **A real provider exists; availability now comes from the credential preflight.** Only
-  `openai` has an implementation — a key for an unimplemented vendor must never be treated as a
-  capability.
+- **Two real providers exist and are selected through `LLM_PROVIDER_REGISTRY`.** Gemini is the
+  default; OpenAI is retained. Only registry members have an implementation — a key for a vendor
+  outside it (e.g. `anthropic`) must never be treated as a capability.
+- **One vendor's missing credential must never silently fall through to the other**, and a
+  provider failure must never be retried against a different vendor behind the same label.
+- **Vendor differences are handled, not assumed away.** Gemini returns HTTP **400** for a bad
+  key (mapped to `AUTHENTICATION_FAILURE` via the body's `error.status`), puts the model in the
+  URL path, uses an uppercase schema dialect that rejects `additionalProperties`, and may omit
+  `candidatesTokenCount` (derived by subtraction, never zero-filled). Do not "simplify" these
+  into the OpenAI shape.
+- **API keys travel in headers, never in a URL.** Gemini accepts `?key=`; it is deliberately
+  unused because a secret in a URL leaks into proxy logs and history.
 - **A provider failure is NEVER downgraded to a synthetic narrative.** Doing so would put
   unlabelled placeholder prose where a reader expects real analysis. Generation fails closed
   instead.
-- **`data_origin="REAL_PROVIDER"` is set in exactly one place** (`openai_provider.py`); the
-  fakes hard-code `SYNTHETIC_DATA`. Never let a fake emit `REAL_PROVIDER`.
+- **`data_origin="REAL_PROVIDER"` is set only by the real providers**; the fakes hard-code
+  `SYNTHETIC_DATA`. Never let a fake emit `REAL_PROVIDER`.
 - **The API key is environment-only and must stay unloggable**: no constructor argument, no
   instance attribute, no exception message, no logging. Provider error bodies are echoed only as
   a short bounded excerpt — they are untrusted content.
@@ -244,10 +272,10 @@ verification could not complete — the call authenticated but the OpenAI accoun
   absent and requires its own directive.
 
 ## Exact Next Action
-**Await a CEO directive.** The track is complete end to end including a real provider. The one
-outstanding item is not code: **add OpenAI billing credit and run
-`PYTHONPATH=. ./venv/bin/pytest -m real_llm_provider`** to complete the real end-to-end
-verification. Do not mark that verification done until it actually passes.
+**Await a CEO directive.** The track is complete end to end with two real providers. The one
+outstanding item is credentials, not code: **set `GEMINI_API_KEY` (and/or add OpenAI billing
+credit), then run `PYTHONPATH=. ./venv/bin/pytest -m real_llm_provider`.** Do not mark either
+verification done until it actually passes.
 On a new session or post-compaction recovery, execute the New Session Recovery Protocol
 (`CLAUDE.md` §7) starting with `CLAUDE.md`.
 
@@ -259,8 +287,9 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
 - Do NOT let the analyst UI import anything but the two Application Layer modules.
 - Do NOT present synthetic narrative as analysis, or make it the default when a real provider
   is available.
-- Do NOT claim the real end-to-end API verification passed until it actually does.
-- Do NOT broaden the live test's quota skip to cover other failure categories.
+- Do NOT claim either real end-to-end API verification passed until it actually does.
+- Do NOT broaden the live tests' narrow quota/credential skip to cover other failure categories.
+- Do NOT put an API key in a URL, a log, a config file, or any persisted artifact.
 - Do NOT add a `result_hash` or any prose hash to `ResearchAnalystReportIdentity`.
 - Do NOT add a verdict/rating/recommendation field to `ResearchReport`.
 - Do NOT let an LLM produce, adjust, or influence the Data Confidence metric.
@@ -268,5 +297,5 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
 
 ## Validation Required
 - `git status` — working tree clean.
-- `PYTHONPATH=. ./venv/bin/pytest` — **660 passed, 12 skipped, 0 failed**.
+- `PYTHONPATH=. ./venv/bin/pytest` — **721 passed, 13 skipped, 0 failed**.
 - `git diff --check` — clean.
