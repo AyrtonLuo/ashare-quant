@@ -340,6 +340,21 @@ elif page == "AI Research Analyst":
         preview_bundle = None
 
     real_available = provider_status.status == analyst.LLM_AVAILABLE_STATUS
+    selectable = list(provider_status.available_provider_ids) or list(
+        provider_status.implemented_provider_ids
+    )
+    selected_provider = st.selectbox(
+        "LLM provider", options=selectable,
+        index=(selectable.index(provider_status.selected_provider_id)
+               if provider_status.selected_provider_id in selectable else 0),
+        format_func=lambda pid: (
+            f"{pid}" + ("" if pid in provider_status.available_provider_ids
+                        else "  (no credential configured)")
+        ),
+        key="analyst_provider",
+        help="Both providers implement the same interface; switching vendors changes nothing "
+             "upstream of the provider call.",
+    )
     narrative_source = st.radio(
         "Narrative source",
         options=["Real LLM provider", "Labelled SYNTHETIC placeholder"],
@@ -352,10 +367,11 @@ elif page == "AI Research Analyst":
         ),
     )
     use_real = narrative_source == "Real LLM provider"
-    if use_real and not real_available:
+    if use_real and selected_provider not in provider_status.available_provider_ids:
         st.warning(
-            "No LLM credential is configured — generation with the real provider will fail "
-            "closed rather than fall back to a synthetic narrative.", icon="⚠️",
+            f"No credential is configured for `{selected_provider}` — generation will fail "
+            "closed rather than fall back to another vendor or to a synthetic narrative.",
+            icon="⚠️",
         )
 
     if st.button("🧠 Generate AI Research Report", key="analyst_generate"):
@@ -364,6 +380,7 @@ elif page == "AI Research Analyst":
                 view = analyst.generate_analyst_report(
                     analyst_symbol, analyst_as_of,
                     allow_synthetic_narrative=not use_real, use_real_provider=use_real,
+                    provider_id=selected_provider if use_real else None,
                 )
                 st.session_state["last_analyst_report_id"] = view.report_id
                 st.success(f"Report generated and persisted: `{view.report_id}`")

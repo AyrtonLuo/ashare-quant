@@ -46,6 +46,11 @@ from src.app.golden_dataset_seed import (
 )
 from src.llm.credential import LLMProviderCredentialPreflight
 from src.llm.fake_provider import FakeLLMProvider
+from src.llm.gemini_provider import (
+    GEMINI_API_KEY_ENV_VAR,
+    GEMINI_PROVIDER_ID,
+    GeminiLLMProvider,
+)
 from src.llm.openai_provider import (
     OPENAI_API_KEY_ENV_VAR,
     OPENAI_PROVIDER_ID,
@@ -84,16 +89,31 @@ from src.quant.technical.indicators import (
 
 REPORT_STORE_BASE_DIR = "data/research/analyst_reports"
 
-# Only `openai` has a concrete implementation; the other two are listed so the UI can show the
-# preflight for a credential a future provider would use. A key for a vendor with no
-# implementation never makes that vendor usable.
-KNOWN_LLM_PROVIDERS: Tuple[Tuple[str, str], ...] = (
-    (OPENAI_PROVIDER_ID, OPENAI_API_KEY_ENV_VAR),
-    ("anthropic", "ANTHROPIC_API_KEY"),
-    ("gemini", "GEMINI_API_KEY"),
+# The registry of providers that are actually IMPLEMENTED: provider_id -> (factory, env var,
+# default model). Both real providers implement the same `LLMProvider` ABC, so selecting between
+# them is a call-site choice and nothing upstream changes. Gemini is the active default per the
+# CEO directive; OpenAI is retained and remains fully selectable.
+LLM_PROVIDER_REGISTRY: Dict[str, Dict[str, Any]] = {
+    GEMINI_PROVIDER_ID: {
+        "factory": GeminiLLMProvider,
+        "env_var": GEMINI_API_KEY_ENV_VAR,
+        "default_model": "gemini-2.5-flash",
+    },
+    OPENAI_PROVIDER_ID: {
+        "factory": OpenAILLMProvider,
+        "env_var": OPENAI_API_KEY_ENV_VAR,
+        "default_model": "gpt-4o-mini",
+    },
+}
+DEFAULT_LLM_PROVIDER_ID = GEMINI_PROVIDER_ID
+
+# Listed so the UI can show the preflight for a credential a not-yet-implemented vendor would
+# use. A key for a vendor absent from LLM_PROVIDER_REGISTRY never makes that vendor usable.
+KNOWN_LLM_PROVIDERS: Tuple[Tuple[str, str], ...] = tuple(
+    [(pid, spec["env_var"]) for pid, spec in LLM_PROVIDER_REGISTRY.items()]
+    + [("anthropic", "ANTHROPIC_API_KEY")]
 )
 
-DEFAULT_LLM_MODEL = "gpt-4o-mini"
 LLM_AVAILABLE_STATUS = "LLM_PROVIDER_AVAILABLE"
 LLM_CREDENTIALS_UNAVAILABLE_STATUS = "LLM_PROVIDER_CREDENTIALS_UNAVAILABLE"
 NARRATIVE_ORIGIN_SYNTHETIC = "SYNTHETIC_DATA"
@@ -118,9 +138,9 @@ _CATEGORY_UNAVAILABLE_REASONS: Dict[str, str] = {
 }
 
 ANALYST_LIMITATIONS: Tuple[str, ...] = (
-    "A real LLM provider is implemented (OpenAI over stdlib HTTP, no vendor SDK). When no "
-    "credential is configured, report generation fails closed or produces an explicitly-"
-    "labelled synthetic placeholder — never an unlabelled substitute.",
+    "Two real LLM providers are implemented (Google Gemini and OpenAI, both over stdlib HTTP, "
+    "no vendor SDK). When no credential is configured, report generation fails closed or "
+    "produces an explicitly-labelled synthetic placeholder — never an unlabelled substitute.",
     "All evidence originates from the certified GOLDEN_DATASET; none of it is REAL_PROVIDER "
     "sourced (LIVE_PROVIDER_CREDENTIALS_UNAVAILABLE).",
     "Technical indicators here are computed on RAW golden closes (input_price_basis='RAW'); "
@@ -142,6 +162,10 @@ class LLMProviderStatusView:
     status: str
     message: str
     credential_reports: Tuple[Dict[str, Any], ...]
+    # Trailing-defaulted, so an existing caller of this view keeps working unmodified.
+    implemented_provider_ids: Tuple[str, ...] = ()
+    available_provider_ids: Tuple[str, ...] = ()
+    selected_provider_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -270,35 +294,63 @@ def get_analyst_symbols() -> List[Dict[str, str]]:
     return [{"symbol": s, "display_name": n} for s, n in sorted(SYMBOL_DISPLAY_NAMES.items())]
 
 
-def _openai_credential_available() -> bool:
-    report = LLMProviderCredentialPreflight.inspect_credentials(
-        OPENAI_PROVIDER_ID, OPENAI_API_KEY_ENV_VAR
-    )
+def _credential_available(provider_id: str) -> bool:
+    spec = LLM_PROVIDER_REGISTRY.get(provider_id)
+    if spec is None:
+        return False   # a vendor with no implementation is never "available", key or not
+    report = LLMProviderCredentialPreflight.inspect_credentials(provider_id, spec["env_var"])
     return report["credential_status"] == "PRESENT_UNVERIFIED"
 
 
+def get_available_llm_provider_ids() -> Tuple[str, ...]:
+    """Implemented providers whose credential is present, in registry order (the default first)."""
+    return tuple(pid for pid in LLM_PROVIDER_REGISTRY if _credential_available(pid))
+
+
+def resolve_llm_provider_id(provider_id: Optional[str] = None) -> str:
+    """Explicit choice wins; otherwise the first implemented provider with a credential;
+    otherwise the configured default (whose generation will then fail closed on the missing
+    credential, rather than silently selecting another vendor)."""
+    if provider_id is not None:
+        if provider_id not in LLM_PROVIDER_REGISTRY:
+            raise ResearchAnalystError(
+                f"FAIL CLOSED: '{provider_id}' is not an implemented LLM provider "
+                f"(implemented: {sorted(LLM_PROVIDER_REGISTRY)})."
+            )
+        return provider_id
+    available = get_available_llm_provider_ids()
+    return available[0] if available else DEFAULT_LLM_PROVIDER_ID
+
+
 def get_llm_provider_status() -> LLMProviderStatusView:
-    """Reports the preflight for every known provider. Only `openai` has an implementation, so
-    only its credential can make generation possible; a key for an unimplemented vendor is shown
-    but never treated as a capability."""
+    """Reports the preflight for every known provider. Only providers in
+    LLM_PROVIDER_REGISTRY have an implementation, so only their credentials can make generation
+    possible; a key for an unimplemented vendor is shown but never treated as a capability."""
     reports = tuple(
         LLMProviderCredentialPreflight.inspect_credentials(provider_id, env_var)
         for provider_id, env_var in KNOWN_LLM_PROVIDERS
     )
-    available = _openai_credential_available()
+    available = get_available_llm_provider_ids()
+    selected = resolve_llm_provider_id()
+    implemented = tuple(LLM_PROVIDER_REGISTRY)
     return LLMProviderStatusView(
         live_provider_implemented=True,
         status=LLM_AVAILABLE_STATUS if available else LLM_CREDENTIALS_UNAVAILABLE_STATUS,
         message=(
-            f"Real provider `{OPENAI_PROVIDER_ID}` is implemented (stdlib HTTP, no vendor SDK) "
-            "and its credential is present. Structural presence only — no connectivity probe "
-            "was made, so a call can still fail on quota, rate limit or network."
+            f"Implemented real providers: {', '.join(implemented)} (stdlib HTTP, no vendor SDK). "
+            f"Credential present for: {', '.join(available)}; `{selected}` would be used. "
+            "Structural presence only — no connectivity probe was made, so a call can still fail "
+            "on quota, rate limit or network."
             if available else
-            f"Real provider `{OPENAI_PROVIDER_ID}` is implemented, but {OPENAI_API_KEY_ENV_VAR} "
-            "is not set. Report generation fails closed unless a synthetic, clearly-labelled "
-            "narrative is explicitly requested."
+            f"Implemented real providers: {', '.join(implemented)}, but no credential is set "
+            f"for any of them ({', '.join(spec['env_var'] for spec in LLM_PROVIDER_REGISTRY.values())}). "
+            "Report generation fails closed unless a synthetic, clearly-labelled narrative is "
+            "explicitly requested."
         ),
         credential_reports=reports,
+        implemented_provider_ids=implemented,
+        available_provider_ids=available,
+        selected_provider_id=selected,
     )
 
 
@@ -439,17 +491,23 @@ def generate_analyst_report(
     allow_synthetic_narrative: bool = False,
     persist: bool = True,
     research_run_id: Optional[str] = None,
-    model: str = DEFAULT_LLM_MODEL,
+    model: Optional[str] = None,
     use_real_provider: Optional[bool] = None,
+    provider_id: Optional[str] = None,
 ) -> AnalystReportView:
-    """Uses the real provider when its credential is present. Fails closed when it is not,
-    unless a synthetic, clearly-labelled narrative is explicitly requested. The Evidence Bundle
-    is real in every case.
+    """Uses a real provider when its credential is present. Fails closed when it is not, unless
+    a synthetic, clearly-labelled narrative is explicitly requested. The Evidence Bundle is real
+    in every case.
 
-    `use_real_provider` forces the choice (True demands the real provider and refuses to fall
-    back; False demands the synthetic path) — the default, None, decides from the preflight. A
-    provider-level failure is never silently downgraded to a synthetic narrative: that would put
-    unlabelled placeholder prose where a reader expects real analysis.
+    `provider_id` selects between the implemented real providers (Gemini, OpenAI); omitted, the
+    first implemented provider with a credential is used. `model` defaults to that provider's
+    own default model. `use_real_provider` forces the path (True demands a real provider and
+    refuses to fall back; False demands the synthetic one) — the default, None, decides from the
+    preflight.
+
+    A provider-level failure is never silently downgraded to a synthetic narrative, and one
+    vendor's failure is never silently retried against another: either would put something other
+    than what the caller asked for behind the same label.
     """
     items, bundle_view = build_evidence_bundle(symbol, as_of)
     if not items:
@@ -458,28 +516,31 @@ def generate_analyst_report(
             "not be generated from an empty Evidence Bundle."
         )
 
-    real_available = _openai_credential_available()
-    if use_real_provider is None:
-        use_real = real_available
-    else:
-        use_real = use_real_provider
+    selected_provider_id = resolve_llm_provider_id(provider_id)
+    real_available = _credential_available(selected_provider_id)
+    use_real = real_available if use_real_provider is None else use_real_provider
+
     if use_real and not real_available:
         raise ResearchAnalystError(
-            f"FAIL CLOSED: {LLM_CREDENTIALS_UNAVAILABLE_STATUS} — the real provider was "
-            f"requested but {OPENAI_API_KEY_ENV_VAR} is not set."
+            f"FAIL CLOSED: {LLM_CREDENTIALS_UNAVAILABLE_STATUS} — provider "
+            f"'{selected_provider_id}' was requested but "
+            f"{LLM_PROVIDER_REGISTRY[selected_provider_id]['env_var']} is not set."
         )
 
     if not use_real and not allow_synthetic_narrative:
+        env_vars = ", ".join(spec["env_var"] for spec in LLM_PROVIDER_REGISTRY.values())
         raise ResearchAnalystError(
             f"FAIL CLOSED: {LLM_CREDENTIALS_UNAVAILABLE_STATUS} — no LLM credential is "
-            f"configured, so no report narrative can be generated. Set "
-            f"{OPENAI_API_KEY_ENV_VAR}, or explicitly request a labelled synthetic narrative."
+            f"configured, so no report narrative can be generated. Set one of {env_vars}, or "
+            "explicitly request a labelled synthetic narrative."
         )
 
     provider: LLMProvider
     if use_real:
-        provider = OpenAILLMProvider()
-        narrative_origin, prompt_version, request_model = "REAL_PROVIDER", "1.0", model
+        spec = LLM_PROVIDER_REGISTRY[selected_provider_id]
+        provider = spec["factory"]()
+        request_model = model or spec["default_model"]
+        narrative_origin, prompt_version = "REAL_PROVIDER", "1.0"
     else:
         provider = FakeLLMProvider(canned_output=_synthetic_canned_output(items))
         narrative_origin = NARRATIVE_ORIGIN_SYNTHETIC

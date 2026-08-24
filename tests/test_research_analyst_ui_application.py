@@ -145,11 +145,38 @@ def test_provider_status_reports_credentials_unavailable_without_a_key(monkeypat
 
 
 def test_a_credential_for_an_unimplemented_vendor_grants_no_capability(monkeypatch):
-    """Only `openai` has an implementation. A Gemini key must not make generation possible."""
+    """Gemini and OpenAI are implemented; Anthropic is not. An Anthropic key must not make
+    generation possible."""
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setenv("GEMINI_API_KEY", "gm-not-a-real-key-0123456789")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-not-a-real-key-0123456789")
     status = analyst.get_llm_provider_status()
     assert status.status == "LLM_PROVIDER_CREDENTIALS_UNAVAILABLE"
+    assert status.available_provider_ids == ()
+    assert "anthropic" not in status.implemented_provider_ids
+
+
+def test_gemini_is_the_default_provider_when_both_credentials_are_present(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "gm-not-a-real-key-0123456789")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-not-a-real-key-0123456789")
+    status = analyst.get_llm_provider_status()
+    assert status.selected_provider_id == "gemini"
+    assert set(status.available_provider_ids) == {"gemini", "openai"}
+
+
+def test_openai_is_retained_and_remains_selectable(monkeypatch):
+    """Gemini replaced OpenAI as the DEFAULT, not as an implementation."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-not-a-real-key-0123456789")
+    status = analyst.get_llm_provider_status()
+    assert "openai" in status.implemented_provider_ids
+    assert status.selected_provider_id == "openai"
+    assert analyst.resolve_llm_provider_id("openai") == "openai"
+
+
+def test_selecting_an_unimplemented_provider_fails_closed():
+    with pytest.raises(analyst.ResearchAnalystError, match="not an implemented LLM provider"):
+        analyst.resolve_llm_provider_id("anthropic")
 
 
 def test_credential_reports_never_expose_the_key_value(monkeypatch):
@@ -239,21 +266,18 @@ def test_fail_closed_generation_persists_nothing(as_of, monkeypatch):
     assert analyst.list_analyst_reports() == []
 
 
-def test_real_provider_is_selected_when_a_credential_is_present(as_of, monkeypatch):
-    """Asserts the SELECTION, without making a network call: the real provider class is swapped
-    for a recording stub, so this test proves which branch was taken and nothing else."""
+def _install_recording_provider(monkeypatch, provider_id, chosen):
+    """Swaps a registry factory for a recording stub, so provider selection can be asserted
+    without making a network call."""
     from src.llm.fake_provider import FakeLLMProvider
-    from src.llm.openai_provider import OPENAI_PROVIDER_ID
-
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-not-a-real-key-0123456789")
-    chosen = {}
 
     class _RecordingProvider(FakeLLMProvider):
         @property
         def provider_id(self):
-            return OPENAI_PROVIDER_ID
+            return provider_id
 
         def generate_structured_research(self, request):
+            chosen["provider_id"] = provider_id
             chosen["model"] = request.model
             chosen["prompt_version"] = request.prompt_version
             self._canned_output = {
@@ -265,13 +289,48 @@ def test_real_provider_is_selected_when_a_credential_is_present(as_of, monkeypat
             response = super().generate_structured_research(request)
             return dataclasses.replace(response, data_origin="REAL_PROVIDER")
 
-    monkeypatch.setattr(analyst, "OpenAILLMProvider", lambda: _RecordingProvider())
-    view = analyst.generate_analyst_report(SYMBOL, as_of)
+    spec = dict(analyst.LLM_PROVIDER_REGISTRY[provider_id])
+    spec["factory"] = _RecordingProvider
+    monkeypatch.setitem(analyst.LLM_PROVIDER_REGISTRY, provider_id, spec)
+    return spec
 
-    assert chosen["model"] == analyst.DEFAULT_LLM_MODEL
+
+@pytest.mark.parametrize("provider_id,env_var", [
+    ("gemini", "GEMINI_API_KEY"), ("openai", "OPENAI_API_KEY"),
+])
+def test_either_real_provider_can_be_selected(as_of, monkeypatch, provider_id, env_var):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv(env_var, "key-not-a-real-credential-0123456789")
+    chosen = {}
+    spec = _install_recording_provider(monkeypatch, provider_id, chosen)
+
+    view = analyst.generate_analyst_report(SYMBOL, as_of, provider_id=provider_id)
+
+    assert chosen["provider_id"] == provider_id
+    assert chosen["model"] == spec["default_model"]     # each provider's own default model
     assert chosen["prompt_version"] == "1.0"
     assert view.narrative_origin == "REAL_PROVIDER"
     assert view.narrative_warning is None
+
+
+def test_gemini_is_chosen_when_no_provider_is_named(as_of, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "gm-not-a-real-key-0123456789")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-not-a-real-key-0123456789")
+    chosen = {}
+    _install_recording_provider(monkeypatch, "gemini", chosen)
+    analyst.generate_analyst_report(SYMBOL, as_of)
+    assert chosen["provider_id"] == "gemini"
+
+
+def test_one_providers_missing_credential_never_silently_uses_the_other(as_of, monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-not-a-real-key-0123456789")
+    with pytest.raises(analyst.ResearchAnalystError) as excinfo:
+        analyst.generate_analyst_report(
+            SYMBOL, as_of, provider_id="gemini", use_real_provider=True
+        )
+    assert "GEMINI_API_KEY is not set" in str(excinfo.value)
 
 
 def test_generation_fails_closed_when_no_evidence_exists():
@@ -366,7 +425,7 @@ def test_report_view_carries_disclaimer_and_limitations(as_of):
     view = _generate(as_of)
     assert "not investment advice" in view.disclaimer.lower()
     joined = " ".join(view.limitations)
-    assert "A real LLM provider is implemented" in joined
+    assert "Two real LLM providers are implemented" in joined
     assert "GOLDEN_DATASET" in joined
     assert "bit-reproducible" in joined
 
