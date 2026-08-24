@@ -34,6 +34,12 @@ from src.app.golden_dataset_seed import (
 from src.app import research_analyst_application as analyst
 from src.data.contracts.quote import QuoteContract
 from src.data.providers.base import ProviderError
+from src.data.providers.fundamental_provider import (
+    GoldenFundamentalProvider,
+    FundamentalProvider,
+    REPORT_PERIOD_NOT_DISCLOSED,
+)
+from src.data.providers.tencent_fundamental_provider import TencentFundamentalProvider
 from src.data.providers.history_provider import (
     MIN_BARS_FOR_FULL_TECHNICALS,
     GoldenHistoryProvider,
@@ -66,9 +72,10 @@ DEFAULT_QUOTE_SOURCE = QUOTE_SOURCE_REAL
 REAL_DATA_STATUS = "REAL DATA"
 DEMO_DATA_STATUS = "DEMO DATA"
 
-REAL_MODE_NO_FUNDAMENTAL_REASON = (
-    "实时模式下尚未接入真实财务数据源；不会用演示数据代替真实数据。"
-)
+# Reasons a fundamental row can be empty. Each is specific: "the source does not report it" and
+# "the metric is not modelled at all" are different facts, and a user deserves to know which.
+_FIELD_NOT_PROVIDED_BY_SOURCE = "当前基本面数据源未提供该指标。"
+_FIELD_NOT_MODELLED_ANYWHERE = "该指标尚未纳入当前数据契约，也无可验证的数据源；不做估算。"
 
 # How many daily bars the Terminal asks for. Comfortably above MACD's 34-bar warm-up so several
 # valid points exist, without pulling years of history a consumer page never shows.
@@ -156,7 +163,7 @@ class TerminalStockView:
     quote: QuoteView
     price_history: "PriceHistoryView"
     technicals: Tuple[TechnicalReadingView, ...]
-    fundamentals: Tuple[FundamentalRowView, ...]
+    fundamentals: "FundamentalPanelView"
     news: Tuple[NewsItemView, ...]
     news_unavailable_reason: Optional[str]
     disclaimer: str = DISCLAIMER
@@ -181,6 +188,20 @@ def _quote_provider(source: Optional[str] = None) -> QuoteProvider:
         for contract in golden_market_data():
             bars_by_symbol.setdefault(contract.symbol, []).append(contract)
         return GoldenQuoteProvider(bars_by_symbol, display_names=dict(SYMBOL_DISPLAY_NAMES))
+    raise TerminalError(
+        f"未知的数据源模式 '{mode}'，应为 {QUOTE_SOURCE_REAL} 或 {QUOTE_SOURCE_DEMO}。"
+    )
+
+
+def _fundamental_provider(source: Optional[str] = None) -> FundamentalProvider:
+    """The single seam for fundamentals — separate from the quote and history seams on purpose.
+    The three feeds have different vendors, different update frequencies and different
+    reliability, so each declares its own source rather than being collapsed into one claim."""
+    mode = source or DEFAULT_QUOTE_SOURCE
+    if mode == QUOTE_SOURCE_REAL:
+        return TencentFundamentalProvider()
+    if mode == QUOTE_SOURCE_DEMO:
+        return GoldenFundamentalProvider(dict(golden_fundamental_data()))
     raise TerminalError(
         f"未知的数据源模式 '{mode}'，应为 {QUOTE_SOURCE_REAL} 或 {QUOTE_SOURCE_DEMO}。"
     )
@@ -502,23 +523,34 @@ def get_technical_views(symbol: str, source: Optional[str] = None
     return views
 
 
-# --- Fundamentals ---------------------------------------------------------------------------------
+# --- Fundamentals -------------------------------------------------------------------------------
 
-# (label, contract attribute, formatter). `None` as the attribute means the field is not modelled
-# by FundamentalDataContract at all — reported honestly rather than silently omitted from the list.
+# (label, contract attribute, formatter), in the order the CEO directive lists them.
+# `None` as the attribute means the metric is not modelled by FundamentalDataContract AND no
+# verifiable free source reports it — surfaced honestly rather than dropped from the table.
 _FUNDAMENTAL_ROWS: Tuple[Tuple[str, Optional[str], str], ...] = (
-    ("营收", "revenue", "money"),
-    ("净利润", "net_income", "money"),
-    ("每股收益 (EPS)", "eps_ttm", "number"),
-    ("净资产收益率 (ROE)", "roe", "percent"),
-    ("毛利率", None, "percent"),
-    ("经营现金流", "operating_cash_flow", "money"),
+    ("总市值", "market_cap", "money"),
     ("市盈率 (PE)", "pe_ttm", "number"),
     ("市净率 (PB)", "pb", "number"),
+    ("净资产收益率 (ROE)", "roe", "percent"),
+    ("营收", "revenue", "money"),
+    ("净利润", "net_income", "money"),
+    ("毛利率", None, "percent"),
+    ("净利率", None, "percent"),
+    ("每股收益 (EPS)", "eps_ttm", "number"),
 )
 
-_FIELD_NOT_MODELLED = "该指标尚未纳入当前数据契约，不做估算。"
-_FIELD_NOT_PROVIDED = "当前数据源未提供该指标。"
+
+@dataclass(frozen=True)
+class FundamentalPanelView:
+    """The fundamental panel carries its OWN source and date. Quotes, K-line history and
+    fundamentals come from different feeds, and telling a user that fundamentals arrived with the
+    price would be false."""
+    rows: Tuple[FundamentalRowView, ...]
+    data_date: str
+    data_source: str
+    is_demo: bool
+    unavailable_reason: Optional[str] = None
 
 
 def _format_value(value: float, kind: str) -> str:
@@ -533,33 +565,67 @@ def _format_value(value: float, kind: str) -> str:
     return f"{value:.2f}"
 
 
-def get_fundamental_views(symbol: str, source: Optional[str] = None
-                          ) -> List[FundamentalRowView]:
-    """Every row is always present in the output. A missing number renders as 暂无数据 with a
-    reason — never omitted from the table, and never estimated.
-
-    In REAL mode every row is 暂无数据: no real fundamental source is wired, and showing demo
-    fundamentals beside a real price would mix the two."""
-    if (source or DEFAULT_QUOTE_SOURCE) == QUOTE_SOURCE_REAL:
-        return [
-            FundamentalRowView(label, NOT_AVAILABLE_TEXT, False, REAL_MODE_NO_FUNDAMENTAL_REASON)
-            for label, _, _ in _FUNDAMENTAL_ROWS
-        ]
-
-    records = golden_fundamental_data().get(symbol, [])
-    latest = records[-1] if records else None
-
+def _rows_from_contract(contract) -> List[FundamentalRowView]:
     rows: List[FundamentalRowView] = []
     for label, attribute, kind in _FUNDAMENTAL_ROWS:
         if attribute is None:
-            rows.append(FundamentalRowView(label, NOT_AVAILABLE_TEXT, False, _FIELD_NOT_MODELLED))
+            rows.append(FundamentalRowView(
+                label, NOT_AVAILABLE_TEXT, False, _FIELD_NOT_MODELLED_ANYWHERE))
             continue
-        value = getattr(latest, attribute, None) if latest is not None else None
+        value = getattr(contract, attribute, None) if contract is not None else None
         if value is None:
-            rows.append(FundamentalRowView(label, NOT_AVAILABLE_TEXT, False, _FIELD_NOT_PROVIDED))
+            rows.append(FundamentalRowView(
+                label, NOT_AVAILABLE_TEXT, False, _FIELD_NOT_PROVIDED_BY_SOURCE))
             continue
         rows.append(FundamentalRowView(label, _format_value(value, kind), True, None))
     return rows
+
+
+def _all_unavailable(reason: str) -> List[FundamentalRowView]:
+    return [FundamentalRowView(label, NOT_AVAILABLE_TEXT, False, reason)
+            for label, _, _ in _FUNDAMENTAL_ROWS]
+
+
+def get_fundamentals_panel(symbol: str, source: Optional[str] = None) -> FundamentalPanelView:
+    """Every row is always present. A missing number renders as 暂无数据 WITH A REASON — never
+    omitted from the table, never estimated, and never back-filled from the other mode."""
+    mode = source or DEFAULT_QUOTE_SOURCE
+    is_demo = mode != QUOTE_SOURCE_REAL
+    try:
+        provider = _fundamental_provider(mode)
+        contract = provider.get_fundamentals(symbol)
+    except (TerminalError, ProviderError) as e:
+        return FundamentalPanelView(
+            rows=tuple(_all_unavailable(str(e))), data_date=NOT_AVAILABLE_TEXT,
+            data_source=DEMO_DATA_STATUS if is_demo else REAL_DATA_STATUS,
+            is_demo=is_demo, unavailable_reason=str(e),
+        )
+
+    is_valid, errors = DataTrustGate.validate_fundamental_data(contract)
+    if not is_valid:
+        reason = f"基本面数据未通过校验，不予显示：{errors}"
+        return FundamentalPanelView(
+            rows=tuple(_all_unavailable(reason)), data_date=NOT_AVAILABLE_TEXT,
+            data_source=provider.source_label, is_demo=is_demo, unavailable_reason=reason,
+        )
+
+    # The accounting period, when the source discloses one; otherwise the valuation date, with
+    # the absence of a report period stated rather than papered over.
+    if contract.report_date and contract.report_date != REPORT_PERIOD_NOT_DISCLOSED:
+        data_date = f"报告期 {contract.report_date}"
+    else:
+        data_date = f"估值日期 {contract.trade_date}（数据源未披露对应报告期）"
+
+    return FundamentalPanelView(
+        rows=tuple(_rows_from_contract(contract)), data_date=data_date,
+        data_source=provider.source_label, is_demo=is_demo,
+    )
+
+
+def get_fundamental_views(symbol: str, source: Optional[str] = None
+                          ) -> List[FundamentalRowView]:
+    """Row-only view, retained for callers that do not need the panel's source metadata."""
+    return list(get_fundamentals_panel(symbol, source).rows)
 
 
 # --- News -----------------------------------------------------------------------------------------
@@ -587,7 +653,7 @@ def get_stock_view(symbol: str, source: Optional[str] = None) -> TerminalStockVi
         quote=get_quote_view(symbol, mode),
         price_history=get_price_history(symbol, mode),
         technicals=tuple(get_technical_views(symbol, mode)),
-        fundamentals=tuple(get_fundamental_views(symbol, mode)),
+        fundamentals=get_fundamentals_panel(symbol, mode),
         news=tuple(news),
         news_unavailable_reason=news_reason,
     )

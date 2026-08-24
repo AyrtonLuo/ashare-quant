@@ -301,13 +301,18 @@ def _render_terminal_technicals(readings) -> None:
         st.caption(reading.detail)
 
 
-def _render_terminal_fundamentals(rows) -> None:
+def _render_terminal_fundamentals(panel) -> None:
     st.markdown("### 基本面")
+    if panel.unavailable_reason:
+        st.info(f"{terminal.NOT_AVAILABLE_TEXT} — {panel.unavailable_reason}", icon="ℹ️")
     st.table({
-        "指标": [row.label for row in rows],
-        "数值": [row.value for row in rows],
-        "说明": [row.reason or "" for row in rows],
+        "指标": [row.label for row in panel.rows],
+        "数值": [row.value for row in panel.rows],
+        "说明": [row.reason or "" for row in panel.rows],
     })
+    # The fundamental panel states its OWN source and date: it comes from a different feed than
+    # the quote and the K-line history, and must not inherit their labels.
+    st.caption(f"数据日期：{panel.data_date}　·　数据来源：{panel.data_source}")
 
 
 def _render_terminal_news(news, unavailable_reason) -> None:

@@ -167,9 +167,11 @@ def test_rsi_thresholds_map_to_the_documented_readings(value, expected):
 # --- Fundamentals: 暂无数据 with a reason, never estimated -----------------------------------------
 
 def test_every_fundamental_row_the_directive_lists_is_present():
+    """The row set follows the T4 directive's own priority list, which replaced 经营现金流 with
+    总市值 and 净利率."""
     labels = [row.label for row in terminal.get_fundamental_views(SYMBOL, DEMO)]
-    for required in ("营收", "净利润", "每股收益 (EPS)", "净资产收益率 (ROE)", "毛利率",
-                     "经营现金流", "市盈率 (PE)", "市净率 (PB)"):
+    for required in ("总市值", "市盈率 (PE)", "市净率 (PB)", "净资产收益率 (ROE)", "营收",
+                     "净利润", "毛利率", "净利率", "每股收益 (EPS)"):
         assert required in labels
 
 
@@ -227,7 +229,9 @@ def test_stock_view_assembles_every_panel():
     view = terminal.get_stock_view(SYMBOL, DEMO)
     assert view.quote.symbol == SYMBOL
     assert len(view.technicals) >= 4
-    assert len(view.fundamentals) == 8
+    # T4 turned the fundamentals into a panel carrying its own source and date.
+    assert len(view.fundamentals.rows) == 9
+    assert view.fundamentals.data_source and view.fundamentals.data_date
     assert view.disclaimer == terminal.DISCLAIMER
 
 

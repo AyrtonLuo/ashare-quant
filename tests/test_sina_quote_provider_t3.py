@@ -259,13 +259,24 @@ def test_an_unknown_source_mode_has_no_history_provider():
         terminal._history_provider("SOMETHING_ELSE")
 
 
-def test_real_mode_never_shows_demo_fundamentals():
-    rows = terminal.get_fundamental_views(SYMBOL, terminal.QUOTE_SOURCE_REAL)
-    assert len(rows) == 8
-    for row in rows:
-        assert row.available is False
-        assert row.value == terminal.NOT_AVAILABLE_TEXT
-        assert "不会用演示数据代替真实数据" in row.reason
+def test_each_mode_draws_fundamentals_from_its_own_provider():
+    """Superseded by T4, which gave REAL mode a real fundamental source. The invariant is now
+    stronger AND network-free: the two modes resolve to DIFFERENT providers, so a REAL-mode
+    fundamental can never come from the demo dataset."""
+    from src.data.providers.fundamental_provider import GoldenFundamentalProvider
+    from src.data.providers.tencent_fundamental_provider import TencentFundamentalProvider
+
+    real = terminal._fundamental_provider(terminal.QUOTE_SOURCE_REAL)
+    demo = terminal._fundamental_provider(terminal.QUOTE_SOURCE_DEMO)
+    assert isinstance(real, TencentFundamentalProvider)
+    assert isinstance(demo, GoldenFundamentalProvider)
+    assert real.provider_id != demo.provider_id
+    assert real.source_label != demo.source_label
+
+
+def test_an_unknown_source_mode_has_no_fundamental_provider():
+    with pytest.raises(terminal.TerminalError, match="未知的数据源模式"):
+        terminal._fundamental_provider("SOMETHING_ELSE")
 
 
 def test_demo_mode_still_shows_its_own_indicators_and_fundamentals():
