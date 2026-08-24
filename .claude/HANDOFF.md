@@ -1,6 +1,6 @@
 # Agent Handoff
 
-_Synchronized to HEAD `a55d0ae` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `3deffa5` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > `.claude/` files > Conversation History._
 
 ## Handoff Status
@@ -9,8 +9,8 @@ READY
 ## Current Track
 **AI Quant Terminal** — consumer repositioning per the CEO Decision on
 `AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` (`d4a2d70`). **Terminal is the default
-mode, Research mode is retained unchanged.** Steps **T1, T2, T5 delivered**; T3 (market-data
-vendor), T4 (news source) and T6 (LLM credential) are gated on CEO decisions.
+mode, Research mode is retained unchanged.** Steps **T1, T2, T3, T5 delivered — the Terminal serves REAL live quotes by default.** T4 (news
+source) and T6 (LLM credential) remain gated on CEO decisions.
 
 The prior **AI Quant Research Analyst** track sits complete beneath it — no phase number assigned
 (standing CEO instruction).
@@ -22,11 +22,19 @@ Layer (not a numbered §11 step). The track is feature-complete against the prop
 written.**
 
 ## Current Objective
-None in flight. Terminal steps **T5 (`5e3c701`), T1 (`2c6bc11`) and T2 (`a55d0ae`)** are
-delivered, tested and pushed. Every remaining Terminal step is blocked on a CEO decision (data
-vendor, news source, LLM credential), not on code. **STOP — await CEO Review.**
+None in flight. Terminal steps **T5 (`5e3c701`), T1 (`2c6bc11`), T2 (`a55d0ae`) and T3
+(`3deffa5`)** are delivered, tested and pushed. **Real-time quotes are live and verified against
+the public endpoint.** **STOP — await CEO Review.**
 
 ## Completed
+- **Real-time A-share quotes** (`3deffa5`, T3) — `src/data/providers/sina_quote_provider.py`,
+  stdlib-only (`urllib` + GBK), **zero new dependencies**, no key/account/purchase. Source picked
+  by live measurement: Sina 4/4, Tencent 4/4, **East Money 2/4 (dropped sockets, IP throttling)
+  → rejected**. Sina preferred because it reports volume in **shares** (Tencent uses 手 — a 100×
+  error if assumed). `data_origin="REAL_PROVIDER"` only from a parsed live response; a halted
+  name, unknown code, truncated layout, non-numeric price, bad timestamp, HTTP error or
+  unreachable host each **fail closed** — nothing is ever substituted, and an unmappable symbol
+  is refused rather than guessed. 3-second cache. **REAL DATA verified live.**
 - **Terminal mode — consumer stock view** (`a55d0ae`, T2) — `src/app/terminal_application.py`
   plus a Terminal-default 模式 switch in the UI. Panels: 搜索 → 行情 → AI 总结 → 技术面 → 基本面 →
   新闻 → 风险 → 看多/看空. The DEMO DATA badge derives from `QuoteContract.data_origin`; missing
@@ -176,14 +184,14 @@ vendor, news source, LLM credential), not on code. **STOP — await CEO Review.*
    exist"; surfacing that class remains the AI's narrative contract (§6).
 
 ## Current Test Baseline
-- **Passed**: 830
+- **Passed**: 863
 - **Skipped**: 13 (11 TuShare live-provider tests; 1 real-Gemini E2E with no credential; 1
   real-OpenAI E2E blocked on account quota — items 1 and 2 under Not Completed)
 - **Failures**: 0
 - **Test Command**: `PYTHONPATH=. ./venv/bin/pytest`
 
 ## Git Status
-- **Branch**: `main`; **Working Tree**: clean; **HEAD**: `a55d0ae`.
+- **Branch**: `main`; **Working Tree**: clean; **HEAD**: `3deffa5`.
 - **`origin/main` is in sync with local `main`** (pushed under explicit CEO authorization for
   this directive).
 - Standing rule unchanged: never push without explicit Product Owner approval.
@@ -206,6 +214,7 @@ vendor, news source, LLM credential), not on code. **STOP — await CEO Review.*
 - `src/app/terminal_application.py` — Terminal Application Layer (the ONLY module the Terminal
   page may call into). Imports nothing from `src/llm/`.
 - `src/data/contracts/quote.py`, `src/data/providers/quote_provider.py` — the T1 quote layer.
+- `src/data/providers/sina_quote_provider.py` — the REAL live quote source (T3).
 - `AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` — the approved Terminal design.
 - `src/app/streamlit_app.py` — the ONLY file permitted to import Streamlit.
 - `src/quant/evidence/evidence_item.py`, `src/quant/technical/indicators.py` — Evidence + indicators.
@@ -226,6 +235,15 @@ vendor, news source, LLM credential), not on code. **STOP — await CEO Review.*
   `reproducibility_scope` field is validated in `__post_init__`, so a caller cannot persist a
   stronger claim. Do not add one.
 - **Terminal is the default mode; Research mode must stay reachable and unchanged.**
+- **REAL and DEMO must never appear on the same page.** In REAL mode the technical and
+  fundamental panels report `暂无数据` because no real historical/fundamental feed is wired —
+  do NOT "improve" this by computing indicators from demo history beside a live price.
+- **There is no automatic REAL→DEMO fallback, and there must never be one.** A failed live fetch
+  shows 暂无数据 + reason; a failed live search returns nothing.
+- **The live quote source is public but UNDOCUMENTED and UNLICENSED** — no SLA, delayed quotes,
+  layout could change without notice (hence the arity check). Fine for research/personal use;
+  a licensed vendor is required before commercial distribution. Do not present it as licensed.
+- **A halted name must never show yesterday's close as a live price.**
 - **A demo quote must never be able to look live**: `GoldenQuoteProvider` hard-codes
   `GOLDEN_DATASET` and stamps the demo bar's own historical timestamp, never `datetime.now()`.
   Do not add a `data_origin` parameter to it.
@@ -306,10 +324,12 @@ vendor, news source, LLM credential), not on code. **STOP — await CEO Review.*
   absent and requires its own directive.
 
 ## Exact Next Action
-**Await CEO Review of T1/T2/T5.** No further Terminal work is authorized or unblocked. The
-remaining steps each need a CEO decision, not code:
-- **T3** market-data vendor + cost (A-share real-time is licensed). When provisioned,
-  `terminal_application._quote_provider()` is the ONE place that changes.
+**Await CEO Review of T3.** No further Terminal work is authorized. Outstanding, each needing a
+CEO decision rather than code:
+- **Licensed quote feed** — whether to procure one before any commercial use; the current source
+  is unlicensed with no SLA.
+- **Real historical bar series** — a separate feed from the quote endpoint, and what the
+  REAL-mode technical panels are waiting on.
 - **T4** news source.
 - **T6** LLM credential/quota (`GEMINI_API_KEY` unset; OpenAI account has no quota).
 Also outstanding: cloud deployment needs the CEO's Streamlit account authorization
@@ -330,6 +350,8 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
   correct answer when data is absent.
 - Do NOT delete the Golden Dataset — it is the approved DEMO DATA source.
 - Do NOT select or purchase a data vendor without an explicit CEO directive.
+- Do NOT let REAL and DEMO data appear on one page, and do NOT add a REAL→DEMO fallback.
+- Do NOT describe the current quote source as licensed or SLA-backed.
 - Do NOT claim either real end-to-end API verification passed until it actually does.
 - Do NOT broaden the live tests' narrow quota/credential skip to cover other failure categories.
 - Do NOT put an API key in a URL, a log, a config file, or any persisted artifact.
@@ -340,5 +362,5 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
 
 ## Validation Required
 - `git status` — working tree clean.
-- `PYTHONPATH=. ./venv/bin/pytest` — **830 passed, 13 skipped, 0 failed**.
+- `PYTHONPATH=. ./venv/bin/pytest` — **863 passed, 13 skipped, 0 failed**.
 - `git diff --check` — clean.

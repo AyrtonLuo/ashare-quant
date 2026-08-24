@@ -1,14 +1,14 @@
 # Current Project State
 
-_Synchronized to HEAD `a55d0ae` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `3deffa5` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > this file > Conversation History._
 
 ## Current Track
 **AI Quant Terminal** — product repositioning from a quant research/audit system to a consumer
 stock-analysis terminal, per the CEO Decision on
 `AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` (`d4a2d70`). **Terminal is the default
-mode; Research mode is retained unchanged.** Steps **T1, T2 and T5 are delivered**; T3/T4/T6 are
-credential- or vendor-gated and explicitly not authorized yet.
+mode; Research mode is retained unchanged.** Steps **T1, T2, T3 and T5 are delivered — the Terminal now serves REAL live quotes by
+default.** T4 (news) and T6 (real AI narrative) remain vendor/credential-gated.
 
 The preceding **AI Quant Research Analyst** track remains complete and untouched beneath it —
 evidence-grounded LLM research synthesis.
@@ -125,6 +125,36 @@ deterministic fakes are retained for testing and for the labelled-synthetic path
     synthetic narrative**. UI gains an explicit narrative-source choice.
   - 41 new tests (offline, against a local 127.0.0.1 HTTP stub — deterministic, free,
     network-free). All existing Fake Provider tests retained unchanged.
+- **Real-time A-share quotes** (`3deffa5`, step T3) — **the Terminal shows REAL DATA by
+  default**, through API → Adapter → Contract → Validation → Application → UI. No raw vendor
+  data reaches the UI.
+  - **Source chosen by measurement**: Sina `hq.sinajs.cn` **4/4** requests succeeded; Tencent
+    **4/4**; East Money **2/4 — dropped sockets with no status code** (IP throttling), so it was
+    rejected. Sina preferred over Tencent because it reports **volume in shares** (Tencent uses
+    手/lots — a 100× error if assumed) and carries an explicit date/time. The 34-field layout was
+    enumerated from a real response before the parser was written.
+  - **Zero new dependencies** — `urllib.request` + GBK decoding, both stdlib. No key, no account,
+    no purchase.
+  - **⚠️ This is a public but UNDOCUMENTED, UNLICENSED endpoint.** No SLA, no support, no
+    compatibility guarantee; quotes are delayed, not tick-level. Fine for research/personal use;
+    **a licensed vendor is required before commercial distribution.** `LiveQuoteProvider` remains
+    the licensed-vendor slot and still refuses explicitly.
+  - **Fails closed, never substitutes**: a halted name (0.00) refuses rather than showing
+    yesterday's close; an unknown code, truncated field layout, non-numeric price, unparseable
+    timestamp, HTTP error or unreachable endpoint each raise. An unmappable symbol is refused,
+    never guessed — guessing returns a real quote for the **wrong security**.
+  - A 3-second cache keeps a page reload from becoming a burst against a free endpoint.
+  - **REAL and DEMO are never mixed.** The quote endpoint serves a quote, not a bar series, so in
+    REAL mode the technical and fundamental panels report `暂无数据` with the reason
+    「不会用演示数据代替真实数据」 — every row still present. **There is no automatic
+    REAL→DEMO fallback anywhere**: a failed fetch shows 暂无数据 + reason; a failed live search
+    returns nothing rather than answering from the demo universe.
+  - UI: 数据源 selector (实时行情 default / 演示数据), **REAL DATA / DEMO DATA** badge on every
+    card, plus 数据状态 / 数据更新时间 / 数据来源 / 交易状态. Search accepts a bare 6-digit code
+    resolved live, so any listed A-share is reachable.
+  - **REAL DATA VERIFIED**: the live test ran (did not skip) against the public endpoint, and the
+    Terminal was confirmed in a browser showing REAL DATA with a same-minute timestamp during an
+    open session.
 - **Terminal mode — consumer stock view** (`a55d0ae`, step T2):
   - New `src/app/terminal_application.py`; the UI reaches project code only through Application
     Layer modules (now three), and this module imports no UI framework and **nothing from
@@ -296,7 +326,7 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 Nothing. Awaiting the next CEO directive.
 
 ## Tests
-- **Passed**: 830
+- **Passed**: 863
 - **Skipped**: 13 (11 TuShare live-provider tests when `TUSHARE_TOKEN` is absent; 1 real-OpenAI
   E2E blocked on account quota; 1 real-Gemini E2E blocked on an absent `GEMINI_API_KEY` — see
   Known Issues)
@@ -306,8 +336,7 @@ Nothing. Awaiting the next CEO directive.
 ## Git Status
 - **Branch**: `main`
 - **Working Tree**: Clean.
-- **HEAD**: `a55d0ae` (`feat: Terminal mode — consumer stock view via a dedicated Application
-  Layer (T2)`)
+- **HEAD**: `3deffa5` (`feat: real-time A-share quotes via Sina public endpoint (T3)`)
 - **`origin/main` is in sync with local `main`.** Pushes are made only under an explicit CEO
   directive authorizing them (as with Step 5 and the §7 layer).
 - Standing rule unchanged: **never push without explicit Product Owner approval.**
@@ -358,10 +387,10 @@ Nothing. Awaiting the next CEO directive.
 delivered, tested and pushed. The remaining Terminal steps are gated on decisions only the CEO
 can make:
 
-- **T3 — real market-data adapter**: blocked on the vendor + cost decision. A-share real-time
-  quotes are a licensed product. `LiveQuoteProvider` is the slot, and it refuses explicitly until
-  then. **When a vendor is provisioned, `terminal_application._quote_provider()` is the ONE place
-  that changes** — every panel reads provenance off the contract.
+- **T3 — DONE** (`3deffa5`), via a free public endpoint. Two follow-ups belong to the CEO:
+  (a) whether to procure a **licensed** feed before any commercial use — the current source is
+  unlicensed and has no SLA; (b) a **real historical bar series**, which is a separate feed from
+  the quote endpoint and is what the REAL-mode technical panels are waiting on.
 - **T4 — real news provider**: blocked on a source decision. Nothing is wired.
 - **T6 — real AI narrative**: blocked on an LLM credential/quota.
 
