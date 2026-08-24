@@ -1,6 +1,6 @@
 # Current Project State
 
-_Synchronized to HEAD `4c1c8dd` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `183c4b1` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > this file > Conversation History._
 
 ## Current Track
@@ -412,6 +412,10 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 Nothing. Awaiting the next CEO directive.
 
 ## Tests
+- **Live-test robustness** (`183c4b1`): three live tests guarded only their FIRST provider
+  call; the Application Layer builds its own provider and makes ADDITIONAL live requests, so
+  a transient vendor drop was reported as a FAILURE rather than a skip. All three now skip on
+  an unreachable provider with **no assertion weakened**.
 - **Passed**: 974
 - **Skipped**: 13 (11 TuShare live-provider tests when `TUSHARE_TOKEN` is absent; 1 real-OpenAI
   E2E blocked on account quota; 1 real-Gemini E2E blocked on an absent `GEMINI_API_KEY` — see

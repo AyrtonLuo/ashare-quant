@@ -1,6 +1,6 @@
 # Agent Handoff
 
-_Synchronized to HEAD `4c1c8dd` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `183c4b1` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > `.claude/` files > Conversation History._
 
 ## Handoff Status
@@ -288,6 +288,7 @@ live and verified against public endpoints.** **STOP — await CEO Review.**
   queried that symbol — an item that does not name the company must be excluded, not attributed.
 - **DEMO mode has no news source and must say so.** Never synthesise headlines, and never let a
   REAL failure fall back to a DEMO answer.
+- **A live test must SKIP on an unreachable vendor, never fail.** Every call that reaches a public endpoint needs that guard — including the *second* call an Application-Layer helper makes, which is what once reported a vendor hiccup as a regression (`183c4b1`). Never weaken the assertions themselves to achieve this.
 - **PB (and anything like it) must be vendor-reported, never derived.** A derived PB was wrong
   for the dual-listed 000333; the vendor's own figure is the only safe one.
 - **A metric no verifiable source reports stays `None`.** 营收/净利润/毛利率/净利率/EPS/ROE render
