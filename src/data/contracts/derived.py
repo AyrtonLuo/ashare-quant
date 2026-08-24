@@ -47,7 +47,10 @@ class DerivedDataContract:
             object.__setattr__(self, 'calculation_timestamp', self.derived_at)
         if self.lookback_window is not None and self.lookback_window <= 0:
             raise ValueError(f"FAIL CLOSED: invalid lookback_window {self.lookback_window} for {self.symbol}.")
-        if self.input_price_basis not in ("PIT_ADJUSTED", "RAW"):
+        # "NOT_APPLICABLE" was added for volume-based indicators (Terminal step T5): traded
+        # volume is not a price, so it has no price basis at all. Labelling it "RAW" would
+        # assert a price basis it does not have; the sentinel states the truth instead.
+        if self.input_price_basis not in ("PIT_ADJUSTED", "RAW", "NOT_APPLICABLE"):
             raise ValueError(f"FAIL CLOSED: unknown input_price_basis '{self.input_price_basis}' for {self.symbol}.")
 
     def to_temporal_contract(self) -> TemporalDataContract:

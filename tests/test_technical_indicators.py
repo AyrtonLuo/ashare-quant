@@ -2,9 +2,9 @@
 test_technical_indicators.py — Canonical Technical Indicator calculation tests.
 
 Directive Step 5: MA, RSI, MACD must be verified with normal data, warm-up, missing data,
-invalid input, and deterministic calculation. Also confirms volatility/momentum/volume
-indicators are honestly NOT implemented (contract-only), per the directive's explicit
-instruction not to "假装完成" (pretend completion).
+invalid input, and deterministic calculation. The volatility/momentum/volume indicators, which
+were contract-only when this file was written, were implemented in Terminal step T5; the last
+test here records that change, and their full coverage lives in test_technical_indicators_t5.py.
 """
 
 from datetime import datetime, timedelta
@@ -149,12 +149,20 @@ def test_macd_deterministic():
     assert r1 == r2
 
 
-# --- Honest incompleteness — NOT implemented this phase --------------------------------------
+# --- Formerly contract-only, implemented in Terminal step T5 ---------------------------------
 
-def test_volatility_momentum_volume_indicators_not_implemented_honestly():
-    with pytest.raises(NotImplementedError):
-        compute_realized_volatility(SYMBOL, _dates(5), [1.0] * 5)
-    with pytest.raises(NotImplementedError):
-        compute_momentum_indicator(SYMBOL, _dates(5), [1.0] * 5)
-    with pytest.raises(NotImplementedError):
-        compute_volume_indicator(SYMBOL, _dates(5), [1.0] * 5)
+def test_volatility_momentum_volume_indicators_are_now_implemented():
+    """Superseded by Terminal step T5: these three raised NotImplementedError while they were
+    contract-only. They are now real calculations, so this test asserts the behaviour that is
+    true today rather than being deleted. Their own detailed coverage — hand-computed values,
+    warm-up handling and fail-closed paths — lives in test_technical_indicators_t5.py."""
+    dates, prices = _dates(5), [10.0, 11.0, 12.0, 11.5, 12.5]
+    for compute in (compute_realized_volatility, compute_momentum_indicator):
+        results = compute(SYMBOL, dates, prices, window=2)
+        assert len(results) == len(dates)
+        assert results[-1].warm_up_satisfied is True
+        assert results[-1].calculated_value is not None
+
+    volume_results = compute_volume_indicator(SYMBOL, dates, [100.0] * 5, window=2)
+    assert len(volume_results) == len(dates)
+    assert volume_results[-1].calculated_value["volume_ma"] == 100.0

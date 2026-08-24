@@ -1,11 +1,11 @@
 """
 indicators.py — Canonical Technical Indicator Calculation.
 
-AI_QUANT_RESEARCH_ANALYST_ARCHITECTURE_PROPOSAL.md §5 (CEO-approved design), now implemented for
-MA, RSI, and MACD only — per the CEO's explicit Step 5 instruction, this is honestly disclosed:
-volatility/momentum/volume indicators are contract-designed (see the stub functions below, each
-documenting input/formula/lookback) but NOT implemented in this phase. Do not treat their
-presence as "done" — every one of them raises NotImplementedError.
+AI_QUANT_RESEARCH_ANALYST_ARCHITECTURE_PROPOSAL.md §5 (CEO-approved design). All six indicators
+are now implemented: MA, RSI and MACD (delivered earlier) plus realized volatility, momentum and
+volume (Terminal directive step T5). Each of the three added here follows the design its own
+docstring already specified before it was built — the formula was not re-invented at
+implementation time.
 
 Do not trust a third-party API's own reported indicator value (directive item 5) — every value
 here is computed locally from a PIT-adjusted price series the caller supplies, never fetched.
@@ -48,6 +48,21 @@ def _validate_series(dates: List[str], prices: List[float]) -> None:
             raise ValueError("FAIL CLOSED: price series contains a None/NaN value.")
         if p <= 0:
             raise ValueError(f"FAIL CLOSED: non-positive price {p} in input series.")
+
+
+def _validate_volume_series(dates: List[str], volumes: List[float]) -> None:
+    """Volume needs its own validator: a suspended or halted session legitimately has volume 0,
+    whereas a price of 0 is always a data error. Sharing _validate_series would therefore reject
+    valid market data."""
+    if len(dates) != len(volumes):
+        raise ValueError("FAIL CLOSED: dates and volumes length mismatch.")
+    if dates != sorted(dates):
+        raise ValueError("FAIL CLOSED: dates must be sorted ascending.")
+    for v in volumes:
+        if v is None or (isinstance(v, float) and math.isnan(v)):
+            raise ValueError("FAIL CLOSED: volume series contains a None/NaN value.")
+        if v < 0:
+            raise ValueError(f"FAIL CLOSED: negative volume {v} in input series.")
 
 
 def _warm_up_record(symbol, dates, i, metric_name, parameters, lookback_window, input_price_basis, data_origin):
@@ -198,43 +213,142 @@ def compute_macd(
     return results
 
 
-# --- Contract-only (NOT implemented this phase) — honestly disclosed, per the CEO's explicit
-# instruction not to "假装完成" (pretend completion). Each documents input/formula/lookback so
-# the design exists even though the calculation does not. -------------------------------------
+# --- Realized volatility / momentum / volume (Terminal step T5) --------------------------------
+# Each implements exactly the design its docstring specified while it was still a stub.
 
-def compute_realized_volatility(symbol: str, dates: List[str], prices: List[float], window: int = 20):
-    """DESIGN ONLY — NOT IMPLEMENTED. Input: PIT-adjusted daily prices. Formula: annualized
-    standard deviation of daily log returns over the trailing `window` days, scaled by
-    sqrt(252) (the same convention as the existing, unregistered RealizedVolatilityFactor in
-    src/quant/factors/volatility.py — this function would reuse that math conceptually, not
-    duplicate a second implementation, if built). Lookback: `window` + 1 prices (for `window`
-    returns). Missing data: same INSUFFICIENT_WARM_UP convention as MA/RSI/MACD above."""
-    raise NotImplementedError(
-        "compute_realized_volatility is contract-designed only, not implemented in this phase — "
-        "see this function's docstring for the intended design."
-    )
+def compute_realized_volatility(
+    symbol: str, dates: List[str], prices: List[float], window: int = 20,
+    input_price_basis: str = "PIT_ADJUSTED", data_origin: str = "SYNTHETIC_DATA",
+) -> List[DerivedDataContract]:
+    """Annualized standard deviation of daily log returns over the trailing `window` days, scaled
+    by sqrt(252).
+
+    Uses the SAMPLE standard deviation (n-1 denominator), matching the convention of the existing
+    RealizedVolatilityFactor rather than introducing a second, subtly different definition of the
+    same statistic. Warm-up: `window` returns require `window` + 1 prices, so the first
+    `window` dates are INSUFFICIENT_WARM_UP.
+    """
+    if window <= 1:
+        raise ValueError(
+            f"FAIL CLOSED: invalid volatility window {window} — a sample standard deviation "
+            "needs at least 2 returns."
+        )
+    _validate_series(dates, prices)
+    params = {"window": window}
+    lookback = window + 1
+    metric_name = f"REALIZED_VOLATILITY_{window}"
+
+    log_returns = [None] + [math.log(prices[i] / prices[i - 1]) for i in range(1, len(prices))]
+
+    results = []
+    for i in range(len(dates)):
+        if i < window:
+            results.append(_warm_up_record(
+                symbol, dates, i, metric_name, params, lookback, input_price_basis, data_origin
+            ))
+            continue
+        sample = log_returns[i - window + 1: i + 1]
+        mean = sum(sample) / len(sample)
+        variance = sum((r - mean) ** 2 for r in sample) / (len(sample) - 1)
+        annualized = math.sqrt(variance) * math.sqrt(252)
+        results.append(DerivedDataContract(
+            symbol=symbol, metric_name=metric_name, calculated_value=round(annualized, 6),
+            derived_at=datetime.now(), formula_version=FORMULA_VERSION,
+            input_data_ids=[f"{symbol}:{d}" for d in dates[i - window: i + 1]],
+            input_as_of=datetime.now(), quality_status="VALID",
+            effective_date=dates[i], parameters=params, input_price_basis=input_price_basis,
+            lookback_window=lookback, warm_up_satisfied=True, data_origin=data_origin,
+        ))
+    return results
 
 
-def compute_momentum_indicator(symbol: str, dates: List[str], prices: List[float], window: int = 20):
-    """DESIGN ONLY — NOT IMPLEMENTED. Input: PIT-adjusted daily prices. Formula: rate-of-change,
-    (price[i] - price[i-window]) / price[i-window] — a raw technical descriptive statistic, NOT
-    the same computation as FactorRegistry's "momentum_20d:v1" (which produces a cross-sectional
-    z-score for signal generation, a different consumption context — this function would not
-    reimplement or replace that factor). Lookback: `window` + 1 prices."""
-    raise NotImplementedError(
-        "compute_momentum_indicator is contract-designed only, not implemented in this phase — "
-        "see this function's docstring for the intended design."
-    )
+def compute_momentum_indicator(
+    symbol: str, dates: List[str], prices: List[float], window: int = 20,
+    input_price_basis: str = "PIT_ADJUSTED", data_origin: str = "SYNTHETIC_DATA",
+) -> List[DerivedDataContract]:
+    """Rate of change: (price[i] - price[i-window]) / price[i-window].
+
+    A raw descriptive statistic, deliberately NOT the same computation as FactorRegistry's
+    "momentum_20d:v1", which produces a cross-sectional z-score for signal generation. This
+    function neither reimplements nor replaces that factor; the two are consumed in different
+    contexts and must not be confused for one another. Warm-up: `window` + 1 prices.
+    """
+    if window <= 0:
+        raise ValueError(f"FAIL CLOSED: invalid momentum window {window}.")
+    _validate_series(dates, prices)
+    params = {"window": window}
+    lookback = window + 1
+    metric_name = f"MOMENTUM_{window}"
+
+    results = []
+    for i in range(len(dates)):
+        if i < window:
+            results.append(_warm_up_record(
+                symbol, dates, i, metric_name, params, lookback, input_price_basis, data_origin
+            ))
+            continue
+        base = prices[i - window]
+        # _validate_series already rejects non-positive prices, so `base` cannot be zero here;
+        # the guard stays as a structural assertion rather than a silent assumption.
+        if base <= 0:
+            raise ValueError(f"FAIL CLOSED: non-positive base price {base} for momentum.")
+        results.append(DerivedDataContract(
+            symbol=symbol, metric_name=metric_name,
+            calculated_value=round((prices[i] - base) / base, 6),
+            derived_at=datetime.now(), formula_version=FORMULA_VERSION,
+            input_data_ids=[f"{symbol}:{dates[i - window]}", f"{symbol}:{dates[i]}"],
+            input_as_of=datetime.now(), quality_status="VALID",
+            effective_date=dates[i], parameters=params, input_price_basis=input_price_basis,
+            lookback_window=lookback, warm_up_satisfied=True, data_origin=data_origin,
+        ))
+    return results
 
 
-def compute_volume_indicator(symbol: str, dates: List[str], volumes: List[float], window: int = 20):
-    """DESIGN ONLY — NOT IMPLEMENTED. Input: daily trading volume (not price). Formula:
-    volume moving average + a same-day volume-vs-average ratio (a standard "volume spike"
-    descriptive statistic). Lookback: `window` prior volume observations. Missing data: same
-    INSUFFICIENT_WARM_UP convention. Note: volume is not corporate-action price-adjusted, so
-    input_price_basis is not applicable the same way — this would need its own explicit
-    "split-adjusted volume: yes/no" flag if implemented."""
-    raise NotImplementedError(
-        "compute_volume_indicator is contract-designed only, not implemented in this phase — "
-        "see this function's docstring for the intended design."
-    )
+def compute_volume_indicator(
+    symbol: str, dates: List[str], volumes: List[float], window: int = 20,
+    volume_split_adjusted: bool = False, data_origin: str = "SYNTHETIC_DATA",
+) -> List[DerivedDataContract]:
+    """Volume moving average plus a same-day volume-vs-average ratio (the standard "volume spike"
+    descriptive statistic). Reported together, once both are available — the same
+    report-all-components-or-none convention MACD uses.
+
+    Input is daily traded volume, NOT price, so `input_price_basis` does not apply. Volume is not
+    corporate-action price-adjusted, and whether it has been split-adjusted is a property of the
+    CALLER's data, not something this function can detect — so it is an explicit required-by-
+    default flag recorded in `parameters`, never assumed. `input_price_basis` is set to the
+    explicit sentinel "NOT_APPLICABLE" rather than being left to imply a price basis it does not
+    have.
+
+    A trailing window whose average volume is 0 (e.g. a fully suspended stock) leaves the ratio
+    mathematically undefined; it is reported as None with the moving average still populated,
+    never as 0.0 or 1.0, either of which would read as a real measurement.
+    """
+    if window <= 0:
+        raise ValueError(f"FAIL CLOSED: invalid volume window {window}.")
+    _validate_volume_series(dates, volumes)
+    params = {"window": window, "volume_split_adjusted": volume_split_adjusted}
+    metric_name = f"VOLUME_{window}"
+
+    results = []
+    for i in range(len(dates)):
+        if i < window - 1:
+            results.append(_warm_up_record(
+                symbol, dates, i, metric_name, params, window, "NOT_APPLICABLE", data_origin
+            ))
+            continue
+        sample = volumes[i - window + 1: i + 1]
+        average = sum(sample) / window
+        value = {
+            "volume": round(volumes[i], 6),
+            "volume_ma": round(average, 6),
+            "volume_ratio": round(volumes[i] / average, 6) if average > 0 else None,
+        }
+        results.append(DerivedDataContract(
+            symbol=symbol, metric_name=metric_name, calculated_value=value,
+            derived_at=datetime.now(), formula_version=FORMULA_VERSION,
+            input_data_ids=[f"{symbol}:{d}" for d in dates[i - window + 1: i + 1]],
+            input_as_of=datetime.now(), quality_status="VALID",
+            effective_date=dates[i], parameters=params, input_price_basis="NOT_APPLICABLE",
+            lookback_window=window, warm_up_satisfied=True, data_origin=data_origin,
+        ))
+    return results
