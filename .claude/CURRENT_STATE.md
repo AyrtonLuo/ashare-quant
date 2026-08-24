@@ -1,15 +1,15 @@
 # Current Project State
 
-_Synchronized to HEAD `43dd721` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `7e9258f` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > this file > Conversation History._
 
 ## Current Track
 **AI Quant Terminal** — product repositioning from a quant research/audit system to a consumer
 stock-analysis terminal, per the CEO Decision on
 `AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` (`d4a2d70`). **Terminal is the default
-mode; Research mode is retained unchanged.** Steps **T1, T2, T3, T3.5 and T5 are delivered — the Terminal serves REAL live quotes AND
-computes all six technical indicators from REAL historical bars.** T4 (news) and T6 (real AI
-narrative) remain vendor/credential-gated.
+mode; Research mode is retained unchanged.** Steps **T1, T2, T3, T3.5, T4 and T5 are delivered — the Terminal serves REAL live quotes,
+computes all six technical indicators from REAL historical bars, and shows REAL valuation
+fundamentals.** News and real AI narrative remain vendor/credential-gated.
 
 The preceding **AI Quant Research Analyst** track remains complete and untouched beneath it —
 evidence-grounded LLM research synthesis.
@@ -126,6 +126,34 @@ deterministic fakes are retained for testing and for the labelled-synthetic path
     synthetic narrative**. UI gains an explicit narrative-source choice.
   - 41 new tests (offline, against a local 127.0.0.1 HTTP stub — deterministic, free,
     network-free). All existing Fake Provider tests retained unchanged.
+- **Real fundamental / valuation data** (`7e9258f`, step T4) — REAL mode shows real
+  **总市值 / PE / PB** instead of 暂无数据.
+  - **Sources measured**: Tencent `qt.gtimg.cn` **3/3** → chosen; Sina `_i` reachable but
+    rejected as primary; **East Money 0/3 — every socket dropped** (it has degraded 2/4 → 3/4 →
+    0/3 across T3/T3.5/T4).
+  - **Every field cross-validated against an independent Sina derivation on 3 symbols**:
+    `price × totalShares / 1e8 == 总市值` held **exactly 3/3**; vendor PE matched
+    `总市值 / TTM净利润` **exactly 3/3**. Field **[73] is TOTAL share capital** — it satisfies the
+    identity on 3/3 while [72]/[76] (流通股本) fail it for the **dual-listed 000333**, which is
+    what discriminated them.
+  - **PB is vendor-reported, never derived.** A derived `price / 每股净资产` matched for 600519 and
+    000001 but was **wrong for 000333 (2.800 vs 3.19)** — a dual-listed equity basis differs.
+    That single disagreement is why nothing is computed here (`book_value_per_share` stays `None`,
+    asserted by test).
+  - **Deliberately not reported**: 营收 / 净利润 / 毛利率 / 净利率 / EPS / ROE — the endpoint does
+    not carry them and no free source was found reporting them verifiably. They stay `None` and
+    render as `暂无数据` **with a reason**; two distinct reasons separate "数据源未提供" from
+    "尚未纳入数据契约，也无可验证数据源；不做估算".
+  - **A third, separate capability**: quotes, history and fundamentals each declare their **own**
+    provider and `source_label` — never collapsed into one data-source claim.
+  - **Fail-closed**: the market-cap identity is re-checked on every fetch (with tolerance, since
+    price and cap can be sampled a moment apart); unknown code, truncated fields, non-numeric or
+    non-positive core values, bad timestamp, unrecognised shape, HTTP error and unreachable host
+    each raise. A blank vendor metric → `None`, **never 0.0**. An undisclosed report period is
+    stated as `NOT_DISCLOSED_BY_SOURCE`, never invented.
+  - **VERIFIED**: live test ran (did not skip); browser showed 平安银行 总市值 2243.32 亿元,
+    PE 5.16, PB 0.48, with 「数据日期：估值日期 2026-08-24（数据源未披露对应报告期）·数据来源：
+    腾讯财经估值数据」— distinct from the quote's 新浪财经 and the history's tencent_kline.
 - **Real historical K-line + real-data technical indicators** (`43dd721`, step T3.5) — REAL mode
   now computes **all six** indicators from a real bar series, through
   API → Adapter → Contract → Validation → Application → Technical Indicators → UI.
@@ -361,7 +389,7 @@ Both items previously recorded here as "disclosed, pre-existing gaps" are now **
 Nothing. Awaiting the next CEO directive.
 
 ## Tests
-- **Passed**: 895
+- **Passed**: 939
 - **Skipped**: 13 (11 TuShare live-provider tests when `TUSHARE_TOKEN` is absent; 1 real-OpenAI
   E2E blocked on account quota; 1 real-Gemini E2E blocked on an absent `GEMINI_API_KEY` — see
   Known Issues)
@@ -371,8 +399,7 @@ Nothing. Awaiting the next CEO directive.
 ## Git Status
 - **Branch**: `main`
 - **Working Tree**: Clean.
-- **HEAD**: `43dd721` (`feat: real historical K-line and real-data technical indicators
-  (T3.5)`)
+- **HEAD**: `7e9258f` (`feat: real fundamental / valuation data for the Terminal (T4)`)
 - **`origin/main` is in sync with local `main`.** Pushes are made only under an explicit CEO
   directive authorizing them (as with Step 5 and the §7 layer).
 - Standing rule unchanged: **never push without explicit Product Owner approval.**
@@ -423,10 +450,11 @@ Nothing. Awaiting the next CEO directive.
 delivered, tested and pushed. The remaining Terminal steps are gated on decisions only the CEO
 can make:
 
-- **T3 + T3.5 — DONE** (`3deffa5`, `43dd721`), via free public endpoints. Outstanding CEO
-  decisions: (a) whether to procure a **licensed** feed before any commercial use — both current
-  sources are unlicensed, undocumented and without SLA; (b) a **real fundamental source**, the
-  last panel still reporting 暂无数据 in REAL mode.
+- **T3 + T3.5 + T4 — DONE** (`3deffa5`, `43dd721`, `7e9258f`), all via free public endpoints.
+  Outstanding CEO decisions: (a) whether to procure a **licensed** feed before any commercial use
+  — all three sources are unlicensed, undocumented and without SLA; (b) whether to add a source
+  for **营收 / 净利润 / 毛利率 / 净利率 / EPS / ROE**, which no verifiable free endpoint provides
+  and which therefore still read 暂无数据.
 - **T4 — real news provider**: blocked on a source decision. Nothing is wired.
 - **T6 — real AI narrative**: blocked on an LLM credential/quota.
 

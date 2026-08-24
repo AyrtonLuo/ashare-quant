@@ -1,6 +1,6 @@
 # Agent Handoff
 
-_Synchronized to HEAD `43dd721` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
+_Synchronized to HEAD `7e9258f` (pushed to `origin/main`). Authority order per `CLAUDE.md` §2:
 Actual Repository Code & Specs > Automated Test Suite > `.claude/` files > Conversation History._
 
 ## Handoff Status
@@ -9,9 +9,9 @@ READY
 ## Current Track
 **AI Quant Terminal** — consumer repositioning per the CEO Decision on
 `AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` (`d4a2d70`). **Terminal is the default
-mode, Research mode is retained unchanged.** Steps **T1, T2, T3, T3.5, T5 delivered — REAL live quotes AND all six technical indicators
-computed from REAL historical bars.** T4 (news source) and T6 (LLM credential) remain gated on
-CEO decisions.
+mode, Research mode is retained unchanged.** Steps **T1, T2, T3, T3.5, T4, T5 delivered — REAL live quotes, all six technical indicators from
+REAL historical bars, and REAL valuation fundamentals.** News and a real AI narrative remain
+gated on CEO decisions.
 
 The prior **AI Quant Research Analyst** track sits complete beneath it — no phase number assigned
 (standing CEO instruction).
@@ -24,10 +24,21 @@ written.**
 
 ## Current Objective
 None in flight. Terminal steps **T5 (`5e3c701`), T1 (`2c6bc11`), T2 (`a55d0ae`) and T3
-(`3deffa5`)** are delivered, tested and pushed, plus **T3.5 (`43dd721`)**. **Real-time quotes and real historical
-K-line are both live and verified against public endpoints.** **STOP — await CEO Review.**
+(`3deffa5`)** are delivered, tested and pushed, plus **T3.5 (`43dd721`)** and **T4 (`7e9258f`)**. **Quotes,
+K-line history and valuation fundamentals are all live and verified against public endpoints.**
+**STOP — await CEO Review.**
 
 ## Completed
+- **Real fundamental / valuation data** (`7e9258f`, T4) — `fundamental_provider.py` (ABC + demo)
+  and `tencent_fundamental_provider.py` (real), stdlib-only, **zero new dependencies**. A THIRD
+  capability: quotes, history and fundamentals each declare their **own** provider and
+  `source_label`. Sources measured: Tencent **3/3** chosen; **East Money 0/3, every socket
+  dropped** (degraded 2/4 → 3/4 → 0/3 across T3/T3.5/T4). Every field cross-validated against an
+  independent Sina derivation on **3 symbols including a dual-listed one**: the market-cap
+  identity and the vendor PE both matched **exactly 3/3**, and field **[73] = TOTAL share
+  capital** was discriminated from 流通股本 by 000333. **PB is vendor-reported, never derived** —
+  a derived PB was wrong for 000333 (2.800 vs 3.19). 营收/净利润/毛利率/净利率/EPS/ROE stay `None`
+  → 暂无数据 with a reason. Market-cap identity re-checked on every fetch. 43 tests.
 - **Real historical K-line + real technical indicators** (`43dd721`, T3.5) —
   `history_provider.py` (ABC + demo) and `tencent_history_provider.py` (real), stdlib-only,
   **zero new dependencies**. A **series** capability was needed because
@@ -197,14 +208,14 @@ K-line are both live and verified against public endpoints.** **STOP — await C
    exist"; surfacing that class remains the AI's narrative contract (§6).
 
 ## Current Test Baseline
-- **Passed**: 895
+- **Passed**: 939
 - **Skipped**: 13 (11 TuShare live-provider tests; 1 real-Gemini E2E with no credential; 1
   real-OpenAI E2E blocked on account quota — items 1 and 2 under Not Completed)
 - **Failures**: 0
 - **Test Command**: `PYTHONPATH=. ./venv/bin/pytest`
 
 ## Git Status
-- **Branch**: `main`; **Working Tree**: clean; **HEAD**: `43dd721`.
+- **Branch**: `main`; **Working Tree**: clean; **HEAD**: `7e9258f`.
 - **`origin/main` is in sync with local `main`** (pushed under explicit CEO authorization for
   this directive).
 - Standing rule unchanged: never push without explicit Product Owner approval.
@@ -230,6 +241,8 @@ K-line are both live and verified against public endpoints.** **STOP — await C
 - `src/data/providers/sina_quote_provider.py` — the REAL live quote source (T3).
 - `src/data/providers/history_provider.py`, `tencent_history_provider.py` — the REAL daily K-line
   series feeding the technical panel (T3.5).
+- `src/data/providers/fundamental_provider.py`, `tencent_fundamental_provider.py` — the REAL
+  valuation source feeding the fundamental panel (T4).
 - `AI_QUANT_TERMINAL_PRODUCT_SIMPLIFICATION_PROPOSAL.md` — the approved Terminal design.
 - `src/app/streamlit_app.py` — the ONLY file permitted to import Streamlit.
 - `src/quant/evidence/evidence_item.py`, `src/quant/technical/indicators.py` — Evidence + indicators.
@@ -254,6 +267,15 @@ K-line are both live and verified against public endpoints.** **STOP — await C
   computation path and differ only in provider; the **fundamental** panel is still 暂无数据 in
   REAL mode because no real fundamental feed is wired — do NOT "improve" that by showing demo
   fundamentals beside a live price.
+- **Quotes, K-line history and fundamentals are THREE separate feeds**, each with its own
+  provider, `source_label` and date. Never collapse them into one data-source claim.
+- **PB (and anything like it) must be vendor-reported, never derived.** A derived PB was wrong
+  for the dual-listed 000333; the vendor's own figure is the only safe one.
+- **A metric no verifiable source reports stays `None`.** 营收/净利润/毛利率/净利率/EPS/ROE render
+  as 暂无数据 with a reason — do NOT compute them from other fields to fill the panel.
+- **A blank vendor metric becomes `None`, never 0.0**, which would read as a real measurement.
+- **The market-cap identity guard must stay.** It is what pinned field [73] as total share
+  capital; removing it would let a silent vendor reordering show a wrong market cap.
 - **Indicator availability is decided PER INDICATOR**, by each function's own warm-up. Do not
   reintroduce a blanket threshold: a single MACD-sized gate hides five computable readings.
 - **`VENDOR_FORWARD_ADJUSTED` is not PIT.** The history series is re-adjusted as of today, so it
@@ -347,12 +369,13 @@ K-line are both live and verified against public endpoints.** **STOP — await C
   absent and requires its own directive.
 
 ## Exact Next Action
-**Await CEO Review of T3.5.** No further Terminal work is authorized. Outstanding, each needing a
+**Await CEO Review of T4.** No further Terminal work is authorized. Outstanding, each needing a
 CEO decision rather than code:
-- **Licensed data feeds** — whether to procure them before any commercial use; both the quote and
-  history sources are public, undocumented and unlicensed, with no SLA.
-- **Real fundamental source** — the last Terminal panel still reporting 暂无数据 in REAL mode.
-- **T4** news source.
+- **Licensed data feeds** — whether to procure them before any commercial use; all three sources
+  (quote, history, fundamentals) are public, undocumented and unlicensed, with no SLA.
+- **A source for 营收 / 净利润 / 毛利率 / 净利率 / EPS / ROE** — no verifiable free endpoint
+  provides them, so those rows still read 暂无数据.
+- **News source** (not started).
 - **T6** LLM credential/quota (`GEMINI_API_KEY` unset; OpenAI account has no quota).
 Also outstanding: cloud deployment needs the CEO's Streamlit account authorization
 (main file `src/app/streamlit_app.py`, **Python 3.11/3.12, not 3.13**), and `CLAUDE.md`'s
@@ -375,6 +398,8 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
 - Do NOT let REAL and DEMO data appear on one page, and do NOT add a REAL→DEMO fallback.
 - Do NOT describe the current quote or history sources as licensed or SLA-backed.
 - Do NOT let the forward-adjusted history series reach any backtest, replay or PIT path.
+- Do NOT derive a valuation metric and present it as vendor data.
+- Do NOT collapse the three feeds into a single "数据来源" claim.
 - Do NOT claim either real end-to-end API verification passed until it actually does.
 - Do NOT broaden the live tests' narrow quota/credential skip to cover other failure categories.
 - Do NOT put an API key in a URL, a log, a config file, or any persisted artifact.
@@ -385,5 +410,5 @@ On a new session or post-compaction recovery, execute the New Session Recovery P
 
 ## Validation Required
 - `git status` — working tree clean.
-- `PYTHONPATH=. ./venv/bin/pytest` — **895 passed, 13 skipped, 0 failed**.
+- `PYTHONPATH=. ./venv/bin/pytest` — **939 passed, 13 skipped, 0 failed**.
 - `git diff --check` — clean.
